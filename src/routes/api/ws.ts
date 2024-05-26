@@ -33,9 +33,9 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 			decrement(amount: number = 1) {
 				this.value -= amount;
 			},
-      get() {
-        return this.value;
-      }
+			get() {
+				return this.value;
+			},
 		};
 
 		io.on("connection", (socket) => {
@@ -90,6 +90,32 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 					SA.Move,
 					[SC_ComType.Announce],
 					[unitData]
+				);
+			});
+
+			socket.on(CA.Increment, ([type, communicationId], [amount]) => {
+				counter.increment(amount);
+				socket.emit(CA.Increment, [
+					SC_ComType.Approve,
+					communicationId,
+				]);
+				socket.broadcast.emit(
+					SA.Increment,
+					[SC_ComType.Announce],
+					[amount]
+				);
+			});
+
+			socket.on(CA.Decrement, ([type, communicationId], [amount]) => {
+				counter.decrement(amount);
+				socket.emit(CA.Decrement, [
+					SC_ComType.Approve,
+					communicationId,
+				]);
+				socket.broadcast.emit(
+					SA.Decrement,
+					[SC_ComType.Announce],
+					[amount]
 				);
 			});
 		});

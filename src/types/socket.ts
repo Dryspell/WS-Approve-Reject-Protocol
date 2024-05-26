@@ -24,6 +24,8 @@ export const enum SA {
 	ChatMessage = "chat-message",
 	UserDisconnected = "user-disconnected",
 	Move = "s_move",
+	Increment = "s_increment",
+	Decrement = "s_decrement",
 }
 
 export const enum SC_ComType {
@@ -43,6 +45,8 @@ export interface ServerToClientEvents {
 	[CA.NewUser]: (meta: SC_Communication) => void;
 	[CA.Move]: (meta: SC_Communication) => void;
 	[CA.SendChatMessage]: (meta: SC_Communication) => void;
+	[CA.Increment]: (meta: SC_Communication) => void;
+	[CA.Decrement]: (meta: SC_Communication) => void;
 
 	[SA.UserConnected]: (meta: SC_Communication, data: [name: string]) => void;
 	[SA.ChatMessage]: (
@@ -54,6 +58,8 @@ export interface ServerToClientEvents {
 		data: [name: string]
 	) => void;
 	[SA.Move]: (meta: SC_Communication, data: [unitData: UnitData]) => void;
+	[SA.Increment]: (meta: SC_Communication, data: [amount: number]) => void;
+	[SA.Decrement]: (meta: SC_Communication, data: [amount: number]) => void;
 }
 
 /**
