@@ -25,18 +25,7 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 		socket.server.io = io;
 
 		const users: Record<string, { name: string }> = {};
-		const counter = {
-			value: 0,
-			increment(amount: number = 1) {
-				this.value += amount;
-			},
-			decrement(amount: number = 1) {
-				this.value -= amount;
-			},
-			get() {
-				return this.value;
-			},
-		};
+		const counters = new Map<string, number>();
 
 		io.on("connection", (socket) => {
 			socket.on(CA.NewUser, ([type, communicationId], [name]) => {
@@ -93,31 +82,69 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 				);
 			});
 
-			socket.on(CA.Increment, ([type, communicationId], [amount]) => {
-				counter.increment(amount);
-				socket.emit(CA.Increment, [
-					SC_ComType.Approve,
-					communicationId,
-				]);
-				socket.broadcast.emit(
-					SA.Increment,
-					[SC_ComType.Announce],
-					[amount]
-				);
+			socket.on(CA.InitCounter, ([type, communicationId], [sigId]) => {
+				const counter = counters.get(sigId);
+				if (counter === undefined) {
+					counters.set(sigId, 0);
+					socket.emit(
+						CA.InitCounter,
+						[SC_ComType.Approve, communicationId],
+						[0]
+					);
+				} else {
+					socket.emit(
+						CA.InitCounter,
+						[SC_ComType.Approve, communicationId],
+						[counter]
+					);
+				}
 			});
 
-			socket.on(CA.Decrement, ([type, communicationId], [amount]) => {
-				counter.decrement(amount);
-				socket.emit(CA.Decrement, [
-					SC_ComType.Approve,
-					communicationId,
-				]);
-				socket.broadcast.emit(
-					SA.Decrement,
-					[SC_ComType.Announce],
-					[amount]
-				);
-			});
+			socket.on(
+				CA.Increment,
+				([type, communicationId], [sigId, amount]) => {
+					const counter = counters.get(sigId);
+					if (counter === undefined) {
+					} else {
+						const newAmount = counter + amount;
+
+						counters.set(sigId, newAmount);
+						socket.emit(CA.Increment, [
+							SC_ComType.Approve,
+							communicationId,
+						]);
+
+						socket.broadcast.emit(
+							SA.Increment,
+							[SC_ComType.Announce],
+							[sigId, newAmount]
+						);
+					}
+				}
+			);
+
+			socket.on(
+				CA.Decrement,
+				([type, communicationId], [sigId, amount]) => {
+					const counter = counters.get(sigId);
+					if (counter === undefined) {
+					} else {
+						const newAmount = counter - amount;
+
+						counters.set(sigId, newAmount);
+						socket.emit(CA.Decrement, [
+							SC_ComType.Approve,
+							communicationId,
+						]);
+
+						socket.broadcast.emit(
+							SA.Decrement,
+							[SC_ComType.Announce],
+							[sigId, newAmount]
+						);
+					}
+				}
+			);
 		});
 
 		return new Response();

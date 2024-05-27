@@ -32,6 +32,8 @@ export const enum SC_ComType {
 	Approve,
 	Reject,
 	Announce,
+	Loading,
+	Error,
 }
 
 /**
@@ -45,6 +47,7 @@ export interface ServerToClientEvents {
 	[CA.NewUser]: (meta: SC_Communication) => void;
 	[CA.Move]: (meta: SC_Communication) => void;
 	[CA.SendChatMessage]: (meta: SC_Communication) => void;
+	[CA.InitCounter]: (meta: SC_Communication, data: [amount: number]) => void;
 	[CA.Increment]: (meta: SC_Communication) => void;
 	[CA.Decrement]: (meta: SC_Communication) => void;
 
@@ -58,8 +61,14 @@ export interface ServerToClientEvents {
 		data: [name: string]
 	) => void;
 	[SA.Move]: (meta: SC_Communication, data: [unitData: UnitData]) => void;
-	[SA.Increment]: (meta: SC_Communication, data: [amount: number]) => void;
-	[SA.Decrement]: (meta: SC_Communication, data: [amount: number]) => void;
+	[SA.Increment]: (
+		meta: SC_Communication,
+		data: [sigId: string, amount: number]
+	) => void;
+	[SA.Decrement]: (
+		meta: SC_Communication,
+		data: [sigId: string, amount: number]
+	) => void;
 }
 
 /**
@@ -69,6 +78,7 @@ export const enum CA {
 	NewUser = "new-user",
 	Disconnect = "disconnect",
 	SendChatMessage = "send-chat-message",
+	InitCounter = "init-counter",
 	Increment = "increment",
 	Decrement = "decrement",
 	Move = "move",
@@ -76,6 +86,11 @@ export const enum CA {
 
 export const enum CS_CommunicationType {
 	Request,
+	Get,
+	GetOrCreate,
+	Set,
+	SetOrCreate,
+	Delta,
 }
 
 export type CS_Communication = [
@@ -90,8 +105,18 @@ export interface ClientToServerEvents {
 		meta: CS_Communication,
 		data: [message: string]
 	) => void;
-	[CA.Increment]: (meta: CS_Communication, data: [amount: number]) => void;
-	[CA.Decrement]: (meta: CS_Communication, data: [amount: number]) => void;
+	[CA.InitCounter]: (
+		meta: CS_Communication,
+		data: [signalId: string]
+	) => void;
+	[CA.Increment]: (
+		meta: CS_Communication,
+		data: [sigId: string, amount: number]
+	) => void;
+	[CA.Decrement]: (
+		meta: CS_Communication,
+		data: [sigId: string, amount: number]
+	) => void;
 	[CA.Move]: (meta: CS_Communication, data: [unitData: UnitData]) => void;
 }
 

@@ -10,12 +10,24 @@ import {
 	SC_ComType,
 } from "~/types/socket";
 
-type IncrementRequest = [CA.Increment, CS_Communication, [amount: number]];
-type DecrementRequest = [CA.Decrement, CS_Communication, [amount: number]];
+type IncrementRequest = [
+	CA.Increment,
+	CS_Communication,
+	[signalId: string, amount: number]
+];
+type DecrementRequest = [
+	CA.Decrement,
+	CS_Communication,
+	[signalId: string, amount: number]
+];
 type Request = IncrementRequest | DecrementRequest;
 
-const useSocketCounter = (socket: clientSocket, value: number) => {
-	const [count, setCount] = createSignal(value);
+const useSocketCounter = (
+	socket: clientSocket,
+	signalId: string,
+	defaultValue: number
+) => {
+	const [count, setCount] = createSignal(defaultValue);
 
 	const cache = new Map<string, Request>();
 
@@ -24,7 +36,7 @@ const useSocketCounter = (socket: clientSocket, value: number) => {
 		const request: Request = [
 			CA.Increment,
 			[CS_CommunicationType.Request, comId],
-			[amount],
+			[signalId, amount],
 		];
 		cache.set(comId, request);
 		socket.emit(...request);
@@ -36,7 +48,7 @@ const useSocketCounter = (socket: clientSocket, value: number) => {
 		const request = cache.get(communicationId);
 		if (!request) return;
 
-		const [, , [amount]] = request;
+		const [, , [sigId, amount]] = request;
 
 		cache.delete(communicationId);
 		if (type === SC_ComType.Approve) {
@@ -52,7 +64,7 @@ const useSocketCounter = (socket: clientSocket, value: number) => {
 		const request: Request = [
 			CA.Decrement,
 			[CS_CommunicationType.Request, comId],
-			[amount],
+			[signalId, amount],
 		];
 		cache.set(comId, request);
 		socket.emit(...request);
@@ -64,7 +76,7 @@ const useSocketCounter = (socket: clientSocket, value: number) => {
 		const request = cache.get(communicationId);
 		if (!request) return;
 
-		const [, , [amount]] = request;
+		const [, , [sigId, amount]] = request;
 
 		cache.delete(communicationId);
 		if (type === SC_ComType.Approve) {
@@ -85,18 +97,18 @@ const useSocketCounter = (socket: clientSocket, value: number) => {
 			>
 				<button
 					class="w-[200px] rounded-full bg-gray-100 border-2 border-gray-300 focus:border-gray-400 active:border-gray-400 px-[2rem] py-[1rem]"
-					onClick={() => increment(1)}
+					onClick={() => decrement(1)}
 				>
-					Increment
+					Decrement
 				</button>
 				<h2 class="text-2xl font-thin text-gray-700 px-[2rem]">
 					Clicks: {count()}
 				</h2>
 				<button
 					class="w-[200px] rounded-full bg-gray-100 border-2 border-gray-300 focus:border-gray-400 active:border-gray-400 px-[2rem] py-[1rem]"
-					onClick={() => decrement(1)}
+					onClick={() => increment(1)}
 				>
-					Decrement
+					Increment
 				</button>
 			</Flex>
 		);
@@ -110,8 +122,8 @@ export default function Home() {
 		console.log("connected to server!!");
 	});
 
-	const { Counter: Counter1 } = useSocketCounter(socket, 0);
-	const { Counter: Counter2 } = useSocketCounter(socket, 0);
+	const { Counter: Counter1 } = useSocketCounter(socket, "1", 0);
+	const { Counter: Counter2 } = useSocketCounter(socket, "2", 0);
 
 	return (
 		<main class="text-center mx-auto text-gray-700 p-4">
