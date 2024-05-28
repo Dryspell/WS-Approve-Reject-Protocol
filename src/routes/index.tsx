@@ -1,93 +1,115 @@
 import { createId } from "@paralleldrive/cuid2";
-import { Component, ComponentProps, createSignal } from "solid-js";
+import { Component, ComponentProps, For, onMount } from "solid-js";
 import { Flex } from "~/components/ui/flex";
 import { socket } from "~/lib/socket";
 import {
-	CA,
 	clientSocket,
-	CS_Communication,
 	CS_CommunicationType,
 	SC_ComType,
+	SignalType,
 } from "~/types/socket";
+import { type serverCounters } from "./api/ws";
+import { createStore } from "solid-js/store";
 
-type IncrementRequest = [
-	CA.Increment,
-	CS_Communication,
-	[signalId: string, amount: number]
-];
-type DecrementRequest = [
-	CA.Decrement,
-	CS_Communication,
-	[signalId: string, amount: number]
-];
-type Request = IncrementRequest | DecrementRequest;
+const useSocketCounter = (socket: clientSocket, sigId: string) => {
+	const [counters, setCounters] = createStore<{
+		[counterId: string]: number;
+	}>({});
 
-const useSocketCounter = (
-	socket: clientSocket,
-	signalId: string,
-	defaultValue: number
-) => {
-	const [count, setCount] = createSignal(defaultValue);
-
+	type Request = Parameters<
+		ReturnType<ReturnType<typeof serverCounters>["csEventsHandler"]>
+	>[0];
 	const cache = new Map<string, Request>();
 
-	const increment = (amount: number) => {
-		const comId = createId();
-		const request: Request = [
-			CA.Increment,
-			[CS_CommunicationType.Request, comId],
-			[signalId, amount],
-		];
-		cache.set(comId, request);
-		socket.emit(...request);
-		// console.info("Increment request sent", request);
-	};
+	socket.on(SignalType.Counter, ([type, comId, data]) => {
+		const request = cache.get(comId);
 
-	socket.on(CA.Increment, ([type, communicationId]) => {
-		if (!communicationId) return;
-		const request = cache.get(communicationId);
-		if (!request) return;
+		if (!request) {
+			switch (type) {
+				case SC_ComType.Approve: {
+					console.error("Received unexpected approve signal");
+					break;
+				}
 
-		const [, , [sigId, amount]] = request;
+				case SC_ComType.Reject: {
+					console.error("Received unexpected reject signal");
+					break;
+				}
 
-		cache.delete(communicationId);
-		if (type === SC_ComType.Approve) {
-			// console.info("Increment request approved", request);
-			setCount(count() + amount);
+				case SC_ComType.Set: {
+					const [sigId, amount] = data;
+					setCounters({ [sigId]: amount });
+					break;
+				}
+
+				case SC_ComType.Delta: {
+					const [sigId, amount] = data;
+					setCounters({ [sigId]: counters[sigId] + amount });
+					break;
+				}
+
+				default: {
+					console.error(`Received unexpected signal type: ${type}`);
+				}
+			}
 		} else {
-			console.error("Increment request rejected");
+			switch (request[0]) {
+				case CS_CommunicationType.Get: {
+					const counters = data?.[0];
+					if (typeof counters !== "object") {
+						throw new Error(
+							"Expected Unreachable: Invalid data received"
+						);
+					}
+					setCounters(counters);
+					break;
+				}
+
+				case CS_CommunicationType.GetOrCreate: {
+					const [sigId] = request[2];
+					const counter = data?.[0];
+					if (typeof counter !== "number") return;
+					setCounters({ [sigId]: counter });
+					break;
+				}
+
+				case CS_CommunicationType.Delta: {
+					const [sigId, delta] = request[2];
+					setCounters({ [sigId]: counters[sigId] + delta });
+					break;
+				}
+			}
 		}
 	});
 
-	const decrement = (amount: number) => {
+	const delta = (d: number) => {
 		const comId = createId();
 		const request: Request = [
-			CA.Decrement,
-			[CS_CommunicationType.Request, comId],
-			[signalId, amount],
+			CS_CommunicationType.Delta,
+			comId,
+			[sigId, d],
 		];
 		cache.set(comId, request);
-		socket.emit(...request);
-		// console.info("Decrement request sent", request);
+		socket.emit(SignalType.Counter, request);
 	};
 
-	socket.on(CA.Decrement, ([type, communicationId]) => {
-		if (!communicationId) return;
-		const request = cache.get(communicationId);
-		if (!request) return;
+	const Counters: Component<ComponentProps<"div">> = (rawProps) => {
+		onMount(() => {
+			const comId = createId();
+			const request: Request = [CS_CommunicationType.Get, comId];
+			cache.set(comId, request);
+			socket.emit(SignalType.Counter, request);
 
-		const [, , [sigId, amount]] = request;
+			const comId2 = createId();
+			const request2: Request = [
+				CS_CommunicationType.GetOrCreate,
+				comId2,
+				[sigId],
+			];
+			cache.set(comId2, request2);
+			socket.emit(SignalType.Counter, request2);
+		});
 
-		cache.delete(communicationId);
-		if (type === SC_ComType.Approve) {
-			// console.info("Decrement request approved", request);
-			setCount(count() - amount);
-		} else {
-			console.error("Decrement request rejected");
-		}
-	});
-
-	const Counter: Component<ComponentProps<"div">> = (rawProps) => {
 		return (
 			<Flex
 				flexDirection="row"
@@ -95,26 +117,30 @@ const useSocketCounter = (
 				alignItems="center"
 				{...rawProps}
 			>
-				<button
-					class="w-[200px] rounded-full bg-gray-100 border-2 border-gray-300 focus:border-gray-400 active:border-gray-400 px-[2rem] py-[1rem]"
-					onClick={() => decrement(1)}
-				>
-					Decrement
-				</button>
-				<h2 class="text-2xl font-thin text-gray-700 px-[2rem]">
-					Clicks: {count()}
-				</h2>
-				<button
-					class="w-[200px] rounded-full bg-gray-100 border-2 border-gray-300 focus:border-gray-400 active:border-gray-400 px-[2rem] py-[1rem]"
-					onClick={() => increment(1)}
-				>
-					Increment
-				</button>
+				<For each={Object.entries(counters)}>
+					{([id, value]) => (
+						<>
+							<button
+								class="w-[200px] rounded-full bg-gray-100 border-2 border-gray-300 focus:border-gray-400 active:border-gray-400 px-[2rem] py-[1rem]"
+								onClick={() => delta(-1)}
+							>
+								Decrement
+							</button>
+							<h2 class="text-2xl font-thin text-gray-700 px-[2rem]">{`${id}: ${value}`}</h2>
+							<button
+								class="w-[200px] rounded-full bg-gray-100 border-2 border-gray-300 focus:border-gray-400 active:border-gray-400 px-[2rem] py-[1rem]"
+								onClick={() => delta(1)}
+							>
+								Increment
+							</button>
+						</>
+					)}
+				</For>
 			</Flex>
 		);
 	};
 
-	return { increment, decrement, count, Counter };
+	return { Counters };
 };
 
 export default function Home() {
@@ -122,8 +148,8 @@ export default function Home() {
 		console.log("connected to server!!");
 	});
 
-	const { Counter: Counter1 } = useSocketCounter(socket, "1", 0);
-	const { Counter: Counter2 } = useSocketCounter(socket, "2", 0);
+	const { Counters: Counter1 } = useSocketCounter(socket, "1");
+	const { Counters: Counter2 } = useSocketCounter(socket, "2");
 
 	return (
 		<main class="text-center mx-auto text-gray-700 p-4">

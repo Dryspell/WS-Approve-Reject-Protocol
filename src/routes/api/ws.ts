@@ -1,14 +1,101 @@
 import { type APIEvent } from "@solidjs/start/server";
 import { Server } from "socket.io";
 import {
-	CA,
-	SA,
+	CS_CommunicationType,
 	SC_ComType,
+	serverSocket,
+	SignalType,
 	type SocketWithIO,
 	type sServer,
 } from "~/types/socket";
 
 const prohibitedWords = ["fish", "cat", "dog"];
+
+export const serverCounters = (defaultValue: number) => {
+	const signals = new Map<string, number>();
+
+	const csEventsHandler = (socket: serverSocket) => {
+		return (
+			params:
+				| [type: CS_CommunicationType.Get, comId: string]
+				| [
+						type: CS_CommunicationType.GetOrCreate,
+						comId: string,
+						data: [sigId: string]
+				  ]
+				| [
+						type: CS_CommunicationType.Delta,
+						comId: string,
+						data: [sigId: string, delta: number]
+				  ]
+		) => {
+			const [type, comId, data] = params;
+
+			switch (type) {
+				case CS_CommunicationType.Get: {
+					socket.emit(SignalType.Counter, [
+						SC_ComType.Approve,
+						comId,
+						[Object.fromEntries(signals.entries())],
+					]);
+					break;
+				}
+
+				case CS_CommunicationType.GetOrCreate: {
+					const [sigId] = data;
+					const counter = signals.get(sigId);
+					if (counter === undefined) {
+						signals.set(sigId, defaultValue);
+						socket.emit(SignalType.Counter, [
+							SC_ComType.Approve,
+							comId,
+							[defaultValue],
+						]);
+						socket.broadcast.emit(SignalType.Counter, [
+							SC_ComType.Set,
+							comId,
+							[sigId, defaultValue],
+						]);
+					} else {
+						socket.emit(SignalType.Counter, [
+							SC_ComType.Approve,
+							comId,
+							[counter],
+						]);
+					}
+					break;
+				}
+
+				case CS_CommunicationType.Delta: {
+					const [sigId, delta] = data;
+					const counter = signals.get(sigId);
+					if (counter === undefined) {
+						socket.emit(SignalType.Counter, [
+							SC_ComType.Reject,
+							comId,
+							["Counter does not exist"],
+						]);
+					} else {
+						signals.set(sigId, counter + delta);
+						socket.emit(SignalType.Counter, [
+							SC_ComType.Approve,
+							comId,
+						]);
+
+						socket.broadcast.emit(SignalType.Counter, [
+							SC_ComType.Delta,
+							comId,
+							[sigId, delta],
+						]);
+					}
+					break;
+				}
+			}
+		};
+	};
+
+	return { signals, csEventsHandler };
+};
 
 export async function GET({ request, nativeEvent }: APIEvent) {
 	const socket = nativeEvent.node.res.socket as SocketWithIO | null;
@@ -25,126 +112,13 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 		socket.server.io = io;
 
 		const users: Record<string, { name: string }> = {};
-		const counters = new Map<string, number>();
+		const { signals, csEventsHandler } = serverCounters(0);
 
 		io.on("connection", (socket) => {
-			socket.on(CA.NewUser, ([type, communicationId], [name]) => {
-				users[socket.id] = { ...users[socket.id], name };
-				socket.emit(CA.NewUser, [SC_ComType.Approve, communicationId]);
-				socket.broadcast.emit(
-					SA.UserConnected,
-					[SC_ComType.Announce],
-					[name]
-				);
-			});
+			console.log("Connection");
+			const handler = csEventsHandler(socket);
 
-			socket.on(CA.Disconnect, () => {
-				users[socket.id]?.name &&
-					socket.broadcast.emit(
-						SA.UserDisconnected,
-						[SC_ComType.Announce],
-						[users[socket.id].name]
-					);
-				delete users[socket.id];
-			});
-
-			socket.on(
-				CA.SendChatMessage,
-				([type, communicationId], [message]) => {
-					if (
-						prohibitedWords.some((word) => message.includes(word))
-					) {
-						socket.emit(CA.SendChatMessage, [
-							SC_ComType.Reject,
-							communicationId,
-						]);
-						return;
-					} else {
-						socket.emit(CA.SendChatMessage, [
-							SC_ComType.Approve,
-							communicationId,
-						]);
-						socket.broadcast.emit(
-							SA.ChatMessage,
-							[SC_ComType.Announce],
-							[message, users[socket.id].name]
-						);
-					}
-				}
-			);
-
-			socket.on(CA.Move, ([type, communicationId], [unitData]) => {
-				socket.emit(CA.Move, [SC_ComType.Approve, communicationId]);
-				socket.broadcast.emit(
-					SA.Move,
-					[SC_ComType.Announce],
-					[unitData]
-				);
-			});
-
-			socket.on(CA.InitCounter, ([type, communicationId], [sigId]) => {
-				const counter = counters.get(sigId);
-				if (counter === undefined) {
-					counters.set(sigId, 0);
-					socket.emit(
-						CA.InitCounter,
-						[SC_ComType.Approve, communicationId],
-						[0]
-					);
-				} else {
-					socket.emit(
-						CA.InitCounter,
-						[SC_ComType.Approve, communicationId],
-						[counter]
-					);
-				}
-			});
-
-			socket.on(
-				CA.Increment,
-				([type, communicationId], [sigId, amount]) => {
-					const counter = counters.get(sigId);
-					if (counter === undefined) {
-					} else {
-						const newAmount = counter + amount;
-
-						counters.set(sigId, newAmount);
-						socket.emit(CA.Increment, [
-							SC_ComType.Approve,
-							communicationId,
-						]);
-
-						socket.broadcast.emit(
-							SA.Increment,
-							[SC_ComType.Announce],
-							[sigId, newAmount]
-						);
-					}
-				}
-			);
-
-			socket.on(
-				CA.Decrement,
-				([type, communicationId], [sigId, amount]) => {
-					const counter = counters.get(sigId);
-					if (counter === undefined) {
-					} else {
-						const newAmount = counter - amount;
-
-						counters.set(sigId, newAmount);
-						socket.emit(CA.Decrement, [
-							SC_ComType.Approve,
-							communicationId,
-						]);
-
-						socket.broadcast.emit(
-							SA.Decrement,
-							[SC_ComType.Announce],
-							[sigId, newAmount]
-						);
-					}
-				}
-			);
+			socket.on(SignalType.Counter, handler);
 		});
 
 		return new Response();
