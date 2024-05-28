@@ -4,11 +4,11 @@ import { Flex } from "~/components/ui/flex";
 import { socket } from "~/lib/socket";
 import {
 	clientSocket,
+	ClientToServerEvents,
 	CS_CommunicationType,
 	SC_ComType,
 	SignalType,
 } from "~/types/socket";
-import { type serverCounters } from "./api/ws";
 import { createStore } from "solid-js/store";
 
 const useSocketCounter = (socket: clientSocket, sigId: string) => {
@@ -16,9 +16,7 @@ const useSocketCounter = (socket: clientSocket, sigId: string) => {
 		[counterId: string]: number;
 	}>({});
 
-	type Request = Parameters<
-		ReturnType<ReturnType<typeof serverCounters>["csEventsHandler"]>
-	>[0];
+	type Request = Parameters<ClientToServerEvents[SignalType.Counter]>[0];
 	const cache = new Map<string, Request>();
 
 	socket.on(SignalType.Counter, ([type, comId, data]) => {
@@ -148,8 +146,7 @@ export default function Home() {
 		console.log("connected to server!!");
 	});
 
-	const { Counters: Counter1 } = useSocketCounter(socket, "1");
-	const { Counters: Counter2 } = useSocketCounter(socket, "2");
+	const { Counters } = useSocketCounter(socket, "1");
 
 	return (
 		<main class="text-center mx-auto text-gray-700 p-4">
@@ -157,8 +154,7 @@ export default function Home() {
 				Hello world!
 			</h1>
 			<div>
-				<Counter1 class="py-[1rem]" />
-				<Counter2 class="py-[1rem]" />
+				<Counters class="py-[1rem]" />
 			</div>
 		</main>
 	);

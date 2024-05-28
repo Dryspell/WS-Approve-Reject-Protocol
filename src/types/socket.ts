@@ -6,8 +6,6 @@ import type {
 	Socket as SocketforServer,
 } from "socket.io";
 import type { Socket as SocketforClient } from "socket.io-client";
-import { type UnitData } from "./game";
-import { serverCounters } from "~/routes/api/ws";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -68,9 +66,20 @@ export const enum CS_CommunicationType {
 export type CS_Communication = [type: CS_CommunicationType, comId: string];
 
 export type ClientToServerEvents = {
-	[SignalType.Counter]: ReturnType<
-		ReturnType<typeof serverCounters>["csEventsHandler"]
-	>;
+	[SignalType.Counter]: (
+		params:
+			| [type: CS_CommunicationType.Get, comId: string]
+			| [
+					type: CS_CommunicationType.GetOrCreate,
+					comId: string,
+					data: [sigId: string]
+			  ]
+			| [
+					type: CS_CommunicationType.Delta,
+					comId: string,
+					data: [sigId: string, delta: number]
+			  ]
+	) => void;
 };
 
 interface InterServerEvents {
