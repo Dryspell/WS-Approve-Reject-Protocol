@@ -6,6 +6,7 @@ import type {
 	Socket as SocketforServer,
 } from "socket.io";
 import type { Socket as SocketforClient } from "socket.io-client";
+import { PokemonApiResponse } from "~/hooks/useDataFetching";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -46,15 +47,27 @@ export interface ServerToClientEvents {
 					data: [sigId: string, amount: number]
 			  ]
 	) => void;
+	[SignalType.Pokemon]: (
+		params:
+			| [
+					type: SC_ComType.Approve,
+					comId: string,
+					data: PokemonApiResponse
+			  ]
+			| [type: SC_ComType.Reject, comId: string, data: [reason: string]]
+			| [type: SC_ComType.Loading, comId: string]
+			| [type: SC_ComType.Error, comId: string, data: [reason: string]]
+	) => void;
 }
 
 export const enum SignalType {
 	User = "user",
 	Counter = "counter",
 	Unit = "unit",
+	Pokemon = "pokemon",
 }
 
-export const enum CS_CommunicationType {
+export const enum CS_ComType {
 	Request,
 	Get,
 	GetOrCreate,
@@ -63,22 +76,23 @@ export const enum CS_CommunicationType {
 	Delta,
 }
 
-export type CS_Communication = [type: CS_CommunicationType, comId: string];
-
 export type ClientToServerEvents = {
 	[SignalType.Counter]: (
 		params:
-			| [type: CS_CommunicationType.Get, comId: string]
+			| [type: CS_ComType.Get, comId: string]
 			| [
-					type: CS_CommunicationType.GetOrCreate,
+					type: CS_ComType.GetOrCreate,
 					comId: string,
 					data: [sigId: string]
 			  ]
 			| [
-					type: CS_CommunicationType.Delta,
+					type: CS_ComType.Delta,
 					comId: string,
 					data: [sigId: string, delta: number]
 			  ]
+	) => void;
+	[SignalType.Pokemon]: (
+		params: [type: CS_ComType.Get, comId: string, data: [id: number]]
 	) => void;
 };
 

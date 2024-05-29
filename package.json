@@ -13,6 +13,8 @@
     "@solidjs/router": "^0.13.3",
     "@solidjs/start": "^1.0.0",
     "autoprefixer": "^10.4.19",
+    "axios": "^1",
+    "axios-cache-interceptor": "^1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "postcss": "^8.4.38",

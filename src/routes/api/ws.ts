@@ -1,15 +1,20 @@
 import { type APIEvent } from "@solidjs/start/server";
 import { Server } from "socket.io";
 import {
-	CS_CommunicationType,
+	CS_ComType,
 	SC_ComType,
 	serverSocket,
 	SignalType,
 	type SocketWithIO,
 	type sServer,
 } from "~/types/socket";
+import Axios from "axios";
+import { setupCache } from "axios-cache-interceptor";
 
 const prohibitedWords = ["fish", "cat", "dog"];
+
+const instance = Axios.create();
+const axios = setupCache(instance);
 
 export async function GET({ request, nativeEvent }: APIEvent) {
 	const socket = nativeEvent.node.res.socket as SocketWithIO | null;
@@ -32,11 +37,11 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 			console.log("Connection");
 
 			socket.on(SignalType.Counter, (params) => {
-				console.log({ params });
+				// console.log({ params });
 				const [type, comId, data] = params;
 
 				switch (type) {
-					case CS_CommunicationType.Get: {
+					case CS_ComType.Get: {
 						socket.emit(SignalType.Counter, [
 							SC_ComType.Approve,
 							comId,
@@ -45,7 +50,7 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 						break;
 					}
 
-					case CS_CommunicationType.GetOrCreate: {
+					case CS_ComType.GetOrCreate: {
 						const [sigId] = data;
 						const counter = signals.get(sigId);
 						if (counter === undefined) {
@@ -70,7 +75,7 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 						break;
 					}
 
-					case CS_CommunicationType.Delta: {
+					case CS_ComType.Delta: {
 						const [sigId, delta] = data;
 						const counter = signals.get(sigId);
 						if (counter === undefined) {
@@ -92,6 +97,40 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 								[sigId, delta],
 							]);
 						}
+						break;
+					}
+				}
+			});
+
+			socket.on(SignalType.Pokemon, (params) => {
+				const [type, comId, data] = params;
+
+				switch (type) {
+					case CS_ComType.Get: {
+						socket.emit(SignalType.Pokemon, [
+							SC_ComType.Loading,
+							comId,
+						]);
+
+						axios({
+							url: `https://pokeapi.co/api/v2/pokemon/${data[0]}`,
+							method: "GET",
+						}).then((response) => {
+							if (response.status === 200) {
+								socket.emit(SignalType.Pokemon, [
+									SC_ComType.Approve,
+									comId,
+									response.data,
+								]);
+							} else {
+								socket.emit(SignalType.Pokemon, [
+									SC_ComType.Error,
+									comId,
+									["Pokemon not found"],
+								]);
+							}
+						});
+
 						break;
 					}
 				}
