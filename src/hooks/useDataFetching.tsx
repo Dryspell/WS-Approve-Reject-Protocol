@@ -10,6 +10,7 @@ import {
 	SignalType,
 } from "~/types/socket";
 import { createStore } from "solid-js/store";
+import { JSONObject } from "~/types/utils";
 
 const enum QueryStatus {
 	Idle,
@@ -49,10 +50,12 @@ export default function useDataFetching<
 		} else {
 			switch (request[0]) {
 				case CS_ComType.Get: {
+					const [pokemonId] = request[2];
+
 					switch (type) {
 						case SC_ComType.Approve: {
 							setPokemons({
-								[request[2][0]]: {
+								[pokemonId]: {
 									status: QueryStatus.Success,
 									data: data as unknown as TSuccessData,
 								},
@@ -63,7 +66,7 @@ export default function useDataFetching<
 						case SC_ComType.Reject: {
 							const [reason] = data;
 							setPokemons({
-								[request[2][0]]: {
+								[pokemonId]: {
 									status: QueryStatus.Error,
 									error: reason,
 								},
@@ -73,7 +76,7 @@ export default function useDataFetching<
 
 						case SC_ComType.Loading: {
 							setPokemons({
-								[request[2][0]]: {
+								[pokemonId]: {
 									status: QueryStatus.Loading,
 								},
 							});
@@ -83,7 +86,7 @@ export default function useDataFetching<
 						case SC_ComType.Error: {
 							const [reason] = data;
 							setPokemons({
-								[request[2][0]]: {
+								[pokemonId]: {
 									status: QueryStatus.Error,
 									error: reason,
 								},
