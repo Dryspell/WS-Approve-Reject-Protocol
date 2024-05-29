@@ -29,33 +29,65 @@ export const serialize = (obj: JSONObject | JSONObject[]): SerializedObject => {
 	}, [] as SerializedObject);
 };
 
-export const deserialize = (
+export const deserialize = <
+	TRep extends JSONObject,
+	R = TRep extends JSONObject[] ? Partial<TRep>[] : Partial<TRep>
+>(
 	serialized: SerializedObject,
-	representation: JSONObject
-): JSONObject => {
-	if (!representation || typeof representation !== "object") return undefined;
+	representation: TRep
+): R => {
+	if (!representation || typeof representation !== "object") {
+		throw new Error("Invalid representation");
+	}
 
 	if (Array.isArray(representation)) {
 		return serialized.map((value, i) => {
 			return !value || typeof value !== "object"
 				? value
 				: deserialize(value, representation[i]);
-		});
+		}) as R;
 	}
 
 	const repKeys = Object.keys(representation);
 
-	return serialized.reduce((acc, value, i) => {
-		const repKey = repKeys[i];
+	return serialized.reduce(
+		(acc, value, i) => {
+			const repKey = repKeys[i];
 
-		acc[repKey] =
-			!value || typeof value !== "object"
+			acc[repKey] =
+				!value || typeof value !== "object"
+					? value
+					: typeof representation[repKey] === "object" &&
+					  representation[repKey] &&
+					  !Array.isArray(representation[repKey])
+					? deserialize(value, representation[repKey])
+					: undefined;
+			return acc;
+		},
+		{} as {
+			[key: string]: JSONObject;
+		}
+	) as R;
+};
+
+export const createRepresentation = <T extends JSONObject>(
+	representative: T
+): { [K in keyof T]: JSONObject } => {
+	if (!representative || typeof representative !== "object") {
+		throw new Error("Invalid representative");
+	}
+
+	return Object.entries(representative).reduce((acc, [key, value]) => {
+		acc[key as keyof T] =
+			typeof value === "string"
+				? ""
+				: typeof value === "number"
+				? 0
+				: typeof value === "boolean"
+				? false
+				: value == null
 				? value
-				: typeof representation[repKey] === "object" &&
-				  representation[repKey] &&
-				  !Array.isArray(representation[repKey])
-				? deserialize(value, representation[repKey])
-				: undefined;
+				: createRepresentation(value);
 		return acc;
-	}, {} as typeof representation);
+	}, {} as { [K in keyof T]: JSONObject });
 };
