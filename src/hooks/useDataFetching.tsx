@@ -45,7 +45,9 @@ export default function useDataFetching<
 		const request = cache.get(comId);
 
 		if (!request) {
-			console.error("Received unexpected signal");
+			console.error(
+				`Received unexpected signal: ${SC_ComType[type]}, ${comId}, ${data}`
+			);
 			return;
 		} else {
 			switch (request[0]) {
@@ -130,9 +132,20 @@ export default function useDataFetching<
 			<div class="text-gray-700 p-4" {...rawProps}>
 				<form
 					onSubmit={(e) => {
-						console.log(e.currentTarget);
 						e.preventDefault();
-						fetchPokemon(1);
+						const formData = new FormData(
+							e.target as HTMLFormElement
+						);
+						console.log(
+							formData.get("pokemonId"),
+							typeof formData.get("pokemonId")
+						);
+						const pokemonId = !Number.isNaN(
+							parseInt(formData.get("pokemonId") as string)
+						)
+							? parseInt(formData.get("pokemonId") as string)
+							: 1;
+						fetchPokemon(pokemonId);
 					}}
 					class="max-6-xs text-6xl text-sky-700 font-thin uppercase my-16 grid grid-cols-2 gap-4"
 				>

@@ -16,7 +16,7 @@ export interface SocketWithIO extends NetSocket {
 	server: SocketServer;
 }
 
-export const enum SC_ComType {
+export enum SC_ComType {
 	Approve,
 	Reject,
 	Set,
