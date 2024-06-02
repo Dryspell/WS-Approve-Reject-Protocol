@@ -44,7 +44,7 @@ export const deserialize = <
 		return serialized.map((value, i) => {
 			return !value || typeof value !== "object"
 				? value
-				: deserialize(value, representation[i]);
+				: deserialize(value, representation[0]);
 		}) as R;
 	}
 
@@ -58,9 +58,9 @@ export const deserialize = <
 				!value || typeof value !== "object"
 					? value
 					: typeof representation[repKey] === "object" &&
-					  representation[repKey] &&
-					  !Array.isArray(representation[repKey])
-					? deserialize(value, representation[repKey])
+					  representation[repKey]
+					? // && !Array.isArray(representation[repKey])
+					  deserialize(value, representation[repKey])
 					: undefined;
 			return acc;
 		},
@@ -75,6 +75,22 @@ export const createRepresentation = <T extends JSONObject>(
 ): { [K in keyof T]: JSONObject } => {
 	if (!representative || typeof representative !== "object") {
 		throw new Error("Invalid representative");
+	}
+
+	if (Array.isArray(representative)) {
+		return representative
+			.map((value) => {
+				return typeof value === "string"
+					? ""
+					: typeof value === "number"
+					? 0
+					: typeof value === "boolean"
+					? false
+					: value == null
+					? value
+					: createRepresentation(value);
+			})
+			.slice(0, 1) as { [K in keyof T]: JSONObject };
 	}
 
 	return Object.entries(representative).reduce((acc, [key, value]) => {

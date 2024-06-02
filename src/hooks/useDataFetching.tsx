@@ -100,11 +100,15 @@ export default function useDataFetching<
 							);
 						}
 					}
+
+					break;
 				}
 
 				default: {
 					console.error(
-						`Received unexpected request type: ${request[0]}`
+						`Received unexpected request type: ${
+							CS_ComType[request[0]]
+						}`
 					);
 				}
 			}

@@ -67,7 +67,7 @@ export const enum SignalType {
 	Pokemon = "pokemon",
 }
 
-export const enum CS_ComType {
+export enum CS_ComType {
 	Request,
 	Get,
 	GetOrCreate,
