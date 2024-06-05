@@ -1,14 +1,20 @@
 import { type APIEvent } from "@solidjs/start/server";
 import { Server } from "socket.io";
 import {
-	CA,
-	SA,
+	CS_ComType,
 	SC_ComType,
+	serverSocket,
+	SignalType,
 	type SocketWithIO,
 	type sServer,
 } from "~/types/socket";
+import Axios from "axios";
+import { setupCache } from "axios-cache-interceptor";
 
 const prohibitedWords = ["fish", "cat", "dog"];
+
+const instance = Axios.create();
+const axios = setupCache(instance);
 
 export async function GET({ request, nativeEvent }: APIEvent) {
 	const socket = nativeEvent.node.res.socket as SocketWithIO | null;
@@ -24,127 +30,111 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 
 		socket.server.io = io;
 
-		const users: Record<string, { name: string }> = {};
-		const counters = new Map<string, number>();
+		const signals = new Map<string, number>();
+		const defaultValue = 0;
 
 		io.on("connection", (socket) => {
-			socket.on(CA.NewUser, ([type, communicationId], [name]) => {
-				users[socket.id] = { ...users[socket.id], name };
-				socket.emit(CA.NewUser, [SC_ComType.Approve, communicationId]);
-				socket.broadcast.emit(
-					SA.UserConnected,
-					[SC_ComType.Announce],
-					[name]
-				);
-			});
+			console.log("Connection");
 
-			socket.on(CA.Disconnect, () => {
-				users[socket.id]?.name &&
-					socket.broadcast.emit(
-						SA.UserDisconnected,
-						[SC_ComType.Announce],
-						[users[socket.id].name]
-					);
-				delete users[socket.id];
-			});
+			socket.on(SignalType.Counter, (params) => {
+				// console.log({ params });
+				const [type, comId, data] = params;
 
-			socket.on(
-				CA.SendChatMessage,
-				([type, communicationId], [message]) => {
-					if (
-						prohibitedWords.some((word) => message.includes(word))
-					) {
-						socket.emit(CA.SendChatMessage, [
-							SC_ComType.Reject,
-							communicationId,
-						]);
-						return;
-					} else {
-						socket.emit(CA.SendChatMessage, [
+				switch (type) {
+					case CS_ComType.Get: {
+						socket.emit(SignalType.Counter, [
 							SC_ComType.Approve,
-							communicationId,
+							comId,
+							[Object.fromEntries(signals.entries())],
 						]);
-						socket.broadcast.emit(
-							SA.ChatMessage,
-							[SC_ComType.Announce],
-							[message, users[socket.id].name]
-						);
+						break;
+					}
+
+					case CS_ComType.GetOrCreate: {
+						const [sigId] = data;
+						const counter = signals.get(sigId);
+						if (counter === undefined) {
+							signals.set(sigId, defaultValue);
+							socket.emit(SignalType.Counter, [
+								SC_ComType.Approve,
+								comId,
+								[defaultValue],
+							]);
+							socket.broadcast.emit(SignalType.Counter, [
+								SC_ComType.Set,
+								comId,
+								[sigId, defaultValue],
+							]);
+						} else {
+							socket.emit(SignalType.Counter, [
+								SC_ComType.Approve,
+								comId,
+								[counter],
+							]);
+						}
+						break;
+					}
+
+					case CS_ComType.Delta: {
+						const [sigId, delta] = data;
+						const counter = signals.get(sigId);
+						if (counter === undefined) {
+							socket.emit(SignalType.Counter, [
+								SC_ComType.Reject,
+								comId,
+								["Counter does not exist"],
+							]);
+						} else {
+							signals.set(sigId, counter + delta);
+							socket.emit(SignalType.Counter, [
+								SC_ComType.Approve,
+								comId,
+							]);
+
+							socket.broadcast.emit(SignalType.Counter, [
+								SC_ComType.Delta,
+								comId,
+								[sigId, delta],
+							]);
+						}
+						break;
 					}
 				}
-			);
-
-			socket.on(CA.Move, ([type, communicationId], [unitData]) => {
-				socket.emit(CA.Move, [SC_ComType.Approve, communicationId]);
-				socket.broadcast.emit(
-					SA.Move,
-					[SC_ComType.Announce],
-					[unitData]
-				);
 			});
 
-			socket.on(CA.InitCounter, ([type, communicationId], [sigId]) => {
-				const counter = counters.get(sigId);
-				if (counter === undefined) {
-					counters.set(sigId, 0);
-					socket.emit(
-						CA.InitCounter,
-						[SC_ComType.Approve, communicationId],
-						[0]
-					);
-				} else {
-					socket.emit(
-						CA.InitCounter,
-						[SC_ComType.Approve, communicationId],
-						[counter]
-					);
+			socket.on(SignalType.Pokemon, (params) => {
+				const [type, comId, data] = params;
+
+				switch (type) {
+					case CS_ComType.Get: {
+						socket.emit(SignalType.Pokemon, [
+							SC_ComType.Loading,
+							comId,
+						]);
+
+						axios({
+							url: `https://pokeapi.co/api/v2/pokemon/${data[0]}`,
+							method: "GET",
+						}).then((response) => {
+							if (response.status === 200) {
+								socket.emit(SignalType.Pokemon, [
+									SC_ComType.Approve,
+									comId,
+									response.data,
+								]);
+							} else {
+								socket.emit(SignalType.Pokemon, [
+									SC_ComType.Error,
+									comId,
+									["Pokemon not found"],
+								]);
+							}
+						});
+
+						break;
+					}
 				}
 			});
-
-			socket.on(
-				CA.Increment,
-				([type, communicationId], [sigId, amount]) => {
-					const counter = counters.get(sigId);
-					if (counter === undefined) {
-					} else {
-						const newAmount = counter + amount;
-
-						counters.set(sigId, newAmount);
-						socket.emit(CA.Increment, [
-							SC_ComType.Approve,
-							communicationId,
-						]);
-
-						socket.broadcast.emit(
-							SA.Increment,
-							[SC_ComType.Announce],
-							[sigId, newAmount]
-						);
-					}
-				}
-			);
-
-			socket.on(
-				CA.Decrement,
-				([type, communicationId], [sigId, amount]) => {
-					const counter = counters.get(sigId);
-					if (counter === undefined) {
-					} else {
-						const newAmount = counter - amount;
-
-						counters.set(sigId, newAmount);
-						socket.emit(CA.Decrement, [
-							SC_ComType.Approve,
-							communicationId,
-						]);
-
-						socket.broadcast.emit(
-							SA.Decrement,
-							[SC_ComType.Announce],
-							[sigId, newAmount]
-						);
-					}
-				}
-			);
 		});
 
 		return new Response();

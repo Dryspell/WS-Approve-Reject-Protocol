@@ -6,7 +6,7 @@ import type {
 	Socket as SocketforServer,
 } from "socket.io";
 import type { Socket as SocketforClient } from "socket.io-client";
-import { type UnitData } from "./game";
+import { PokemonApiResponse } from "~/hooks/useDataFetching";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -16,75 +16,58 @@ export interface SocketWithIO extends NetSocket {
 	server: SocketServer;
 }
 
-/**
- * Server to Client Actions
- */
-export const enum SA {
-	UserConnected = "user-connected",
-	ChatMessage = "chat-message",
-	UserDisconnected = "user-disconnected",
-	Move = "s_move",
-	Increment = "s_increment",
-	Decrement = "s_decrement",
-}
-
-export const enum SC_ComType {
+export enum SC_ComType {
 	Approve,
 	Reject,
-	Announce,
+	Set,
+	Delta,
 	Loading,
 	Error,
 }
 
-/**
- * Approves or Rejects a client communication or announces a server action
- */
-export type SC_Communication =
-	| [type: SC_ComType.Approve | SC_ComType.Reject, communicationId: string]
-	| [type: SC_ComType.Announce];
-
 export interface ServerToClientEvents {
-	[CA.NewUser]: (meta: SC_Communication) => void;
-	[CA.Move]: (meta: SC_Communication) => void;
-	[CA.SendChatMessage]: (meta: SC_Communication) => void;
-	[CA.InitCounter]: (meta: SC_Communication, data: [amount: number]) => void;
-	[CA.Increment]: (meta: SC_Communication) => void;
-	[CA.Decrement]: (meta: SC_Communication) => void;
-
-	[SA.UserConnected]: (meta: SC_Communication, data: [name: string]) => void;
-	[SA.ChatMessage]: (
-		meta: SC_Communication,
-		data: [message: string, name: string]
+	[SignalType.Counter]: (
+		params:
+			| [
+					type: SC_ComType.Approve,
+					comId: string,
+					data?:
+						| [amount: number]
+						| [counters: { [sigId: string]: number }]
+			  ]
+			| [type: SC_ComType.Reject, comId: string, data: [reason: string]]
+			| [
+					type: SC_ComType.Delta,
+					comId: string,
+					data: [sigId: string, amount: number]
+			  ]
+			| [
+					type: SC_ComType.Set,
+					comId: string,
+					data: [sigId: string, amount: number]
+			  ]
 	) => void;
-	[SA.UserDisconnected]: (
-		meta: SC_Communication,
-		data: [name: string]
-	) => void;
-	[SA.Move]: (meta: SC_Communication, data: [unitData: UnitData]) => void;
-	[SA.Increment]: (
-		meta: SC_Communication,
-		data: [sigId: string, amount: number]
-	) => void;
-	[SA.Decrement]: (
-		meta: SC_Communication,
-		data: [sigId: string, amount: number]
+	[SignalType.Pokemon]: (
+		params:
+			| [
+					type: SC_ComType.Approve,
+					comId: string,
+					data: PokemonApiResponse
+			  ]
+			| [type: SC_ComType.Reject, comId: string, data: [reason: string]]
+			| [type: SC_ComType.Loading, comId: string]
+			| [type: SC_ComType.Error, comId: string, data: [reason: string]]
 	) => void;
 }
 
-/**
- * Client to Server Actions
- */
-export const enum CA {
-	NewUser = "new-user",
-	Disconnect = "disconnect",
-	SendChatMessage = "send-chat-message",
-	InitCounter = "init-counter",
-	Increment = "increment",
-	Decrement = "decrement",
-	Move = "move",
+export const enum SignalType {
+	User = "user",
+	Counter = "counter",
+	Unit = "unit",
+	Pokemon = "pokemon",
 }
 
-export const enum CS_CommunicationType {
+export enum CS_ComType {
 	Request,
 	Get,
 	GetOrCreate,
@@ -93,32 +76,25 @@ export const enum CS_CommunicationType {
 	Delta,
 }
 
-export type CS_Communication = [
-	type: CS_CommunicationType,
-	communicationId: string
-];
-
-export interface ClientToServerEvents {
-	[CA.NewUser]: (meta: CS_Communication, data: [name: string]) => void;
-	[CA.Disconnect]: (meta: CS_Communication) => void;
-	[CA.SendChatMessage]: (
-		meta: CS_Communication,
-		data: [message: string]
+export type ClientToServerEvents = {
+	[SignalType.Counter]: (
+		params:
+			| [type: CS_ComType.Get, comId: string]
+			| [
+					type: CS_ComType.GetOrCreate,
+					comId: string,
+					data: [sigId: string]
+			  ]
+			| [
+					type: CS_ComType.Delta,
+					comId: string,
+					data: [sigId: string, delta: number]
+			  ]
 	) => void;
-	[CA.InitCounter]: (
-		meta: CS_Communication,
-		data: [signalId: string]
+	[SignalType.Pokemon]: (
+		params: [type: CS_ComType.Get, comId: string, data: [id: number]]
 	) => void;
-	[CA.Increment]: (
-		meta: CS_Communication,
-		data: [sigId: string, amount: number]
-	) => void;
-	[CA.Decrement]: (
-		meta: CS_Communication,
-		data: [sigId: string, amount: number]
-	) => void;
-	[CA.Move]: (meta: CS_Communication, data: [unitData: UnitData]) => void;
-}
+};
 
 interface InterServerEvents {
 	// ping: () => void;
