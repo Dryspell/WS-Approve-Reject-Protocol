@@ -10,6 +10,7 @@ import {
 } from "~/types/socket";
 import Axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
+import { routerPaths, topLevelRouterPaths } from "~/lib/tRPC/router";
 
 const prohibitedWords = ["fish", "cat", "dog"];
 
@@ -35,106 +36,121 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 
 		io.on("connection", (socket) => {
 			console.log("Connection");
+			console.log({ routerPaths });
 
-			socket.on(SignalType.Counter, (params) => {
-				// console.log({ params });
-				const [type, comId, data] = params;
+			for (const key of topLevelRouterPaths) {
+				socket.on(key, (params) => {
+					console.log({ params });
+				});
+			}
 
-				switch (type) {
-					case CS_ComType.Get: {
-						socket.emit(SignalType.Counter, [
-							SC_ComType.Approve,
-							comId,
-							[Object.fromEntries(signals.entries())],
-						]);
-						break;
-					}
+			// for (const path of routerPaths) {
+			// 	socket.on(path, (params) => {
+			// 		console.log({ params });
+			// 	});
+			// }
 
-					case CS_ComType.GetOrCreate: {
-						const [sigId] = data;
-						const counter = signals.get(sigId);
-						if (counter === undefined) {
-							signals.set(sigId, defaultValue);
-							socket.emit(SignalType.Counter, [
-								SC_ComType.Approve,
-								comId,
-								[defaultValue],
-							]);
-							socket.broadcast.emit(SignalType.Counter, [
-								SC_ComType.Set,
-								comId,
-								[sigId, defaultValue],
-							]);
-						} else {
-							socket.emit(SignalType.Counter, [
-								SC_ComType.Approve,
-								comId,
-								[counter],
-							]);
-						}
-						break;
-					}
+			// socket.on(SignalType.Counter, (params) => {
+			// 	// console.log({ params });
+			// 	const [type, comId, data] = params;
 
-					case CS_ComType.Delta: {
-						const [sigId, delta] = data;
-						const counter = signals.get(sigId);
-						if (counter === undefined) {
-							socket.emit(SignalType.Counter, [
-								SC_ComType.Reject,
-								comId,
-								["Counter does not exist"],
-							]);
-						} else {
-							signals.set(sigId, counter + delta);
-							socket.emit(SignalType.Counter, [
-								SC_ComType.Approve,
-								comId,
-							]);
+			// 	switch (type) {
+			// 		case CS_ComType.Get: {
+			// 			socket.emit(SignalType.Counter, [
+			// 				SC_ComType.Approve,
+			// 				comId,
+			// 				[Object.fromEntries(signals.entries())],
+			// 			]);
+			// 			break;
+			// 		}
 
-							socket.broadcast.emit(SignalType.Counter, [
-								SC_ComType.Delta,
-								comId,
-								[sigId, delta],
-							]);
-						}
-						break;
-					}
-				}
-			});
+			// 		case CS_ComType.GetOrCreate: {
+			// 			const [sigId] = data;
+			// 			const counter = signals.get(sigId);
+			// 			if (counter === undefined) {
+			// 				signals.set(sigId, defaultValue);
+			// 				socket.emit(SignalType.Counter, [
+			// 					SC_ComType.Approve,
+			// 					comId,
+			// 					[defaultValue],
+			// 				]);
+			// 				socket.broadcast.emit(SignalType.Counter, [
+			// 					SC_ComType.Set,
+			// 					comId,
+			// 					[sigId, defaultValue],
+			// 				]);
+			// 			} else {
+			// 				socket.emit(SignalType.Counter, [
+			// 					SC_ComType.Approve,
+			// 					comId,
+			// 					[counter],
+			// 				]);
+			// 			}
+			// 			break;
+			// 		}
 
-			socket.on(SignalType.Pokemon, (params) => {
-				const [type, comId, data] = params;
+			// 		case CS_ComType.Delta: {
+			// 			const [sigId, delta] = data;
+			// 			const counter = signals.get(sigId);
+			// 			if (counter === undefined) {
+			// 				socket.emit(SignalType.Counter, [
+			// 					SC_ComType.Reject,
+			// 					comId,
+			// 					["Counter does not exist"],
+			// 				]);
+			// 			} else {
+			// 				signals.set(sigId, counter + delta);
+			// 				socket.emit(SignalType.Counter, [
+			// 					SC_ComType.Approve,
+			// 					comId,
+			// 				]);
 
-				switch (type) {
-					case CS_ComType.Get: {
-						socket.emit(SignalType.Pokemon, [
-							SC_ComType.Loading,
-							comId,
-						]);
+			// 				socket.broadcast.emit(SignalType.Counter, [
+			// 					SC_ComType.Delta,
+			// 					comId,
+			// 					[sigId, delta],
+			// 				]);
+			// 			}
+			// 			break;
+			// 		}
+			// 	}
+			// });
 
-						axios({
-							url: `https://pokeapi.co/api/v2/pokemon/${data[0]}`,
-							method: "GET",
-						}).then((response) => {
-							if (response.status === 200) {
-								socket.emit(SignalType.Pokemon, [
-									SC_ComType.Approve,
-									comId,
-									response.data,
-								]);
-							} else {
-								socket.emit(SignalType.Pokemon, [
-									SC_ComType.Error,
-									comId,
-									["Pokemon not found"],
-								]);
-							}
-						});
+			// socket.on(SignalType.Pokemon, (params) => {
+			// 	const [type, comId, data] = params;
 
-						break;
-					}
-				}
-			});
+			// 	switch (type) {
+			// 		case CS_ComType.Get: {
+			// 			socket.emit(SignalType.Pokemon, [
+			// 				SC_ComType.Loading,
+			// 				comId,
+			// 			]);
+
+			// 			axios({
+			// 				url: `https://pokeapi.co/api/v2/pokemon/${data[0]}`,
+			// 				method: "GET",
+			// 			}).then((response) => {
+			// 				if (response.status === 200) {
+			// 					socket.emit(SignalType.Pokemon, [
+			// 						SC_ComType.Approve,
+			// 						comId,
+			// 						response.data,
+			// 					]);
+			// 				} else {
+			// 					socket.emit(SignalType.Pokemon, [
+			// 						SC_ComType.Error,
+			// 						comId,
+			// 						["Pokemon not found"],
+			// 					]);
+			// 				}
+			// 			});
+
+			// 			break;
+			// 		}
+			// 	}
+			// });
+
+			console.log("eventNames: ", socket.eventNames());
 		});
 
 		return new Response();

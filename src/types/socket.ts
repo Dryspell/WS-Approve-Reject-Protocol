@@ -1,3 +1,4 @@
+import { inferRouterInputs } from "@trpc/server";
 import type { Server as HTTPServer } from "http";
 import type { Socket as NetSocket } from "net";
 import type {
@@ -7,6 +8,9 @@ import type {
 } from "socket.io";
 import type { Socket as SocketforClient } from "socket.io-client";
 import { PokemonApiResponse } from "~/hooks/useDataFetching";
+import { Procedures } from "~/lib/tRPC/router";
+import { AppRouter } from "../lib/tRPC/router";
+import { GetInferenceHelpers } from "@trpc/server/unstable-core-do-not-import";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -68,33 +72,52 @@ export const enum SignalType {
 }
 
 export enum CS_ComType {
-	Request,
-	Get,
-	GetOrCreate,
-	Set,
-	SetOrCreate,
-	Delta,
+	Request = "request",
+	Get = "get",
+	GetOrCreate = "getOrCreate",
+	Set = "set",
+	SetOrCreate = "setOrCreate",
+	Delta = "delta",
 }
 
 export type ClientToServerEvents = {
 	[SignalType.Counter]: (
-		params:
-			| [type: CS_ComType.Get, comId: string]
-			| [
-					type: CS_ComType.GetOrCreate,
-					comId: string,
-					data: [sigId: string]
-			  ]
-			| [
-					type: CS_ComType.Delta,
-					comId: string,
-					data: [sigId: string, delta: number]
-			  ]
+		params: inferRouterInputs<AppRouter>[SignalType.Counter][CS_ComType.Get]
+		// | [type: CS_ComType.Get, comId: string]
+		// | [
+		// 		type: CS_ComType.GetOrCreate,
+		// 		comId: string,
+		// 		data: [sigId: string]
+		//   ]
+		// | [
+		// 		type: CS_ComType.Delta,
+		// 		comId: string,
+		// 		data: [sigId: string, delta: number]
+		//   ]
 	) => void;
 	[SignalType.Pokemon]: (
-		params: [type: CS_ComType.Get, comId: string, data: [id: number]]
+		params: inferRouterInputs<AppRouter>[SignalType.Pokemon][CS_ComType.Get]
 	) => void;
 };
+// {
+// [SignalType.Counter]: (
+// 	params:
+// 		| [type: CS_ComType.Get, comId: string]
+// 		| [
+// 				type: CS_ComType.GetOrCreate,
+// 				comId: string,
+// 				data: [sigId: string]
+// 		  ]
+// 		| [
+// 				type: CS_ComType.Delta,
+// 				comId: string,
+// 				data: [sigId: string, delta: number]
+// 		  ]
+// ) => void;
+// [SignalType.Pokemon]: (
+// 	params: [type: CS_ComType.Get, comId: string, data: [id: number]]
+// ) => void;
+// };
 
 interface InterServerEvents {
 	// ping: () => void;
