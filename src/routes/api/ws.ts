@@ -10,6 +10,7 @@ import {
 } from "~/types/socket";
 import Axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
+import sCounters from "~/lib/counters";
 
 const prohibitedWords = ["fish", "cat", "dog"];
 
@@ -30,77 +31,16 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 
 		socket.server.io = io;
 
-		const signals = new Map<string, number>();
-		const defaultValue = 0;
+		const {
+			signals: counterSignals,
+			defaultValue,
+			handler: counterHandler,
+		} = sCounters();
 
 		io.on("connection", (socket) => {
 			console.log("Connection");
 
-			socket.on(SignalType.Counter, (params) => {
-				// console.log({ params });
-				const [type, comId, data] = params;
-
-				switch (type) {
-					case CS_ComType.Get: {
-						socket.emit(SignalType.Counter, [
-							SC_ComType.Approve,
-							comId,
-							[Object.fromEntries(signals.entries())],
-						]);
-						break;
-					}
-
-					case CS_ComType.GetOrCreate: {
-						const [sigId] = data;
-						const counter = signals.get(sigId);
-						if (counter === undefined) {
-							signals.set(sigId, defaultValue);
-							socket.emit(SignalType.Counter, [
-								SC_ComType.Approve,
-								comId,
-								[defaultValue],
-							]);
-							socket.broadcast.emit(SignalType.Counter, [
-								SC_ComType.Set,
-								comId,
-								[sigId, defaultValue],
-							]);
-						} else {
-							socket.emit(SignalType.Counter, [
-								SC_ComType.Approve,
-								comId,
-								[counter],
-							]);
-						}
-						break;
-					}
-
-					case CS_ComType.Delta: {
-						const [sigId, delta] = data;
-						const counter = signals.get(sigId);
-						if (counter === undefined) {
-							socket.emit(SignalType.Counter, [
-								SC_ComType.Reject,
-								comId,
-								["Counter does not exist"],
-							]);
-						} else {
-							signals.set(sigId, counter + delta);
-							socket.emit(SignalType.Counter, [
-								SC_ComType.Approve,
-								comId,
-							]);
-
-							socket.broadcast.emit(SignalType.Counter, [
-								SC_ComType.Delta,
-								comId,
-								[sigId, delta],
-							]);
-						}
-						break;
-					}
-				}
-			});
+			socket.on(SignalType.Counter, counterHandler(socket));
 
 			socket.on(SignalType.Pokemon, (params) => {
 				const [type, comId, data] = params;

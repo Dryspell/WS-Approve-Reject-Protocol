@@ -9,31 +9,44 @@ import {
 	SC_ComType,
 	SignalType,
 } from "~/types/socket";
-import { createStore } from "solid-js/store";
+import { createStore, SetStoreFunction } from "solid-js/store";
+import { TupleFilterByIndex } from "~/types/tuples";
 
-export default function useSocketCounter(socket: clientSocket, sigId: string) {
-	const [counters, setCounters] = createStore<{
-		[counterId: string]: number;
-	}>({});
+type Request = Parameters<ClientToServerEvents[SignalType.Counter]>[0];
 
-	type Request = Parameters<ClientToServerEvents[SignalType.Counter]>[0];
-	const cache = new Map<string, Request>();
-
-	socket.on(SignalType.Counter, ([type, comId, data]) => {
+export const sc_CounterHandler =
+	(
+		cache: Map<string, Request>,
+		counters: {
+			[counterId: string]: number;
+		},
+		setCounters: SetStoreFunction<{
+			[counterId: string]: number;
+		}>
+	) =>
+	([type, comId, data]:
+		| [
+				type: SC_ComType.Approve,
+				comId: string,
+				data?:
+					| [amount: number]
+					| [counters: { [sigId: string]: number }]
+		  ]
+		| [type: SC_ComType.Reject, comId: string, data: [reason: string]]
+		| [
+				type: SC_ComType.Delta,
+				comId: string,
+				data: [sigId: string, amount: number]
+		  ]
+		| [
+				type: SC_ComType.Set,
+				comId: string,
+				data: [sigId: string, amount: number]
+		  ]) => {
 		const request = cache.get(comId);
 
 		if (!request) {
 			switch (type) {
-				case SC_ComType.Approve: {
-					console.error("Received unexpected approve signal");
-					break;
-				}
-
-				case SC_ComType.Reject: {
-					console.error("Received unexpected reject signal");
-					break;
-				}
-
 				case SC_ComType.Set: {
 					const [sigId, amount] = data;
 					setCounters({ [sigId]: amount });
@@ -47,7 +60,9 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 				}
 
 				default: {
-					console.error(`Received unexpected signal type: ${type}`);
+					console.error(
+						`Received unexpected signal type: ${SC_ComType[type]}`
+					);
 				}
 			}
 		} else {
@@ -64,7 +79,7 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 				}
 
 				case CS_ComType.GetOrCreate: {
-					const [sigId] = request[2];
+					const [, , [sigId]] = request;
 					const counter = data?.[0];
 					if (typeof counter !== "number") return;
 					setCounters({ [sigId]: counter });
@@ -76,9 +91,27 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 					setCounters({ [sigId]: counters[sigId] + delta });
 					break;
 				}
+
+				default: {
+					console.error(
+						`Found unhandled request in cache: ${request}`
+					);
+				}
 			}
 		}
-	});
+	};
+
+export default function useSocketCounter(socket: clientSocket, sigId: string) {
+	const [counters, setCounters] = createStore<{
+		[counterId: string]: number;
+	}>({});
+
+	const cache = new Map<string, Request>();
+
+	socket.on(
+		SignalType.Counter,
+		sc_CounterHandler(cache, counters, setCounters)
+	);
 
 	const delta = (d: number) => {
 		const comId = createId();

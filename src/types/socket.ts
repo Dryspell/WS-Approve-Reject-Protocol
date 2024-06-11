@@ -7,6 +7,8 @@ import type {
 } from "socket.io";
 import type { Socket as SocketforClient } from "socket.io-client";
 import { PokemonApiResponse } from "~/hooks/useDataFetching";
+import { sc_CounterHandler } from "~/hooks/useSocketCounter";
+import sCounters from "~/lib/counters";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -26,27 +28,7 @@ export enum SC_ComType {
 }
 
 export interface ServerToClientEvents {
-	[SignalType.Counter]: (
-		params:
-			| [
-					type: SC_ComType.Approve,
-					comId: string,
-					data?:
-						| [amount: number]
-						| [counters: { [sigId: string]: number }]
-			  ]
-			| [type: SC_ComType.Reject, comId: string, data: [reason: string]]
-			| [
-					type: SC_ComType.Delta,
-					comId: string,
-					data: [sigId: string, amount: number]
-			  ]
-			| [
-					type: SC_ComType.Set,
-					comId: string,
-					data: [sigId: string, amount: number]
-			  ]
-	) => void;
+	[SignalType.Counter]: ReturnType<typeof sc_CounterHandler>;
 	[SignalType.Pokemon]: (
 		params:
 			| [
@@ -77,20 +59,7 @@ export enum CS_ComType {
 }
 
 export type ClientToServerEvents = {
-	[SignalType.Counter]: (
-		params:
-			| [type: CS_ComType.Get, comId: string]
-			| [
-					type: CS_ComType.GetOrCreate,
-					comId: string,
-					data: [sigId: string]
-			  ]
-			| [
-					type: CS_ComType.Delta,
-					comId: string,
-					data: [sigId: string, delta: number]
-			  ]
-	) => void;
+	[SignalType.Counter]: ReturnType<ReturnType<typeof sCounters>["handler"]>;
 	[SignalType.Pokemon]: (
 		params: [type: CS_ComType.Get, comId: string, data: [id: number]]
 	) => void;

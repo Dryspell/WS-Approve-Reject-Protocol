@@ -3,12 +3,11 @@ import { deserialize } from "../types/utils";
 
 export default function Serialization(props: {}) {
 	const testSerialObject = {
-		greeting: "Welcome to quicktype!",
+		greeting: "Welcome!",
 		instructions: [
-			"Type or paste JSON here",
-			"Or choose a sample above",
-			"quicktype will generate code in your",
-			"chosen language to parse the sample data",
+			"These are serialized objects",
+			"Use the serialization functions to",
+			"convert them to and from JSON",
 		],
 		sampleNest: {
 			language: "TypeScript",
@@ -35,13 +34,11 @@ export default function Serialization(props: {}) {
 	};
 
 	const testSerialObject2 = {
-		greeting: "Welcome to quicktype!",
+		greeting: "Welcome!",
 		instructions: [
-			"Type or paste JSON here",
-			"Or choose a sample above",
-			"quicktype will generate code in your",
-			"chosen language to parse the sample data",
-			"cool",
+			"These are serialized objects",
+			"Use the serialization functions to",
+			"convert them to and from JSON",
 		],
 		sampleNest: {
 			language: "TypeScript",
@@ -75,33 +72,51 @@ export default function Serialization(props: {}) {
 
 	return (
 		<div class="grid grid-cols-3 gap-4">
-			<pre>{JSON.stringify(testSerialObject, null, 2)}</pre>
-			<pre>
-				{JSON.stringify(
-					createRepresentation(testSerialObject),
-					null,
-					2
-				)}
-			</pre>
-			<pre>{JSON.stringify(serialized, null, 2)}</pre>
-			<pre>{JSON.stringify(deserialized, null, 2)}</pre>
-			<pre>
-				{JSON.stringify(
-					serialize(deepClone(testSerialObject2)),
-					null,
-					2
-				)}
-			</pre>
-			<pre>
-				{JSON.stringify(
-					deserialize(
+			<div>
+				<h1>Test Object</h1>
+				<pre>{JSON.stringify(testSerialObject, null, 2)}</pre>
+			</div>
+			<div>
+				<h1>Representation</h1>
+				<pre>
+					{JSON.stringify(
+						createRepresentation(testSerialObject),
+						null,
+						2
+					)}
+				</pre>
+			</div>
+			<div>
+				<h1>Serialized</h1>
+				<pre>{JSON.stringify(serialized, null, 2)}</pre>
+			</div>
+			<div>
+				<h1>Deserialized</h1>
+				<pre>{JSON.stringify(deserialized, null, 2)}</pre>
+			</div>
+			<div>
+				<h1>Serialized Second Object</h1>
+				<pre>
+					{JSON.stringify(
 						serialize(deepClone(testSerialObject2)),
-						createRepresentation(testSerialObject)
-					),
-					null,
-					2
-				)}
-			</pre>
+						null,
+						2
+					)}
+				</pre>
+			</div>
+			<div>
+				<h1>Deserialized Second Object</h1>
+				<pre>
+					{JSON.stringify(
+						deserialize(
+							serialize(deepClone(testSerialObject2)),
+							createRepresentation(testSerialObject)
+						),
+						null,
+						2
+					)}
+				</pre>
+			</div>
 		</div>
 	);
 }
