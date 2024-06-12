@@ -11,6 +11,7 @@ import {
 import Axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
 import counters from "~/lib/Server/counters";
+import pokemonFetch from "~/lib/Server/pokemonFetch";
 
 const prohibitedWords = ["fish", "cat", "dog"];
 
@@ -32,45 +33,13 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 		socket.server.io = io;
 
 		const { handler: counterHandler } = counters();
+		const { handler: pokemonHandler } = pokemonFetch();
 
 		io.on("connection", (socket) => {
 			console.log("Connection");
 
 			socket.on(SignalType.Counter, counterHandler(socket));
-
-			socket.on(SignalType.Pokemon, (params) => {
-				const [type, comId, data] = params;
-
-				switch (type) {
-					case CS_ComType.Get: {
-						socket.emit(SignalType.Pokemon, [
-							SC_ComType.Loading,
-							comId,
-						]);
-
-						axios({
-							url: `https://pokeapi.co/api/v2/pokemon/${data[0]}`,
-							method: "GET",
-						}).then((response) => {
-							if (response.status === 200) {
-								socket.emit(SignalType.Pokemon, [
-									SC_ComType.Approve,
-									comId,
-									response.data,
-								]);
-							} else {
-								socket.emit(SignalType.Pokemon, [
-									SC_ComType.Error,
-									comId,
-									["Pokemon not found"],
-								]);
-							}
-						});
-
-						break;
-					}
-				}
-			});
+			socket.on(SignalType.Pokemon, pokemonHandler(socket));
 		});
 
 		return new Response();

@@ -9,6 +9,7 @@ import type { Socket as SocketforClient } from "socket.io-client";
 import { PokemonApiResponse } from "~/hooks/useDataFetching";
 import { sc_CounterHandler } from "~/hooks/useSocketCounter";
 import counters from "~/lib/Server/counters";
+import pokemonFetch from "~/lib/Server/pokemonFetch";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -60,9 +61,9 @@ export enum CS_ComType {
 
 export type ClientToServerEvents = {
 	[SignalType.Counter]: ReturnType<ReturnType<typeof counters>["handler"]>;
-	[SignalType.Pokemon]: (
-		params: [type: CS_ComType.Get, comId: string, data: [id: number]]
-	) => void;
+	[SignalType.Pokemon]: ReturnType<
+		ReturnType<typeof pokemonFetch>["handler"]
+	>;
 };
 
 interface InterServerEvents {
