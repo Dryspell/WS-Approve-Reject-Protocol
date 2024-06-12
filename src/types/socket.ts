@@ -7,7 +7,7 @@ import type {
 } from "socket.io";
 import type { Socket as SocketforClient } from "socket.io-client";
 import { PokemonApiResponse } from "~/hooks/useDataFetching";
-import { sc_CounterHandler } from "~/hooks/useSocketCounter";
+import { counterHandler } from "~/hooks/useSocketCounter";
 import counters from "~/lib/Server/counters";
 import pokemonFetch from "~/lib/Server/pokemonFetch";
 
@@ -29,7 +29,7 @@ export enum SC_ComType {
 }
 
 export interface ServerToClientEvents {
-	[SignalType.Counter]: ReturnType<typeof sc_CounterHandler>;
+	[SignalType.Counter]: ReturnType<typeof counterHandler>;
 	[SignalType.Pokemon]: (
 		params:
 			| [

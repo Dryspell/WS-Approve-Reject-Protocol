@@ -1,7 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
 import { Component, ComponentProps, For, onMount } from "solid-js";
-import { Flex } from "~/components/ui/flex";
-import { socket } from "~/lib/socket";
 import {
 	clientSocket,
 	ClientToServerEvents,

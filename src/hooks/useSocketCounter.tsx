@@ -12,7 +12,7 @@ import { createStore, SetStoreFunction } from "solid-js/store";
 
 type Request = Parameters<ClientToServerEvents[SignalType.Counter]>[0];
 
-export const sc_CounterHandler =
+export const counterHandler =
 	(
 		cache: Map<string, Request>,
 		counters: {
@@ -106,10 +106,7 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 
 	const cache = new Map<string, Request>();
 
-	socket.on(
-		SignalType.Counter,
-		sc_CounterHandler(cache, counters, setCounters)
-	);
+	socket.on(SignalType.Counter, counterHandler(cache, counters, setCounters));
 
 	const delta = (d: number) => {
 		const comId = createId();
