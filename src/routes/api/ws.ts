@@ -10,7 +10,7 @@ import {
 } from "~/types/socket";
 import Axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
-import sCounters from "~/lib/counters";
+import counters from "~/lib/Server/counters";
 
 const prohibitedWords = ["fish", "cat", "dog"];
 
@@ -31,11 +31,7 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 
 		socket.server.io = io;
 
-		const {
-			signals: counterSignals,
-			defaultValue,
-			handler: counterHandler,
-		} = sCounters();
+		const { handler: counterHandler } = counters();
 
 		io.on("connection", (socket) => {
 			console.log("Connection");

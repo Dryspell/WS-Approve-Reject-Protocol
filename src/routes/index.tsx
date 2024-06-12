@@ -1,8 +1,8 @@
-import { socket } from "~/lib/socket";
 import useSocketCounter from "~/hooks/useSocketCounter";
 import { SignalType } from "~/types/socket";
 import useDataFetching from "~/hooks/useDataFetching";
 import Serialization from "~/components/Serialization";
+import { socket } from "~/lib/Client/socket";
 
 export default function Home() {
 	socket.on("connect", () => {

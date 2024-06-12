@@ -5,7 +5,7 @@ import {
 	SignalType,
 } from "~/types/socket";
 
-export default function sCounters() {
+export default function counters() {
 	const signals = new Map<string, number>();
 	const defaultValue = 0;
 

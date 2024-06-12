@@ -1,7 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { Component, ComponentProps, For, onMount } from "solid-js";
 import { Flex } from "~/components/ui/flex";
-import { socket } from "~/lib/socket";
 import {
 	clientSocket,
 	ClientToServerEvents,
@@ -10,7 +9,6 @@ import {
 	SignalType,
 } from "~/types/socket";
 import { createStore, SetStoreFunction } from "solid-js/store";
-import { TupleFilterByIndex } from "~/types/tuples";
 
 type Request = Parameters<ClientToServerEvents[SignalType.Counter]>[0];
 
