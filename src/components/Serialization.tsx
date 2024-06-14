@@ -1,5 +1,9 @@
-import { createRepresentation, deepClone, serialize } from "~/types/utils";
-import { deserialize } from "../types/utils";
+import {
+	createRepresentation,
+	deepClone,
+	serialize,
+	deserialize,
+} from "~/types/utils";
 
 export default function Serialization(props: {}) {
 	const testSerialObject = {

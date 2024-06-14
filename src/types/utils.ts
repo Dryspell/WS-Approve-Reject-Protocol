@@ -20,7 +20,7 @@ export type SerializedObject = (
 	| SerializedObject
 )[];
 
-export const serialize = (obj: JSONObject | JSONObject[]): SerializedObject => {
+export const serialize = (obj: JSONObject | JSONObject[]) => {
 	if (!obj || typeof obj !== "object") return [obj];
 
 	return Object.entries(obj).reduce((acc, [key, value], i) => {

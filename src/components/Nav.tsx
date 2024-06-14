@@ -14,6 +14,10 @@ const routes = [
 		value: "serialization",
 		label: "Serialization",
 	},
+	{
+		value: "chat",
+		label: "Chat",
+	},
 ];
 
 export default function Nav() {

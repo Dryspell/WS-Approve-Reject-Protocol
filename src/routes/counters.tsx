@@ -1,4 +1,4 @@
-import useSocketCounter from "~/hooks/useSocketCounter";
+import useSocketCounter from "~/hooks/useCounters";
 import { socket } from "~/lib/Client/socket";
 
 export default function CountersPage() {
