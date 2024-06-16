@@ -9,6 +9,7 @@ import {
 } from "~/types/socket";
 import { createStore } from "solid-js/store";
 import { JSONObject } from "~/types/utils";
+import { InferRequestData } from "~/types/socket-utils";
 
 const enum QueryStatus {
 	Idle,
@@ -26,7 +27,9 @@ export default function useDataFetching<
 	TSuccessData extends JSONObject,
 	TSignalType extends SignalType.Pokemon
 >(socket: clientSocket, signalType: TSignalType) {
-	type Request = Parameters<ClientToServerEvents[TSignalType]>[0];
+	// type Request = Parameters<ClientToServerEvents[TSignalType]>[0];
+	type Request = InferRequestData<TSignalType>;
+
 	const cache = new Map<string, Request>();
 
 	const [pokemons, setPokemons] = createStore<{
@@ -117,12 +120,9 @@ export default function useDataFetching<
 
 	function fetchPokemon(pokemonId: number) {
 		const comId = createId();
-		cache.set(comId, [CS_ComType.Get, comId, [pokemonId]]);
-		socket.emit(signalType as SignalType.Pokemon, [
-			CS_ComType.Get,
-			comId,
-			[pokemonId],
-		]);
+		const request: Request = [CS_ComType.Get, comId, [pokemonId]];
+		cache.set(comId, request);
+		socket.emit(signalType as SignalType.Pokemon, request);
 	}
 
 	const Interface: Component<ComponentProps<"div">> = (rawProps) => {

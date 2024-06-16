@@ -12,6 +12,7 @@ import counters from "~/lib/Server/counters";
 import pokemonFetch from "~/lib/Server/pokemonFetch";
 import { chatHandler } from "~/hooks/useChat";
 import chat from "~/lib/Server/chat";
+import { InferHandler } from "./socket-utils";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -64,11 +65,9 @@ export enum CS_ComType {
 }
 
 export type ClientToServerEvents = {
-	[SignalType.Counter]: ReturnType<ReturnType<typeof counters>["handler"]>;
-	[SignalType.Pokemon]: ReturnType<
-		ReturnType<typeof pokemonFetch>["handler"]
-	>;
-	[SignalType.Chat]: ReturnType<typeof chat>["handler"];
+	[SignalType.Counter]: InferHandler<typeof counters>;
+	[SignalType.Pokemon]: InferHandler<typeof pokemonFetch>;
+	[SignalType.Chat]: InferHandler<typeof chat>;
 };
 
 interface InterServerEvents {

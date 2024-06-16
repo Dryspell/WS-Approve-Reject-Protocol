@@ -9,8 +9,9 @@ import {
 	SignalType,
 } from "~/types/socket";
 import { createStore, SetStoreFunction } from "solid-js/store";
+import { InferRequestData } from "~/types/socket-utils";
 
-type Request = Parameters<ClientToServerEvents[SignalType.Counter]>[0];
+type Request = InferRequestData<SignalType.Counter>;
 
 export const counterHandler =
 	(

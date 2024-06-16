@@ -1,3 +1,4 @@
+import { ChatActionType } from "~/hooks/useChat";
 import {
 	CS_ComType,
 	SC_ComType,
@@ -5,37 +6,51 @@ import {
 	SignalType,
 } from "~/types/socket";
 
-export type Message = [sender: string, message: string];
+export type User = [userId: string, userName: string];
+export type Message = [senderId: string, message: string];
+export type Room = [
+	roomId: string,
+	roomName: string,
+	memberIds: string[],
+	messages: Message[]
+];
 
 export default function chat() {
-	const rooms = new Map<string, Message[]>();
+	const rooms = new Map<string, Room>();
 
 	const handler =
 		(socket: serverSocket) =>
 		([type, comId, data]: [
-			type: CS_ComType.GetOrCreate,
+			type: ChatActionType.CreateOrJoinRoom,
 			comId: string,
-			data: [room: string]
+			data: [roomId: string, roomName: string, userId: string]
 		]) => {
 			switch (type) {
-				case CS_ComType.GetOrCreate: {
-					const [room] = data;
-					const messages = rooms.get(room);
-					if (messages === undefined) {
-						rooms.set(room, []);
+				case ChatActionType.CreateOrJoinRoom: {
+					const [roomId, roomName, userId] = data;
+					const existingRoom = rooms.get(roomId);
+					if (!existingRoom) {
+						const roomData: Room = [roomId, roomName, [userId], []];
+						rooms.set(roomId, roomData);
 						socket.emit(SignalType.Chat, [
 							SC_ComType.Approve,
 							comId,
-							[] as Message[],
+							roomData,
 						]);
 					} else {
 						socket.emit(SignalType.Chat, [
 							SC_ComType.Approve,
 							comId,
-							messages,
+							existingRoom,
 						]);
 					}
 					break;
+				}
+
+				default: {
+					console.error(
+						`Received unexpected signal: ${CS_ComType[type]}, ${comId}, ${data}`
+					);
 				}
 			}
 		};
