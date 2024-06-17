@@ -74,6 +74,31 @@ export default function Serialization(props: {}) {
 		createRepresentation(testSerialObject)
 	);
 
+	const serializeProxy = new Proxy(
+		serialize({
+			testSerialObject2,
+		}),
+		{
+			get: (target, prop) => {
+				console.log(target, prop);
+				if (!(prop in testSerialObject2)) {
+					console.log("undefined");
+					return undefined;
+				}
+				const newProp = prop as keyof typeof testSerialObject2;
+				const index = Object.keys(testSerialObject2).indexOf(newProp);
+				if (!Array.isArray(target) || !Array.isArray(target[0]))
+					return undefined;
+				const res =
+					target?.[0]?.[
+						Object.keys(testSerialObject2).indexOf(newProp)
+					];
+				console.log(res, index);
+				return res;
+			},
+		}
+	) as unknown as typeof testSerialObject2;
+
 	return (
 		<div class="grid grid-cols-3 gap-4">
 			<div>
@@ -120,6 +145,10 @@ export default function Serialization(props: {}) {
 						2
 					)}
 				</pre>
+			</div>
+			<div>
+				<h1>Proxy Serialized Access</h1>
+				<pre>{JSON.stringify(serializeProxy.arrayNest, null, 2)}</pre>
 			</div>
 		</div>
 	);

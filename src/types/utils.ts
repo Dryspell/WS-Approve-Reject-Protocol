@@ -107,3 +107,65 @@ export const createRepresentation = <T extends JSONObject>(
 		return acc;
 	}, {} as { [K in keyof T]: JSONObject });
 };
+
+// https://stackoverflow.com/questions/52855145/typescript-object-type-to-array-type-tuple/68695508#68695508
+// https://github.com/microsoft/TypeScript/issues/13298
+
+type Object = {
+	[key: string]: string | null | boolean | number | Object | Object[];
+};
+const testObj = {
+	a: "a" as string | boolean,
+	b: null,
+	c: true,
+	d: 1,
+	e: {
+		f: "f",
+		g: null,
+		h: true,
+		i: 1,
+	},
+	j: ["hello", false] as [string, boolean],
+} satisfies JSONObject;
+
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
+	k: infer I
+) => void
+	? I
+	: never;
+
+type LastOf<T> = UnionToIntersection<
+	T extends any ? () => T : never
+> extends () => infer R
+	? R
+	: never;
+
+// TS4.0+
+type Push<T extends any[], V> = [...T, V];
+
+type TuplifyUnion<
+	T,
+	L = LastOf<T>,
+	N = [T] extends [never] ? true : false
+> = true extends N ? [] : Push<TuplifyUnion<Exclude<T, L>>, L>;
+
+type ObjValueTuple<
+	T,
+	KS extends any[] = TuplifyUnion<keyof T>,
+	R extends any[] = []
+> = KS extends [infer K, ...infer KT]
+	? T[K & keyof T] extends Object
+		? ObjValueTuple<T, KT, [...R, ObjValueTuple<T[K & keyof T]>]>
+		: ObjValueTuple<T, KT, [...R, T[K & keyof T]]>
+	: R;
+
+type test = ObjValueTuple<typeof testObj>;
+
+// type ObjToTuple<
+// 	T,
+// 	KS extends keyof T = keyof T, // any[] = TuplifyUnion<keyof T>,
+// 	R extends any[] = [never]
+// > = T[KS] extends Record<infer Prop, infer Value>
+// 	? Push<R, [ObjToTuple<Value>]>
+// 	: Push<R, T[KS]>;
+// type test2 = ObjToTuple<typeof testObj>;
