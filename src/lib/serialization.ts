@@ -115,7 +115,7 @@ export const createRepresentation = <T extends JSONObject>(
 
 type Object = { [key: string]: string | null | boolean | number | Object };
 const testObj = {
-	a: "a",
+	a: "a" as string | boolean,
 	b: null,
 	c: true,
 	d: 1,
