@@ -20,7 +20,9 @@ export type SerializedObject = (
 	| SerializedObject
 )[];
 
-export const serialize = (obj: JSONObject | JSONObject[]): SerializedObject => {
+export const serialize = <T extends JSONObject>(
+	obj: T | T[]
+): SerializedObject => {
 	if (!obj || typeof obj !== "object") return [obj];
 
 	return Object.entries(obj).reduce((acc, [key, value], i) => {
@@ -107,3 +109,53 @@ export const createRepresentation = <T extends JSONObject>(
 		return acc;
 	}, {} as { [K in keyof T]: JSONObject });
 };
+
+// https://stackoverflow.com/questions/52855145/typescript-object-type-to-array-type-tuple/68695508#68695508
+// https://github.com/microsoft/TypeScript/issues/13298
+
+type Object = { [key: string]: string | null | boolean | number | Object };
+const testObj = {
+	a: "a",
+	b: null,
+	c: true,
+	d: 1,
+	e: {
+		f: "f",
+		g: null,
+		h: true,
+		i: 1,
+	},
+} satisfies Object;
+
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
+	k: infer I
+) => void
+	? I
+	: never;
+
+type LastOf<T> = UnionToIntersection<
+	T extends any ? () => T : never
+> extends () => infer R
+	? R
+	: never;
+
+// TS4.0+
+type Push<T extends any[], V> = [...T, V];
+
+type TuplifyUnion<
+	T,
+	L = LastOf<T>,
+	N = [T] extends [never] ? true : false
+> = true extends N ? [] : Push<TuplifyUnion<Exclude<T, L>>, L>;
+
+type ObjValueTuple<
+	T,
+	KS extends any[] = TuplifyUnion<keyof T>,
+	R extends any[] = []
+> = KS extends [infer K, ...infer KT]
+	? T[K & keyof T] extends Object
+		? ObjValueTuple<T, KT, [...R, ObjValueTuple<T[K & keyof T]>]>
+		: ObjValueTuple<T, KT, [...R, T[K & keyof T]]>
+	: R;
+
+type test = ObjValueTuple<typeof testObj>;
