@@ -29,11 +29,74 @@ export const chatHandler =
 	) =>
 	([type, comId, data]:
 		| [type: SC_ComType.Approve, comId: string, data: Room]
-		| [type: SC_ComType.Reject, comId: string, data: [reason: string]]) => {
+		| [type: SC_ComType.Approve, comId: string]
+		| [type: SC_ComType.Reject, comId: string, data: [reason: string]]
+		| [type: SC_ComType.Delta, comId: string, data: Message]
+		| [type: SC_ComType.Set, comId: string, data: Room]) => {
 		const request = cache.get(comId);
 
 		if (!request) {
 			switch (type) {
+				case SC_ComType.Set: {
+					const [roomId, ...roomData] = data;
+					setRooms({
+						[roomId]: [roomId, ...roomData],
+					});
+					break;
+				}
+
+				case SC_ComType.Delta: {
+					const [roomId, ...message] = data;
+					const room = rooms[roomId];
+					room[3].push([roomId, ...message]);
+					setRooms({
+						[roomId]: room,
+					});
+					break;
+				}
+
+				default: {
+					console.error(
+						`Received unexpected signal: ${SC_ComType[type]}, ${comId}, ${data}`
+					);
+				}
+			}
+		} else {
+			const [reqType, reqComId, reqData] = request;
+			switch (reqType) {
+				case ChatActionType.CreateOrJoinRoom: {
+					if (type === SC_ComType.Approve && data) {
+						const [roomId, ...roomData] = data;
+						setRooms({
+							[roomId]: [roomId, ...roomData],
+						});
+						cache.delete(comId);
+					} else if (type === SC_ComType.Reject) {
+						const [reason] = data;
+						console.error(
+							`Failed to create or join room: ${reason}`
+						);
+					}
+					break;
+				}
+
+				case ChatActionType.SendMessage: {
+					if (type === SC_ComType.Approve && data) {
+						const [[senderId, roomId, timestamp, message]] =
+							reqData;
+						const room = rooms[roomId];
+						room[3].push([senderId, roomId, timestamp, message]);
+						setRooms({
+							[roomId]: room,
+						});
+						cache.delete(comId);
+					} else if (type === SC_ComType.Reject) {
+						const [reason] = data;
+						console.error(`Failed to send message: ${reason}`);
+					}
+					break;
+				}
+
 				default: {
 					console.error(
 						`Received unexpected signal: ${SC_ComType[type]}, ${comId}, ${data}`
@@ -49,7 +112,7 @@ export default function useChat(socket: clientSocket) {
 
 	const [rooms, setRooms] = createStore<Record<string, Room>>({});
 
-	const handler = chatHandler(cache, rooms, setRooms);
+	socket.on(SignalType.Chat, chatHandler(cache, rooms, setRooms));
 
 	const Chat: Component<ComponentProps<"div">> = (rawProps) => {
 		onMount(() => {
@@ -93,5 +156,5 @@ export default function useChat(socket: clientSocket) {
 		);
 	};
 
-	return { Chat, handler, cache, messages, setMessages };
+	return { Chat, cache, messages, setMessages };
 }
