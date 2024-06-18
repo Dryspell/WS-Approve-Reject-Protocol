@@ -12,6 +12,7 @@ import Axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
 import counters from "~/lib/Server/counters";
 import pokemonFetch from "~/lib/Server/pokemonFetch";
+import chat from "~/lib/Server/chat";
 
 const prohibitedWords = ["fish", "cat", "dog"];
 
@@ -34,12 +35,14 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 
 		const { handler: counterHandler } = counters();
 		const { handler: pokemonHandler } = pokemonFetch();
+		const { handler: chatHandler } = chat();
 
 		io.on("connection", (socket) => {
 			console.log("Connection");
 
 			socket.on(SignalType.Counter, counterHandler(socket));
 			socket.on(SignalType.Pokemon, pokemonHandler(socket));
+			socket.on(SignalType.Chat, chatHandler(socket));
 		});
 
 		return new Response();

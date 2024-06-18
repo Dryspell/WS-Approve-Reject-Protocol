@@ -46,6 +46,9 @@ export default function chat() {
 					const [roomId, roomName, userId] = data;
 
 					const existingRoom = rooms.get(roomId);
+					console.log(
+						`Received request to create or join room: ${roomId}, ${roomName}, ${userId}`
+					);
 
 					if (
 						!existingRoom &&
