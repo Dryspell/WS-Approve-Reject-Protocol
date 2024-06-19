@@ -11,11 +11,11 @@ import {
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { InferRequestData } from "~/types/socket-utils";
 
-type Request = InferRequestData<SignalType.Counter>;
+type RequestData = InferRequestData<SignalType.Counter>;
 
 export const counterHandler =
 	(
-		cache: Map<string, Request>,
+		cache: Map<string, RequestData>,
 		counters: {
 			[counterId: string]: number;
 		},
@@ -64,39 +64,6 @@ export const counterHandler =
 					);
 				}
 			}
-		} else {
-			switch (request[0]) {
-				case CS_ComType.Get: {
-					const counters = data?.[0];
-					if (typeof counters !== "object") {
-						throw new Error(
-							"Expected Unreachable: Invalid data received"
-						);
-					}
-					setCounters(counters);
-					break;
-				}
-
-				case CS_ComType.GetOrCreate: {
-					const [, , [sigId]] = request;
-					const counter = data?.[0];
-					if (typeof counter !== "number") return;
-					setCounters({ [sigId]: counter });
-					break;
-				}
-
-				case CS_ComType.Delta: {
-					const [sigId, delta] = request[2];
-					setCounters({ [sigId]: counters[sigId] + delta });
-					break;
-				}
-
-				default: {
-					console.error(
-						`Found unhandled request in cache: ${request}`
-					);
-				}
-			}
 		}
 	};
 
@@ -105,28 +72,96 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 		[counterId: string]: number;
 	}>({});
 
-	const cache = new Map<string, Request>();
+	const cache = new Map<string, RequestData>();
 
 	socket.on(SignalType.Counter, counterHandler(cache, counters, setCounters));
 
 	const delta = (d: number) => {
 		const comId = createId();
-		const request: Request = [CS_ComType.Delta, comId, [sigId, d]];
+		const request: RequestData = [comId, [sigId, d]];
 		cache.set(comId, request);
-		socket.emit(SignalType.Counter, request);
+
+		socket
+			.timeout(5000)
+			.emit(
+				SignalType.Counter,
+				CS_ComType.Delta,
+				request,
+				(
+					err: Error,
+					response:
+						| [SC_ComType.Approve, string]
+						| [SC_ComType.Reject, string, [reason: string]]
+				) => {
+					if (err) {
+						console.error(err);
+						return;
+					}
+
+					setCounters({ [sigId]: counters[sigId] + d });
+				}
+			);
 	};
 
 	const Counters: Component<ComponentProps<"div">> = (rawProps) => {
 		onMount(() => {
 			const comId = createId();
-			const request: Request = [CS_ComType.Get, comId];
-			cache.set(comId, request);
-			socket.emit(SignalType.Counter, request);
+			const requestData: RequestData = [comId];
+			cache.set(comId, requestData);
+			socket
+				.timeout(5000)
+				.emit(
+					SignalType.Counter,
+					CS_ComType.Get,
+					requestData,
+					(
+						err: Error,
+						[resType, resComId, resData]:
+							| [
+									SC_ComType.Approve,
+									string,
+									{ [k: string]: number }[]
+							  ]
+							| [SC_ComType.Reject, string, [reason: string]]
+					) => {
+						if (err) {
+							console.error(err);
+							return;
+						}
+						const counters = resData?.[0];
+						if (typeof counters !== "object") {
+							throw new Error(
+								"Expected Unreachable: Invalid data received"
+							);
+						}
+						setCounters(counters);
+					}
+				);
 
 			const comId2 = createId();
-			const request2: Request = [CS_ComType.GetOrCreate, comId2, [sigId]];
+			const request2: RequestData = [comId2, [sigId]];
 			cache.set(comId2, request2);
-			socket.emit(SignalType.Counter, request2);
+			socket
+				.timeout(5000)
+				.emit(
+					SignalType.Counter,
+					CS_ComType.GetOrCreate,
+					request2,
+					(
+						err: Error,
+						response:
+							| [SC_ComType.Approve, string, [number]]
+							| [SC_ComType.Reject, string, [reason: string]]
+					) => {
+						if (err) {
+							console.error(err);
+							return;
+						}
+						const counter = response?.[2][0];
+						if (typeof counter !== "number") return;
+						setCounters({ [sigId]: counter });
+					}
+				);
 		});
 
 		return (

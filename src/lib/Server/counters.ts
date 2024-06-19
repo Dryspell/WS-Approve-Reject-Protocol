@@ -5,29 +5,47 @@ import {
 	SignalType,
 } from "~/types/socket";
 
+export type CounterHandlerArgs =
+	| [
+			type: CS_ComType.Get,
+			request: [comId: string],
+			callback: (
+				returnData:
+					| [SC_ComType.Approve, string, { [k: string]: number }[]]
+					| [SC_ComType.Reject, string, [reason: string]]
+			) => void
+	  ]
+	| [
+			type: CS_ComType.GetOrCreate,
+			request: [comId: string, [sigId: string]],
+			callback: (
+				returnData:
+					| [SC_ComType.Approve, string, [number]]
+					| [SC_ComType.Reject, string, [reason: string]]
+			) => void
+	  ]
+	| [
+			type: CS_ComType.Delta,
+			request: [comId: string, [sigId: string, delta: number]],
+			callback: (
+				returnData:
+					| [SC_ComType.Approve, string]
+					| [SC_ComType.Reject, string, [reason: string]]
+			) => void
+	  ];
+
 export default function counters() {
 	const signals = new Map<string, number>();
 	const defaultValue = 0;
 
 	const handler =
 		(socket: serverSocket) =>
-		([type, comId, data]:
-			| [type: CS_ComType.Get, comId: string]
-			| [
-					type: CS_ComType.GetOrCreate,
-					comId: string,
-					data: [sigId: string]
-			  ]
-			| [
-					type: CS_ComType.Delta,
-					comId: string,
-					data: [sigId: string, delta: number]
-			  ]) => {
-			// console.log({ params });
-
+		(...[type, request, callback]: CounterHandlerArgs) => {
+			console.log([type, request, callback]);
 			switch (type) {
 				case CS_ComType.Get: {
-					socket.emit(SignalType.Counter, [
+					const [comId] = request;
+					callback([
 						SC_ComType.Approve,
 						comId,
 						[Object.fromEntries(signals.entries())],
@@ -36,45 +54,34 @@ export default function counters() {
 				}
 
 				case CS_ComType.GetOrCreate: {
-					const [sigId] = data;
+					const [comId, [sigId]] = request;
 					const counter = signals.get(sigId);
 					if (counter === undefined) {
 						signals.set(sigId, defaultValue);
-						socket.emit(SignalType.Counter, [
-							SC_ComType.Approve,
-							comId,
-							[defaultValue],
-						]);
+						callback([SC_ComType.Approve, comId, [defaultValue]]);
 						socket.broadcast.emit(SignalType.Counter, [
 							SC_ComType.Set,
 							comId,
 							[sigId, defaultValue],
 						]);
 					} else {
-						socket.emit(SignalType.Counter, [
-							SC_ComType.Approve,
-							comId,
-							[counter],
-						]);
+						callback([SC_ComType.Approve, comId, [counter]]);
 					}
 					break;
 				}
 
 				case CS_ComType.Delta: {
-					const [sigId, delta] = data;
+					const [comId, [sigId, delta]] = request;
 					const counter = signals.get(sigId);
 					if (counter === undefined) {
-						socket.emit(SignalType.Counter, [
+						callback([
 							SC_ComType.Reject,
 							comId,
 							["Counter does not exist"],
 						]);
 					} else {
 						signals.set(sigId, counter + delta);
-						socket.emit(SignalType.Counter, [
-							SC_ComType.Approve,
-							comId,
-						]);
+						callback([SC_ComType.Approve, comId]);
 
 						socket.broadcast.emit(SignalType.Counter, [
 							SC_ComType.Delta,
@@ -83,6 +90,12 @@ export default function counters() {
 						]);
 					}
 					break;
+				}
+
+				default: {
+					console.error(
+						`Received unexpected signal type: ${CS_ComType[type]}`
+					);
 				}
 			}
 		};
