@@ -3,19 +3,15 @@ import { Component, ComponentProps, For, onMount } from "solid-js";
 import { Flex } from "~/components/ui/flex";
 import {
 	clientSocket,
-	ClientToServerEvents,
 	CS_ComType,
 	SC_ComType,
 	SignalType,
 } from "~/types/socket";
 import { createStore, SetStoreFunction } from "solid-js/store";
-import { InferRequestData } from "~/types/socket-utils";
-
-type RequestData = InferRequestData<SignalType.Counter>;
+import { showToast } from "~/components/ui/toast";
 
 export const counterHandler =
 	(
-		cache: Map<string, RequestData>,
 		counters: {
 			[counterId: string]: number;
 		},
@@ -42,27 +38,23 @@ export const counterHandler =
 				comId: string,
 				data: [sigId: string, amount: number]
 		  ]) => {
-		const request = cache.get(comId);
+		switch (type) {
+			case SC_ComType.Set: {
+				const [sigId, amount] = data;
+				setCounters({ [sigId]: amount });
+				break;
+			}
 
-		if (!request) {
-			switch (type) {
-				case SC_ComType.Set: {
-					const [sigId, amount] = data;
-					setCounters({ [sigId]: amount });
-					break;
-				}
+			case SC_ComType.Delta: {
+				const [sigId, amount] = data;
+				setCounters({ [sigId]: counters[sigId] + amount });
+				break;
+			}
 
-				case SC_ComType.Delta: {
-					const [sigId, amount] = data;
-					setCounters({ [sigId]: counters[sigId] + amount });
-					break;
-				}
-
-				default: {
-					console.error(
-						`Received unexpected signal type: ${SC_ComType[type]}`
-					);
-				}
+			default: {
+				console.error(
+					`Received unexpected signal type: ${SC_ComType[type]}`
+				);
 			}
 		}
 	};
@@ -72,21 +64,18 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 		[counterId: string]: number;
 	}>({});
 
-	const cache = new Map<string, RequestData>();
+	socket.on(SignalType.Counter, counterHandler(counters, setCounters));
 
-	socket.on(SignalType.Counter, counterHandler(cache, counters, setCounters));
-
-	const delta = (d: number) => {
+	const delta = (delt: number) => {
 		const comId = createId();
-		const request: RequestData = [comId, [sigId, d]];
-		cache.set(comId, request);
+		const initialTs = performance.now();
 
 		socket
 			.timeout(5000)
 			.emit(
 				SignalType.Counter,
 				CS_ComType.Delta,
-				request,
+				[comId, [sigId, delt]],
 				(
 					err: Error,
 					response:
@@ -94,11 +83,25 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 						| [SC_ComType.Reject, string, [reason: string]]
 				) => {
 					if (err) {
-						console.error(err);
+						showToast({
+							title: "Error",
+							description: err.message,
+							variant: "error",
+						});
 						return;
 					}
-
-					setCounters({ [sigId]: counters[sigId] + d });
+					if (response[0] === SC_ComType.Reject) {
+						showToast({
+							title: "Error",
+							description: response[2][0],
+							variant: "error",
+						});
+						return;
+					}
+					console.log(
+						`Delta took ${performance.now() - initialTs}ms`
+					);
+					setCounters({ [sigId]: counters[sigId] + delt });
 				}
 			);
 	};
@@ -106,14 +109,12 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 	const Counters: Component<ComponentProps<"div">> = (rawProps) => {
 		onMount(() => {
 			const comId = createId();
-			const requestData: RequestData = [comId];
-			cache.set(comId, requestData);
 			socket
 				.timeout(5000)
 				.emit(
 					SignalType.Counter,
 					CS_ComType.Get,
-					requestData,
+					[comId],
 					(
 						err: Error,
 						[resType, resComId, resData]:
@@ -139,14 +140,12 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 				);
 
 			const comId2 = createId();
-			const request2: RequestData = [comId2, [sigId]];
-			cache.set(comId2, request2);
 			socket
 				.timeout(5000)
 				.emit(
 					SignalType.Counter,
 					CS_ComType.GetOrCreate,
-					request2,
+					[comId2, [sigId]],
 					(
 						err: Error,
 						response:
@@ -194,5 +193,5 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 		);
 	};
 
-	return { Counters, counters, setCounters, delta, cache };
+	return { Counters, counters, setCounters, delta };
 }
