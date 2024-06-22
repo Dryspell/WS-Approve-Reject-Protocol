@@ -7,8 +7,10 @@
     "start": "vinxi start"
   },
   "dependencies": {
+    "@corvu/resizable": "^0.2.2",
     "@fontsource/inter": "^5.0.18",
     "@kobalte/core": "^0.13.3",
+    "@ngneat/falso": "^7.2.0",
     "@paralleldrive/cuid2": "^2.2.2",
     "@solidjs/router": "^0.13.5",
     "@solidjs/start": "^1.0.1",
@@ -19,6 +21,7 @@
     "axios-cache-interceptor": "^1.5.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "embla-carousel-solid": "^8.1.5",
     "postcss": "^8.4.38",
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.7.5",

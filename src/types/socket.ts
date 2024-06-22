@@ -8,9 +8,12 @@ import type {
 } from "socket.io";
 import type { Socket as SocketforClient } from "socket.io-client";
 import { PokemonApiResponse } from "~/hooks/useDataFetching";
-import { Procedures } from "~/lib/tRPC/router";
-import { AppRouter } from "../lib/tRPC/router";
-import { GetInferenceHelpers } from "@trpc/server/unstable-core-do-not-import";
+import { counterHandler } from "~/hooks/useCounters";
+import counters from "~/lib/Server/counters";
+import pokemonFetch from "~/lib/Server/pokemonFetch";
+import { chatHandler } from "~/hooks/useChat";
+import chat from "~/lib/Server/chat";
+import { InferHandler } from "./socket-utils";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -30,27 +33,7 @@ export enum SC_ComType {
 }
 
 export interface ServerToClientEvents {
-	[SignalType.Counter]: (
-		params:
-			| [
-					type: SC_ComType.Approve,
-					comId: string,
-					data?:
-						| [amount: number]
-						| [counters: { [sigId: string]: number }]
-			  ]
-			| [type: SC_ComType.Reject, comId: string, data: [reason: string]]
-			| [
-					type: SC_ComType.Delta,
-					comId: string,
-					data: [sigId: string, amount: number]
-			  ]
-			| [
-					type: SC_ComType.Set,
-					comId: string,
-					data: [sigId: string, amount: number]
-			  ]
-	) => void;
+	[SignalType.Counter]: ReturnType<typeof counterHandler>;
 	[SignalType.Pokemon]: (
 		params:
 			| [
@@ -62,6 +45,7 @@ export interface ServerToClientEvents {
 			| [type: SC_ComType.Loading, comId: string]
 			| [type: SC_ComType.Error, comId: string, data: [reason: string]]
 	) => void;
+	[SignalType.Chat]: ReturnType<typeof chatHandler>;
 }
 
 export const enum SignalType {
@@ -69,6 +53,7 @@ export const enum SignalType {
 	Counter = "counter",
 	Unit = "unit",
 	Pokemon = "pokemon",
+	Chat = "chat",
 }
 
 export enum CS_ComType {
@@ -81,23 +66,9 @@ export enum CS_ComType {
 }
 
 export type ClientToServerEvents = {
-	[SignalType.Counter]: (
-		params: inferRouterInputs<AppRouter>[SignalType.Counter][CS_ComType.Get]
-		// | [type: CS_ComType.Get, comId: string]
-		// | [
-		// 		type: CS_ComType.GetOrCreate,
-		// 		comId: string,
-		// 		data: [sigId: string]
-		//   ]
-		// | [
-		// 		type: CS_ComType.Delta,
-		// 		comId: string,
-		// 		data: [sigId: string, delta: number]
-		//   ]
-	) => void;
-	[SignalType.Pokemon]: (
-		params: inferRouterInputs<AppRouter>[SignalType.Pokemon][CS_ComType.Get]
-	) => void;
+	[SignalType.Counter]: InferHandler<typeof counters>;
+	[SignalType.Pokemon]: InferHandler<typeof pokemonFetch>;
+	[SignalType.Chat]: InferHandler<typeof chat>;
 };
 // {
 // [SignalType.Counter]: (

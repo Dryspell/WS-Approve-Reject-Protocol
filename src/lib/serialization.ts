@@ -20,9 +20,7 @@ export type SerializedObject = (
 	| SerializedObject
 )[];
 
-export const serialize = <T extends JSONObject>(
-	obj: T | T[]
-): SerializedObject => {
+export const serialize = (obj: JSONObject | JSONObject[]) => {
 	if (!obj || typeof obj !== "object") return [obj];
 
 	return Object.entries(obj).reduce((acc, [key, value], i) => {
@@ -113,7 +111,9 @@ export const createRepresentation = <T extends JSONObject>(
 // https://stackoverflow.com/questions/52855145/typescript-object-type-to-array-type-tuple/68695508#68695508
 // https://github.com/microsoft/TypeScript/issues/13298
 
-type Object = { [key: string]: string | null | boolean | number | Object };
+type Object = {
+	[key: string]: string | null | boolean | number | Object | Object[];
+};
 const testObj = {
 	a: "a" as string | boolean,
 	b: null,
@@ -125,7 +125,8 @@ const testObj = {
 		h: true,
 		i: 1,
 	},
-} satisfies Object;
+	j: ["hello", false] as [string, boolean],
+} satisfies JSONObject;
 
 type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
 	k: infer I
@@ -159,3 +160,12 @@ type ObjValueTuple<
 	: R;
 
 type test = ObjValueTuple<typeof testObj>;
+
+// type ObjToTuple<
+// 	T,
+// 	KS extends keyof T = keyof T, // any[] = TuplifyUnion<keyof T>,
+// 	R extends any[] = [never]
+// > = T[KS] extends Record<infer Prop, infer Value>
+// 	? Push<R, [ObjToTuple<Value>]>
+// 	: Push<R, T[KS]>;
+// type test2 = ObjToTuple<typeof testObj>;
