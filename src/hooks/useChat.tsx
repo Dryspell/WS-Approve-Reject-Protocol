@@ -1,22 +1,16 @@
-import {
-	clientSocket,
-	ClientToServerEvents,
-	SC_ComType,
-	SignalType,
-} from "~/types/socket";
+import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
 import { createSignal } from "solid-js";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Component, ComponentProps, For, onMount } from "solid-js";
-import { Message, Room } from "~/lib/Server/chat";
+import { ChatHandlerArgs, Message, Room } from "~/lib/Server/chat";
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createId } from "@paralleldrive/cuid2";
-import { InferRequestData } from "~/types/socket-utils";
+import { InferCallbackData, InferRequestData } from "~/types/socket-utils";
 import { Button } from "~/components/ui/button";
 import { randAnimal } from "@ngneat/falso";
 import { showToast } from "~/components/ui/toast";
-
-type Request = InferRequestData<SignalType.Chat>;
+import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
 
 export enum ChatActionType {
 	CreateOrJoinRoom,
@@ -26,116 +20,170 @@ export enum ChatActionType {
 
 export const chatHandler =
 	(
-		cache: Map<string, Request>,
 		rooms: Record<string, Room>,
 		setRooms: SetStoreFunction<Record<string, Room>>
 	) =>
 	([type, comId, data]:
-		| [type: SC_ComType.Approve, comId: string, data: Room]
-		| [type: SC_ComType.Approve, comId: string]
-		| [type: SC_ComType.Reject, comId: string, data: [reason: string]]
 		| [type: SC_ComType.Delta, comId: string, data: Message]
 		| [type: SC_ComType.Set, comId: string, data: Room]) => {
-		const request = cache.get(comId);
-
-		if (!request) {
-			switch (type) {
-				case SC_ComType.Set: {
-					const [roomId, ...roomData] = data;
-					setRooms({
-						[roomId]: [roomId, ...roomData],
-					});
-					break;
-				}
-
-				case SC_ComType.Delta: {
-					const [roomId, ...message] = data;
-					const room = rooms[roomId];
-					room[3].push([roomId, ...message]);
-					setRooms({
-						[roomId]: room,
-					});
-					break;
-				}
-
-				default: {
-					console.error(
-						`Received unexpected signal: ${SC_ComType[type]}, ${comId}, ${data}`
-					);
-				}
+		switch (type) {
+			case SC_ComType.Set: {
+				const [roomId, ...roomData] = data;
+				setRooms({
+					[roomId]: [roomId, ...roomData],
+				});
+				break;
 			}
-		} else {
-			const [reqType, reqComId, reqData] = request;
-			switch (reqType) {
-				case ChatActionType.CreateOrJoinRoom: {
-					if (type === SC_ComType.Approve && data) {
-						const [roomId, ...roomData] = data;
-						setRooms({
-							[roomId]: [roomId, ...roomData],
-						});
-						cache.delete(comId);
-					} else if (type === SC_ComType.Reject) {
-						const [reason] = data;
-						console.error(
-							`Failed to create or join room: ${reason}`
-						);
-					}
-					break;
-				}
 
-				case ChatActionType.SendMessage: {
-					if (type === SC_ComType.Approve && data) {
-						const [[senderId, roomId, timestamp, message]] =
-							reqData;
-						const room = rooms[roomId];
-						room[3].push([senderId, roomId, timestamp, message]);
-						setRooms({
-							[roomId]: room,
-						});
-						cache.delete(comId);
-					} else if (type === SC_ComType.Reject) {
-						const [reason] = data;
-						console.error(`Failed to send message: ${reason}`);
-					}
-					break;
-				}
+			case SC_ComType.Delta: {
+				const [roomId, ...message] = data;
+				const room = rooms[roomId];
+				room[3].push([roomId, ...message]);
+				setRooms({
+					[roomId]: room,
+				});
+				break;
+			}
 
-				default: {
-					console.error(
-						`Received unexpected signal: ${SC_ComType[type]}, ${comId}, ${data}`
-					);
-				}
+			default: {
+				console.error(
+					`Received unexpected signal: ${SC_ComType[type]}, ${comId}, ${data}`
+				);
 			}
 		}
 	};
 
+const DEFAULT_CHAT_ROOM = {
+	id: "global",
+	name: "Global",
+	members: [],
+	messages: [],
+	permissions: [],
+};
+
+const joinRoom = (
+	socket: clientSocket,
+	roomId: string,
+	roomName: string,
+	userName: string,
+	setRooms: SetStoreFunction<Record<string, Room>>
+) => {
+	socket
+		.timeout(DEFAULT_REQUEST_TIMEOUT)
+		.emit(
+			SignalType.Chat,
+			ChatActionType.CreateOrJoinRoom,
+			[createId(), [roomId, roomName, userName]],
+			(
+				err: Error,
+				[returnType, comId, returnData]: InferCallbackData<
+					ChatHandlerArgs,
+					ChatActionType.CreateOrJoinRoom
+				>
+			) => {
+				if (err) {
+					showToast({
+						title: "Error",
+						description: err.message,
+						variant: "error",
+					});
+					return;
+				}
+				if (returnType === SC_ComType.Reject) {
+					const [reason] = returnData;
+					showToast({
+						title: "Error",
+						description: reason,
+						variant: "error",
+					});
+					return;
+				}
+
+				const [roomId, roomName, ...roomData] = returnData;
+				showToast({
+					title: "Room Joined!",
+					description: `You have
+              successfully created or joined room: ${roomName}`,
+					variant: "success",
+				});
+				setRooms({
+					[roomId]: [roomId, roomName, ...roomData],
+				});
+			}
+		);
+};
+
+const sendMessage = (
+	socket: clientSocket,
+	message: Message,
+	rooms: Record<string, Room>,
+	setRooms: SetStoreFunction<Record<string, Room>>
+) => {
+	socket
+		.timeout(DEFAULT_REQUEST_TIMEOUT)
+		.emit(
+			SignalType.Chat,
+			ChatActionType.SendMessage,
+			[createId(), [message]],
+			(
+				err: Error,
+				[returnType, comId, returnData]: InferCallbackData<
+					ChatHandlerArgs,
+					ChatActionType.SendMessage
+				>
+			) => {
+				if (returnType === SC_ComType.Reject) {
+					const [reason] = returnData;
+					showToast({
+						title: "Error",
+						description: reason,
+						variant: "error",
+					});
+					return;
+				}
+				if (err) {
+					showToast({
+						title: "Error",
+						description: err.message,
+						variant: "error",
+					});
+					return;
+				}
+				if (returnType === SC_ComType.Approve && returnData) {
+					const [senderId, roomId, ...rest] = message;
+					const room = rooms[roomId];
+					room[3].push(message);
+					setRooms({
+						[roomId]: room,
+					});
+				}
+			}
+		);
+};
+
 export default function useChat(socket: clientSocket) {
-	const cache = new Map<string, Request>();
 	const [messages, setMessages] = createSignal([] as Message[]);
 
 	const [rooms, setRooms] = createStore<Record<string, Room>>({});
-	const [currentRoom, setCurrentRoom] = createSignal("global");
+	const [currentRoom, setCurrentRoom] = createSignal(DEFAULT_CHAT_ROOM.id);
 	const [user, setUser] = createSignal({
 		name: randAnimal(),
 		id: createId(),
 	});
 	const [chatInput, setChatInput] = createSignal("");
 
-	socket.on(SignalType.Chat, chatHandler(cache, rooms, setRooms));
+	socket.on(SignalType.Chat, chatHandler(rooms, setRooms));
 
 	const Chat: Component<ComponentProps<"div">> = (rawProps) => {
 		onMount(() => {
-			const comId = createId();
-			const request: Request = [
-				ChatActionType.CreateOrJoinRoom,
-				comId,
-				["global", "Global", user().name],
-			];
-			cache.set(comId, request);
-			socket.emit(SignalType.Chat, request);
+			joinRoom(
+				socket,
+				DEFAULT_CHAT_ROOM.id,
+				DEFAULT_CHAT_ROOM.name,
+				user().name,
+				setRooms
+			);
 		});
-
-		console.log(rooms);
 
 		return (
 			<div>
@@ -214,21 +262,13 @@ export default function useChat(socket: clientSocket) {
 									variant: "error",
 								});
 							}
-							const comId = createId();
-							const request: Request = [
-								ChatActionType.SendMessage,
-								comId,
-								[
-									[
-										user().id,
-										currentRoom(),
-										Date.now(),
-										chatInput(),
-									],
-								],
+							const message: Message = [
+								user().id,
+								currentRoom(),
+								Date.now(),
+								chatInput(),
 							];
-							cache.set(comId, request);
-							socket.emit(SignalType.Chat, request);
+							sendMessage(socket, message, rooms, setRooms);
 						}}
 					>
 						Send!
@@ -238,5 +278,5 @@ export default function useChat(socket: clientSocket) {
 		);
 	};
 
-	return { Chat, cache, messages, setMessages };
+	return { Chat, messages, setMessages };
 }

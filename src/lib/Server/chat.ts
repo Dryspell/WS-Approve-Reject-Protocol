@@ -21,6 +21,41 @@ export type Room = [
 	permissions: string[]
 ];
 
+export type ChatHandlerArgs =
+	| [
+			type: ChatActionType.CreateOrJoinRoom,
+			request: [
+				comId: string,
+				data: [roomId: string, roomName: string, userId: string]
+			],
+			callback: (
+				returnData:
+					| [
+							returnType: SC_ComType.Approve,
+							comId: string,
+							returnData: Room
+					  ]
+					| [
+							returnType: SC_ComType.Reject,
+							comId: string,
+							returnData: [reason: string]
+					  ]
+			) => void
+	  ]
+	| [
+			type: ChatActionType.SendMessage,
+			request: [comId: string, data: [message: Message]],
+			callback: (
+				returnData:
+					| [returnType: SC_ComType.Approve, comId: string]
+					| [
+							returnType: SC_ComType.Reject,
+							comId: string,
+							returnData: [reason: string]
+					  ]
+			) => void
+	  ];
+
 const userHasPermissionToCreateRoom = (userId: string) => true;
 const userHasPermissionToJoinRoom = (userId: string, roomId: string) => true;
 const userHasPermissionToSendMessage = (userId: string, roomId: string) => true;
@@ -30,19 +65,10 @@ export default function chat() {
 
 	const handler =
 		(socket: serverSocket) =>
-		([type, comId, data]:
-			| [
-					type: ChatActionType.CreateOrJoinRoom,
-					comId: string,
-					data: [roomId: string, roomName: string, userId: string]
-			  ]
-			| [
-					type: ChatActionType.SendMessage,
-					comId: string,
-					data: [message: Message]
-			  ]) => {
+		(...[type, request, callback]: ChatHandlerArgs) => {
 			switch (type) {
 				case ChatActionType.CreateOrJoinRoom: {
+					const [comId, data] = request;
 					const [roomId, roomName, userId] = data;
 
 					const existingRoom = rooms.get(roomId);
@@ -62,11 +88,7 @@ export default function chat() {
 							[],
 						];
 						rooms.set(roomId, roomData);
-						socket.emit(SignalType.Chat, [
-							SC_ComType.Approve,
-							comId,
-							roomData,
-						]);
+						callback([SC_ComType.Approve, comId, roomData]);
 						socket.broadcast.emit(SignalType.Chat, [
 							SC_ComType.Set,
 							comId,
@@ -76,7 +98,7 @@ export default function chat() {
 						!existingRoom &&
 						!userHasPermissionToCreateRoom(userId)
 					) {
-						socket.emit(SignalType.Chat, [
+						callback([
 							SC_ComType.Reject,
 							comId,
 							["Permission denied to create room"],
@@ -85,16 +107,12 @@ export default function chat() {
 						existingRoom &&
 						userHasPermissionToJoinRoom(userId, roomId)
 					) {
-						socket.emit(SignalType.Chat, [
-							SC_ComType.Approve,
-							comId,
-							existingRoom,
-						]);
+						callback([SC_ComType.Approve, comId, existingRoom]);
 					} else if (
 						existingRoom &&
 						!userHasPermissionToJoinRoom(userId, roomId)
 					) {
-						socket.emit(SignalType.Chat, [
+						callback([
 							SC_ComType.Reject,
 							comId,
 							["Permission denied to join room"],
@@ -104,11 +122,12 @@ export default function chat() {
 				}
 
 				case ChatActionType.SendMessage: {
+					const [comId, data] = request;
 					const [[senderId, roomId, timestamp, message]] = data;
 					const room = rooms.get(roomId);
 
 					if (!room) {
-						socket.emit(SignalType.Chat, [
+						callback([
 							SC_ComType.Reject,
 							comId,
 							["Room does not exist"],
@@ -119,10 +138,7 @@ export default function chat() {
 					if (userHasPermissionToSendMessage(senderId, roomId)) {
 						room?.[3].push([senderId, roomId, timestamp, message]);
 						rooms.set(roomId, room);
-						socket.emit(SignalType.Chat, [
-							SC_ComType.Approve,
-							comId,
-						]);
+						callback([SC_ComType.Approve, comId]);
 						socket.broadcast.emit(SignalType.Chat, [
 							SC_ComType.Delta,
 							comId,
@@ -134,7 +150,7 @@ export default function chat() {
 
 				default: {
 					console.error(
-						`Received unexpected signal: ${CS_ComType[type]}, ${comId}, ${data}`
+						`Received unexpected signal: ${CS_ComType[type]}, ${request}`
 					);
 				}
 			}
