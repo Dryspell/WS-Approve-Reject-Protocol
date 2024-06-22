@@ -9,6 +9,9 @@ import {
 } from "~/types/socket";
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { showToast } from "~/components/ui/toast";
+import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
+import { InferCallbackData } from "~/types/socket-utils";
+import { CounterHandlerArgs } from "~/lib/Server/counters";
 
 export const counterHandler =
 	(
@@ -68,19 +71,20 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 
 	const delta = (delt: number) => {
 		const comId = createId();
-		const initialTs = performance.now();
+		// const initialTs = performance.now();
 
 		socket
-			.timeout(5000)
+			.timeout(DEFAULT_REQUEST_TIMEOUT)
 			.emit(
 				SignalType.Counter,
 				CS_ComType.Delta,
 				[comId, [sigId, delt]],
 				(
 					err: Error,
-					response:
-						| [SC_ComType.Approve, string]
-						| [SC_ComType.Reject, string, [reason: string]]
+					response: InferCallbackData<
+						CounterHandlerArgs,
+						CS_ComType.Delta
+					>
 				) => {
 					if (err) {
 						showToast({
@@ -98,9 +102,9 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 						});
 						return;
 					}
-					console.log(
-						`Delta took ${performance.now() - initialTs}ms`
-					);
+					// console.log(
+					// 	`Delta took ${performance.now() - initialTs}ms`
+					// );
 					setCounters({ [sigId]: counters[sigId] + delt });
 				}
 			);
@@ -110,54 +114,55 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 		onMount(() => {
 			const comId = createId();
 			socket
-				.timeout(5000)
+				.timeout(DEFAULT_REQUEST_TIMEOUT)
 				.emit(
 					SignalType.Counter,
 					CS_ComType.Get,
 					[comId],
 					(
 						err: Error,
-						[resType, resComId, resData]:
-							| [
-									SC_ComType.Approve,
-									string,
-									{ [k: string]: number }[]
-							  ]
-							| [SC_ComType.Reject, string, [reason: string]]
+						[returnType, comId, returnData]: InferCallbackData<
+							CounterHandlerArgs,
+							CS_ComType.Get
+						>
 					) => {
 						if (err) {
 							console.error(err);
 							return;
 						}
-						const counters = resData?.[0];
-						if (typeof counters !== "object") {
-							throw new Error(
-								"Expected Unreachable: Invalid data received"
-							);
+						if (returnType === SC_ComType.Reject) {
+							console.error(returnData[0]);
+							return;
 						}
+						const counters = returnData[0];
+
 						setCounters(counters);
 					}
 				);
 
 			const comId2 = createId();
 			socket
-				.timeout(5000)
+				.timeout(DEFAULT_REQUEST_TIMEOUT)
 				.emit(
 					SignalType.Counter,
 					CS_ComType.GetOrCreate,
 					[comId2, [sigId]],
 					(
 						err: Error,
-						response:
-							| [SC_ComType.Approve, string, [number]]
-							| [SC_ComType.Reject, string, [reason: string]]
+						[returnType, comId, returnData]: InferCallbackData<
+							CounterHandlerArgs,
+							CS_ComType.GetOrCreate
+						>
 					) => {
 						if (err) {
 							console.error(err);
 							return;
 						}
-						const counter = response?.[2][0];
-						if (typeof counter !== "number") return;
+						if (returnType === SC_ComType.Reject) {
+							console.error(returnData[0]);
+							return;
+						}
+						const counter = returnData[0];
 						setCounters({ [sigId]: counter });
 					}
 				);

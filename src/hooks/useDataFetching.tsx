@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { Component, ComponentProps, For, onMount } from "solid-js";
+import { Component, ComponentProps, For } from "solid-js";
 import {
 	clientSocket,
 	ClientToServerEvents,
@@ -9,7 +9,9 @@ import {
 } from "~/types/socket";
 import { createStore } from "solid-js/store";
 import { JSONObject } from "~/types/utils";
-import { InferRequestData } from "~/types/socket-utils";
+import { InferCallbackData } from "~/types/socket-utils";
+import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
+import { PokemonFetchHandlerArgs } from "~/lib/Server/pokemonFetch";
 
 const enum QueryStatus {
 	Idle,
@@ -24,105 +26,73 @@ export type PokemonApiResponse = {
 } & JSONObject;
 
 export default function useDataFetching<
-	TSuccessData extends JSONObject,
-	TSignalType extends SignalType.Pokemon
+	TSuccessData,
+	TSignalType extends keyof ClientToServerEvents & SignalType
 >(socket: clientSocket, signalType: TSignalType) {
-	// type Request = Parameters<ClientToServerEvents[TSignalType]>[0];
-	type Request = InferRequestData<TSignalType>;
-
-	const cache = new Map<string, Request>();
-
-	const [pokemons, setPokemons] = createStore<{
-		[pokemonId: string]:
+	const [queryData, setQueryData] = createStore<
+		Record<
+			string, // queryKey (pokemonId)
 			| {
-					status: QueryStatus.Success;
-					data: TSuccessData;
+					queryStatus: QueryStatus.Success;
+					data?: PokemonApiResponse;
 			  }
-			| { status: QueryStatus.Error; error: string }
-			| { status: QueryStatus.Loading };
-	}>({});
-
-	socket.on(signalType as SignalType.Pokemon, ([type, comId, data]) => {
-		const request = cache.get(comId);
-
-		if (!request) {
-			console.error(
-				`Received unexpected signal: ${SC_ComType[type]}, ${comId}, ${data}`
-			);
-			return;
-		} else {
-			switch (request[0]) {
-				case CS_ComType.Get: {
-					const [pokemonId] = request[2];
-
-					switch (type) {
-						case SC_ComType.Approve: {
-							setPokemons({
-								[pokemonId]: {
-									status: QueryStatus.Success,
-									data: data as unknown as TSuccessData,
-								},
-							});
-							break;
-						}
-
-						case SC_ComType.Reject: {
-							const [reason] = data;
-							setPokemons({
-								[pokemonId]: {
-									status: QueryStatus.Error,
-									error: reason,
-								},
-							});
-							break;
-						}
-
-						case SC_ComType.Loading: {
-							setPokemons({
-								[pokemonId]: {
-									status: QueryStatus.Loading,
-								},
-							});
-							break;
-						}
-
-						case SC_ComType.Error: {
-							const [reason] = data;
-							setPokemons({
-								[pokemonId]: {
-									status: QueryStatus.Error,
-									error: reason,
-								},
-							});
-							break;
-						}
-
-						default: {
-							console.error(
-								`Received unexpected signal type: ${type}`
-							);
-						}
-					}
-
-					break;
-				}
-
-				default: {
-					console.error(
-						`Received unexpected request type: ${
-							CS_ComType[request[0]]
-						}`
-					);
-				}
-			}
-		}
-	});
+			| {
+					queryStatus: QueryStatus.Loading;
+			  }
+			| {
+					queryStatus: QueryStatus.Error;
+					error: string;
+			  }
+		>
+	>({});
 
 	function fetchPokemon(pokemonId: number) {
 		const comId = createId();
-		const request: Request = [CS_ComType.Get, comId, [pokemonId]];
-		cache.set(comId, request);
-		socket.emit(signalType as SignalType.Pokemon, request);
+		setQueryData({ [pokemonId]: { queryStatus: QueryStatus.Loading } });
+		socket
+			.timeout(DEFAULT_REQUEST_TIMEOUT)
+			.emit(
+				signalType as SignalType.Pokemon,
+				CS_ComType.Get,
+				[comId, [pokemonId]],
+				(
+					err: Error,
+					[returnType, comId, returnData]: InferCallbackData<
+						PokemonFetchHandlerArgs,
+						CS_ComType.Get
+					>
+				) => {
+					if (err) {
+						setQueryData({
+							[pokemonId]: {
+								queryStatus: QueryStatus.Error,
+								error: err.message,
+							},
+						});
+						return;
+					}
+
+					if (returnType === SC_ComType.Reject) {
+						setQueryData({
+							[pokemonId]: {
+								queryStatus: QueryStatus.Error,
+								error: returnData[0],
+							},
+						});
+						return;
+					}
+
+					if (returnType === SC_ComType.Approve) {
+						setQueryData({
+							[pokemonId]: {
+								queryStatus: QueryStatus.Success,
+								data: returnData,
+							},
+						});
+						return;
+					}
+				}
+			);
 	}
 
 	const Interface: Component<ComponentProps<"div">> = (rawProps) => {
@@ -165,16 +135,22 @@ export default function useDataFetching<
 					</button>
 				</form>
 				<div>
-					<For each={Object.entries(pokemons)}>
-						{([pokemonId, pokemon]) => (
+					<For each={Object.entries(queryData)}>
+						{([queryKey, queryData]) => (
 							<>
-								{pokemon.status === QueryStatus.Loading ? (
+								{queryData.queryStatus ===
+								QueryStatus.Loading ? (
 									<div>Loading...</div>
-								) : pokemon.status === QueryStatus.Error ? (
-									<div>Error: {pokemon.error}</div>
+								) : queryData.queryStatus ===
+								  QueryStatus.Error ? (
+									<div>Error: {queryData.error}</div>
 								) : (
 									<pre>
-										{JSON.stringify(pokemon.data, null, 2)}
+										{JSON.stringify(
+											queryData.data,
+											null,
+											2
+										)}
 									</pre>
 								)}
 							</>
@@ -188,8 +164,7 @@ export default function useDataFetching<
 	return {
 		Interface,
 		fetchPokemon,
-		pokemons,
-		setPokemons,
-		cache,
+		queryData,
+		setQueryData,
 	};
 }
