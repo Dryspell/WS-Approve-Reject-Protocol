@@ -12,8 +12,8 @@
     "@kobalte/core": "^0.13.3",
     "@ngneat/falso": "^7.2.0",
     "@paralleldrive/cuid2": "^2.2.2",
-    "@solidjs/router": "^0.13.5",
-    "@solidjs/start": "^1.0.1",
+    "@solidjs/router": "^0.13.6",
+    "@solidjs/start": "^1.0.2",
     "@trpc/client": "11.0.0-rc.390",
     "@trpc/server": "11.0.0-rc.390",
     "autoprefixer": "^10.4.19",
@@ -29,7 +29,7 @@
     "tailwind-merge": "^2.3.0",
     "tailwindcss": "^3.4.4",
     "tailwindcss-animate": "^1.0.7",
-    "vinxi": "^0.3.11",
+    "vinxi": "^0.3.12",
     "zod": "^3.23.8"
   },
   "engines": {
