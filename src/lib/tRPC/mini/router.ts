@@ -5,6 +5,7 @@ import { createId } from "@paralleldrive/cuid2";
 import {
 	AnyProcedure,
 	AnyRouter,
+	Procedure,
 } from "@trpc/server/unstable-core-do-not-import";
 import { CS_ComType, SignalType } from "~/types/socket";
 
@@ -120,7 +121,17 @@ type inferProcedures<
 			? {
 					[Proc in keyof TRouter[Key]]: {
 						key: Join<[...Rollup, Key, Proc], ".">;
-						value: TRouter[Key][Proc];
+						value: TRouter[Key][Proc] extends infer InputOutput extends Procedure<
+							any,
+							any
+						>
+							? (
+									input: InputOutput["_def"]["$types"]["input"],
+									callback: (
+										returnData: InputOutput["_def"]["$types"]["output"]
+									) => void
+							  ) => void
+							: never;
 					};
 			  }[keyof TRouter[Key]] extends infer Entries extends {
 					key: string;
@@ -133,9 +144,3 @@ type inferProcedures<
 >;
 
 export type Procedures = inferProcedures<AppRouter>;
-
-type inferProcedureInput<TProcedure extends keyof Procedures> =
-	Procedures[TProcedure]["_def"]["$types"];
-
-type x = inferProcedureInput<"counter.delta">;
-type y = inferProcedureInput<"counter.get">;

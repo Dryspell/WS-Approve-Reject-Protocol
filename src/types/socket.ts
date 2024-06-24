@@ -14,6 +14,7 @@ import pokemonFetch from "~/lib/Server/pokemonFetch";
 import { chatHandler } from "~/hooks/useChat";
 import chat from "~/lib/Server/chat";
 import { InferHandler } from "./socket-utils";
+import { Procedures } from "~/lib/tRPC/mini/router";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -65,11 +66,13 @@ export enum CS_ComType {
 	Delta = "delta",
 }
 
-export type ClientToServerEvents = {
-	[SignalType.Counter]: InferHandler<typeof counters>;
-	[SignalType.Pokemon]: InferHandler<typeof pokemonFetch>;
-	[SignalType.Chat]: InferHandler<typeof chat>;
-};
+export type ClientToServerEvents = Procedures;
+
+// {
+// 	[SignalType.Counter]: InferHandler<typeof counters>;
+// 	[SignalType.Pokemon]: InferHandler<typeof pokemonFetch>;
+// 	[SignalType.Chat]: InferHandler<typeof chat>;
+// };
 // {
 // [SignalType.Counter]: (
 // 	params:

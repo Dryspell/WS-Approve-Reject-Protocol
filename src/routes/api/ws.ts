@@ -29,10 +29,18 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 
 		io.on("connection", (socket) => {
 			console.log("Connection");
+			socket.on("counter.get", (...[input, callback]) => {
+				console.log("Counter Get", input);
+				callback(3);
+			});
+			socket.on("counter.delta", (...[input, callback]) => {
+				console.log("Counter Delta", input);
+				callback();
+			});
 
-			socket.on(SignalType.Counter, counterHandler(socket));
-			socket.on(SignalType.Pokemon, pokemonHandler(socket));
-			socket.on(SignalType.Chat, chatHandler(socket));
+			// socket.on(SignalType.Counter, counterHandler(socket));
+			// socket.on(SignalType.Pokemon, pokemonHandler(socket));
+			// socket.on(SignalType.Chat, chatHandler(socket));
 		});
 
 		return new Response();
