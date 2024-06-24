@@ -21,6 +21,7 @@ const appRouter = router({
 					`Received ${CS_ComType.Get} signal with comId: ${input[0]}`
 				);
 				console.error("Not implemented");
+				return 3;
 			}),
 		[CS_ComType.GetOrCreate]: publicProcedure
 			.input(z.object({ title: z.string() }))
@@ -84,8 +85,6 @@ export const topLevelRouterPaths = Object.keys(appRouter).filter(
 	(key) => !["_def", "createCaller"].includes(key)
 ) as (keyof Omit<AppRouter, "_def" | "createCaller">)[];
 
-const testJoin = ["a", "b", "hello", "world"] as const;
-
 type Join<TElements, TSeparator extends string> = TElements extends Readonly<
 	[infer First, ...infer Rest]
 >
@@ -99,32 +98,44 @@ type Join<TElements, TSeparator extends string> = TElements extends Readonly<
 		: never
 	: "";
 
-type JoinTest = Join<typeof testJoin, ".">;
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
+	k: infer I
+) => void
+	? I
+	: never;
 
 type inferProcedures<
 	TRouter extends AnyRouter,
 	Rollup extends string[] = []
-> = {
-	[Key in keyof Omit<
-		TRouter,
-		"_def" | "createCaller"
-	>]: TRouter[Key] extends AnyRouter
-		? Key extends string
-			? inferProcedures<TRouter[Key], [...Rollup, Key]>
-			: never
-		: TRouter[Key] extends object
-		? {
-				[Proc in keyof TRouter[Key]]: {
-					key: Join<[...Rollup, Key, Proc], ".">;
-					value: TRouter[Key][Proc];
-				};
-		  }[keyof TRouter[Key]] extends infer Entries extends {
-				key: string;
-				value: unknown;
-		  }
-			? { [E in Entries as E["key"]]: E["value"] }
-			: never
-		: never;
-}[keyof Omit<TRouter, "_def" | "createCaller">];
+> = UnionToIntersection<
+	{
+		[Key in keyof Omit<
+			TRouter,
+			"_def" | "createCaller"
+		>]: TRouter[Key] extends AnyRouter
+			? Key extends string
+				? inferProcedures<TRouter[Key], [...Rollup, Key]>
+				: never
+			: TRouter[Key] extends object
+			? {
+					[Proc in keyof TRouter[Key]]: {
+						key: Join<[...Rollup, Key, Proc], ".">;
+						value: TRouter[Key][Proc];
+					};
+			  }[keyof TRouter[Key]] extends infer Entries extends {
+					key: string;
+					value: unknown;
+			  }
+				? { [E in Entries as E["key"]]: E["value"] }
+				: never
+			: never;
+	}[keyof Omit<TRouter, "_def" | "createCaller">]
+>;
 
 export type Procedures = inferProcedures<AppRouter>;
+
+type inferProcedureInput<TProcedure extends keyof Procedures> =
+	Procedures[TProcedure]["_def"]["$types"];
+
+type x = inferProcedureInput<"counter.delta">;
+type y = inferProcedureInput<"counter.get">;
