@@ -23,10 +23,9 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 	const socket = nativeEvent.node.res.socket as SocketWithIO | null;
 	if (!socket) return;
 	if (socket.server.io) {
-		console.log("Socket is already running " + request.url, request);
+		// console.log("Socket is already running " + request.url, request);
 	} else {
 		console.log("Initializing Socket");
-
 		const io: sServer = new Server(socket.server, {
 			path: "/api/ws",
 		});
@@ -38,7 +37,7 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 		const { handler: chatHandler } = chat();
 
 		io.on("connection", (socket) => {
-			console.log("Connection");
+			console.log(`Connection: ${socket.id}`);
 
 			socket.on(SignalType.Counter, counterHandler(socket));
 			socket.on(SignalType.Pokemon, pokemonHandler(socket));

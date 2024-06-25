@@ -88,6 +88,8 @@ export default function chat() {
 							[],
 						];
 						rooms.set(roomId, roomData);
+						socket.join(roomId);
+
 						callback([SC_ComType.Approve, comId, roomData]);
 						socket.broadcast.emit(SignalType.Chat, [
 							SC_ComType.Set,
@@ -107,6 +109,7 @@ export default function chat() {
 						existingRoom &&
 						userHasPermissionToJoinRoom(userId, roomId)
 					) {
+						socket.join(roomId);
 						callback([SC_ComType.Approve, comId, existingRoom]);
 					} else if (
 						existingRoom &&
@@ -139,11 +142,13 @@ export default function chat() {
 						room?.[3].push([senderId, roomId, timestamp, message]);
 						rooms.set(roomId, room);
 						callback([SC_ComType.Approve, comId]);
-						socket.broadcast.emit(SignalType.Chat, [
-							SC_ComType.Delta,
-							comId,
-							[senderId, roomId, timestamp, message],
-						]);
+						socket
+							.to(roomId)
+							.emit(SignalType.Chat, [
+								SC_ComType.Delta,
+								comId,
+								[senderId, roomId, timestamp, message],
+							]);
 						break;
 					}
 				}

@@ -1,5 +1,5 @@
 import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
-import { createSignal } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Component, ComponentProps, For, onMount } from "solid-js";
 import { ChatHandlerArgs, Message, Room } from "~/lib/Server/chat";
@@ -132,6 +132,10 @@ const sendMessage = (
 					ChatActionType.SendMessage
 				>
 			) => {
+				console.log(
+					`Received response from server: ${returnType}, ${comId}, ${returnData}`
+				);
+				console.log(returnType === SC_ComType.Approve);
 				if (returnType === SC_ComType.Reject) {
 					const [reason] = returnData;
 					showToast({
@@ -149,13 +153,20 @@ const sendMessage = (
 					});
 					return;
 				}
-				if (returnType === SC_ComType.Approve && returnData) {
+				if (returnType === SC_ComType.Approve) {
+					console.log(
+						`Recieved approval from server: ${message.join(", ")}`
+					);
 					const [senderId, roomId, ...rest] = message;
-					const room = rooms[roomId];
-					room[3].push(message);
-					setRooms({
-						[roomId]: room,
-					});
+					const [, roomName, memberIds, messages, permissions] =
+						rooms[roomId];
+					setRooms(roomId, [
+						roomId,
+						roomName,
+						memberIds,
+						[...messages, message],
+						permissions,
+					]);
 				}
 			}
 		);
@@ -163,7 +174,6 @@ const sendMessage = (
 
 export default function useChat(socket: clientSocket) {
 	const [messages, setMessages] = createSignal([] as Message[]);
-
 	const [rooms, setRooms] = createStore<Record<string, Room>>({});
 	const [currentRoom, setCurrentRoom] = createSignal(DEFAULT_CHAT_ROOM.id);
 	const [user, setUser] = createSignal({
@@ -183,6 +193,10 @@ export default function useChat(socket: clientSocket) {
 				user().name,
 				setRooms
 			);
+		});
+
+		createEffect(() => {
+			console.log({ rooms });
 		});
 
 		return (
@@ -269,6 +283,7 @@ export default function useChat(socket: clientSocket) {
 								chatInput(),
 							];
 							sendMessage(socket, message, rooms, setRooms);
+							setChatInput("");
 						}}
 					>
 						Send!
