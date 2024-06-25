@@ -2,7 +2,13 @@ import { TRPCResponse } from "@trpc/server/rpc";
 import { createRecursiveProxy } from "./createProxy";
 import { DecorateRouterRecord } from "./utils";
 import { AnyTRPCRouter } from "@trpc/server";
-import { AppRouter, ProcedureNames } from "./router";
+import {
+	AppRouter,
+	inferProcedureInput,
+	inferProcedureOutput,
+	ProcedureNames,
+	Procedures,
+} from "./router";
 import { clientSocket } from "~/types/socket";
 import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
 import { socket } from "~/lib/Client/socket";
@@ -13,23 +19,27 @@ export const createTinyRPCClient = <TRouter extends AnyTRPCRouter>(
 	createRecursiveProxy(async (opts) => {
 		const path = [...opts.path]; // e.g. ["post", "byId", "query"]
 		const method = path.pop()! as "query" | "mutate";
-		const dotPath = path.join(".") as ProcedureNames; // "post.byId" - this is the path procedures have on the backend
+		const dotPath = path.join(".") as keyof Procedures; // "post.byId" - this is the path procedures have on the backend
 
-		const [input] = opts.args;
+		const [input] = opts.args as [inferProcedureInput<typeof dotPath>];
 
-		let [socketErr, responseData] = [undefined, undefined];
 		socket
 			.timeout(DEFAULT_REQUEST_TIMEOUT)
-			.emit(dotPath, input, (err, response) => {
-				socketErr = err;
-				responseData = response;
-			});
+			.emit(
+				dotPath,
+				input,
+				(
+					err: Error,
+					response: inferProcedureOutput<typeof dotPath>
+				) => {
+					if (err) {
+						throw new Error(`Error: ${err}`);
+					}
 
-		if ("error" in responseData) {
-			throw new Error(`Error: ${responseData.error.message}`);
-		}
-		// No error - all good. Return the data.
-		return responseData.result.data;
+					// No error - all good. Return the data.
+					return response;
+				}
+			);
 	}) as DecorateRouterRecord<TRouter["_def"]["record"]>;
 
 socket.on("connect", () => {
@@ -38,4 +48,4 @@ socket.on("connect", () => {
 
 const client = createTinyRPCClient<AppRouter>(socket);
 
-client.counter.get.query(["123"]);
+const x = client.counter.get.query(["123"]);

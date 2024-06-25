@@ -23,17 +23,17 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 
 		socket.server.io = io;
 
-		const { handler: counterHandler } = counters();
-		const { handler: pokemonHandler } = pokemonFetch();
-		const { handler: chatHandler } = chat();
+		// const { handler: counterHandler } = counters();
+		// const { handler: pokemonHandler } = pokemonFetch();
+		// const { handler: chatHandler } = chat();
 
 		io.on("connection", (socket) => {
 			console.log("Connection");
-			socket.on("counter.get", (...[input, callback]) => {
+			socket.on("counter.get", (input, callback) => {
 				console.log("Counter Get", input);
 				callback(3);
 			});
-			socket.on("counter.delta", (...[input, callback]) => {
+			socket.on("counter.delta", (input, callback) => {
 				console.log("Counter Delta", input);
 				callback();
 			});

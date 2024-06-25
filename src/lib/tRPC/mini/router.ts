@@ -144,3 +144,14 @@ type inferProcedures<
 >;
 
 export type Procedures = inferProcedures<AppRouter>;
+
+export type inferProcedureInput<Proc extends keyof Procedures> =
+	Procedures[Proc] extends (input: infer I, callback: any) => any ? I : never;
+
+export type inferProcedureOutput<Proc extends keyof Procedures> =
+	Procedures[Proc] extends (
+		input: any,
+		callback: (output: infer O) => void
+	) => any
+		? O
+		: never;

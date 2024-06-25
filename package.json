@@ -14,6 +14,7 @@
     "@paralleldrive/cuid2": "^2.2.2",
     "@solidjs/router": "^0.13.6",
     "@solidjs/start": "^1.0.2",
+    "@tanstack/solid-query": "^5.45.0",
     "@trpc/client": "11.0.0-rc.390",
     "@trpc/server": "11.0.0-rc.390",
     "autoprefixer": "^10.4.19",
