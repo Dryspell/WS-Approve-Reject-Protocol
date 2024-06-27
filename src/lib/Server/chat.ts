@@ -6,7 +6,7 @@ import {
 	SignalType,
 } from "~/types/socket";
 
-export type User = [userId: string, userName: string];
+export type User = [userId: string, userName: string, avatarUrl?: string];
 export type Message = [
 	senderId: string,
 	roomId: string,
@@ -16,7 +16,7 @@ export type Message = [
 export type Room = [
 	roomId: string,
 	roomName: string,
-	memberIds: string[],
+	members: User[],
 	messages: Message[],
 	permissions: string[]
 ];
@@ -26,7 +26,7 @@ export type ChatHandlerArgs =
 			type: ChatActionType.CreateOrJoinRoom,
 			request: [
 				comId: string,
-				data: [roomId: string, roomName: string, userId: string]
+				data: [roomId: string, roomName: string, user: User]
 			],
 			callback: (
 				returnData:
@@ -69,21 +69,21 @@ export default function chat() {
 			switch (type) {
 				case ChatActionType.CreateOrJoinRoom: {
 					const [comId, data] = request;
-					const [roomId, roomName, userId] = data;
+					const [roomId, roomName, user] = data;
 
 					const existingRoom = rooms.get(roomId);
 					console.log(
-						`Received request to create or join room: ${roomId}, ${roomName}, ${userId}`
+						`Received request to create or join room: ${roomId}, ${roomName}, ${user[0]}`
 					);
 
 					if (
 						!existingRoom &&
-						userHasPermissionToCreateRoom(userId)
+						userHasPermissionToCreateRoom(user[0])
 					) {
 						const roomData: Room = [
 							roomId,
 							roomName,
-							[userId],
+							[user],
 							[],
 							[],
 						];
@@ -98,7 +98,7 @@ export default function chat() {
 						]);
 					} else if (
 						!existingRoom &&
-						!userHasPermissionToCreateRoom(userId)
+						!userHasPermissionToCreateRoom(user[0])
 					) {
 						callback([
 							SC_ComType.Reject,
@@ -107,13 +107,13 @@ export default function chat() {
 						]);
 					} else if (
 						existingRoom &&
-						userHasPermissionToJoinRoom(userId, roomId)
+						userHasPermissionToJoinRoom(user[0], roomId)
 					) {
 						socket.join(roomId);
 						callback([SC_ComType.Approve, comId, existingRoom]);
 					} else if (
 						existingRoom &&
-						!userHasPermissionToJoinRoom(userId, roomId)
+						!userHasPermissionToJoinRoom(user[0], roomId)
 					) {
 						callback([
 							SC_ComType.Reject,

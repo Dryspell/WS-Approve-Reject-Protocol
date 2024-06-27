@@ -91,6 +91,7 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 							title: "Error",
 							description: err.message,
 							variant: "error",
+							duration: 5000,
 						});
 						return;
 					}
@@ -99,6 +100,7 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 							title: "Error",
 							description: response[2][0],
 							variant: "error",
+							duration: 5000,
 						});
 						return;
 					}

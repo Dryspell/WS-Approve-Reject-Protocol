@@ -19,6 +19,7 @@
     "axios-cache-interceptor": "^1.5.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
     "embla-carousel-solid": "^8.1.5",
     "postcss": "^8.4.38",
     "socket.io": "^4.7.5",
@@ -31,5 +32,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "daisyui": "^4.12.10"
   }
 }

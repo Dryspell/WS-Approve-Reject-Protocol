@@ -11,6 +11,13 @@ import { Button } from "~/components/ui/button";
 import { randAnimal } from "@ngneat/falso";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
+import { formatDistance } from "date-fns";
+import {
+	Resizable,
+	ResizableHandle,
+	ResizablePanel,
+} from "~/components/ui/resizable";
+import { Card } from "~/components/ui/card";
 
 export enum ChatActionType {
 	CreateOrJoinRoom,
@@ -65,7 +72,7 @@ const joinRoom = (
 	socket: clientSocket,
 	roomId: string,
 	roomName: string,
-	userName: string,
+	user: { name: string; id: string },
 	setRooms: SetStoreFunction<Record<string, Room>>
 ) => {
 	socket
@@ -73,7 +80,7 @@ const joinRoom = (
 		.emit(
 			SignalType.Chat,
 			ChatActionType.CreateOrJoinRoom,
-			[createId(), [roomId, roomName, userName]],
+			[createId(), [roomId, roomName, [user.id, user.name]]],
 			(
 				err: Error,
 				[returnType, comId, returnData]: InferCallbackData<
@@ -86,6 +93,7 @@ const joinRoom = (
 						title: "Error",
 						description: err.message,
 						variant: "error",
+						duration: 5000,
 					});
 					return;
 				}
@@ -95,6 +103,7 @@ const joinRoom = (
 						title: "Error",
 						description: reason,
 						variant: "error",
+						duration: 5000,
 					});
 					return;
 				}
@@ -105,6 +114,7 @@ const joinRoom = (
 					description: `You have
               successfully created or joined room: ${roomName}`,
 					variant: "success",
+					duration: 5000,
 				});
 				setRooms({
 					[roomId]: [roomId, roomName, ...roomData],
@@ -142,6 +152,7 @@ const sendMessage = (
 						title: "Error",
 						description: reason,
 						variant: "error",
+						duration: 5000,
 					});
 					return;
 				}
@@ -150,6 +161,7 @@ const sendMessage = (
 						title: "Error",
 						description: err.message,
 						variant: "error",
+						duration: 5000,
 					});
 					return;
 				}
@@ -173,30 +185,27 @@ const sendMessage = (
 };
 
 export default function useChat(socket: clientSocket) {
-	const [messages, setMessages] = createSignal([] as Message[]);
-	const [rooms, setRooms] = createStore<Record<string, Room>>({});
-	const [currentRoom, setCurrentRoom] = createSignal(DEFAULT_CHAT_ROOM.id);
-	const [user, setUser] = createSignal({
-		name: randAnimal(),
-		id: createId(),
-	});
-	const [chatInput, setChatInput] = createSignal("");
-
-	socket.on(SignalType.Chat, chatHandler(rooms, setRooms));
-
 	const Chat: Component<ComponentProps<"div">> = (rawProps) => {
+		const [rooms, setRooms] = createStore<Record<string, Room>>({});
+		const [currentRoom, setCurrentRoom] = createSignal(
+			DEFAULT_CHAT_ROOM.id
+		);
+		const [user, setUser] = createSignal({
+			name: randAnimal(),
+			id: createId(),
+		});
+		const [chatInput, setChatInput] = createSignal("");
+
+		socket.on(SignalType.Chat, chatHandler(rooms, setRooms));
+
 		onMount(() => {
 			joinRoom(
 				socket,
 				DEFAULT_CHAT_ROOM.id,
 				DEFAULT_CHAT_ROOM.name,
-				user().name,
+				user(),
 				setRooms
 			);
-		});
-
-		createEffect(() => {
-			console.log({ rooms });
 		});
 
 		return (
@@ -241,17 +250,107 @@ export default function useChat(socket: clientSocket) {
 					<For each={Object.entries(rooms)}>
 						{([
 							roomId,
-							[, roomName, memberIds, messages, permissions],
+							[, roomName, members, messages, permissions],
 						]) => (
 							<TabsContent value={roomId}>
-								<For each={messages}>
-									{([
-										senderId,
-										roomId,
-										timestamp,
-										message,
-									]) => <div>{message}</div>}
-								</For>
+								<Resizable
+									orientation="horizontal"
+									class="max-w-full rounded-lg border"
+								>
+									<ResizablePanel
+										initialSize={0.15}
+										class="p-2"
+									>
+										<For each={members}>
+											{([id, name]) => (
+												<Card class="m-1.5">
+													<div class="flex flex-row items-center">
+														<div
+															class="chat-image
+                              avatar"
+														>
+															<div class="w-10 rounded-full">
+																<img
+																	alt="Tailwind CSS chat bubble component"
+																	src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
+																/>
+															</div>
+														</div>
+														<div class="chat-header">
+															{name}
+														</div>
+													</div>
+												</Card>
+											)}
+										</For>
+									</ResizablePanel>
+									<ResizableHandle withHandle />
+									<ResizablePanel
+										initialSize={0.85}
+										class="p-2"
+									>
+										<div>
+											<For each={messages}>
+												{([
+													senderId,
+													roomId,
+													timestamp,
+													message,
+												]) => {
+													return (
+														<div
+															class={`chat ${
+																senderId ===
+																user().id
+																	? "chat-start"
+																	: "chat-end"
+															}`}
+														>
+															<div class="chat-image avatar">
+																<div class="w-10 rounded-full">
+																	<img
+																		alt="Tailwind CSS chat bubble component"
+																		src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
+																	/>
+																</div>
+															</div>
+															<div class="chat-header">
+																{
+																	members.find(
+																		([
+																			id,
+																			name,
+																		]) =>
+																			id ===
+																			senderId
+																	)?.[1]
+																}
+																<time class="text-xs opacity-50 px-2">
+																	{formatDistance(
+																		new Date(
+																			timestamp
+																		),
+																		new Date(),
+																		{
+																			addSuffix:
+																				true,
+																		}
+																	)}
+																</time>
+															</div>
+															<div class="chat-bubble">
+																{message}
+															</div>
+															<div class="chat-footer opacity-50">
+																Delivered
+															</div>
+														</div>
+													);
+												}}
+											</For>
+										</div>
+									</ResizablePanel>
+								</Resizable>
 							</TabsContent>
 						)}
 					</For>
@@ -274,6 +373,7 @@ export default function useChat(socket: clientSocket) {
 									description:
 										"Please enter a message before sending!",
 									variant: "error",
+									duration: 5000,
 								});
 							}
 							const message: Message = [
@@ -293,5 +393,5 @@ export default function useChat(socket: clientSocket) {
 		);
 	};
 
-	return { Chat, messages, setMessages };
+	return { Chat };
 }
