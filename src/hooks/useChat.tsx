@@ -1,5 +1,5 @@
 import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
-import { createEffect, createSignal } from "solid-js";
+import { Accessor, createEffect, createSignal } from "solid-js";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Component, ComponentProps, For, onMount } from "solid-js";
 import { ChatHandlerArgs, Message, Room } from "~/lib/Server/chat";
@@ -263,11 +263,11 @@ export default function useChat(socket: clientSocket) {
 									>
 										<For each={members}>
 											{([id, name]) => (
-												<Card class="m-1.5">
-													<div class="flex flex-row items-center">
+												<Card class="m-1.5 p-2">
+													<div class="flex flex-row items-center justify-center">
 														<div
 															class="chat-image
-                              avatar"
+                              avatar pr-2"
 														>
 															<div class="w-10 rounded-full">
 																<img
@@ -298,53 +298,15 @@ export default function useChat(socket: clientSocket) {
 													message,
 												]) => {
 													return (
-														<div
-															class={`chat ${
-																senderId ===
-																user().id
-																	? "chat-start"
-																	: "chat-end"
-															}`}
-														>
-															<div class="chat-image avatar">
-																<div class="w-10 rounded-full">
-																	<img
-																		alt="Tailwind CSS chat bubble component"
-																		src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
-																	/>
-																</div>
-															</div>
-															<div class="chat-header">
-																{
-																	members.find(
-																		([
-																			id,
-																			name,
-																		]) =>
-																			id ===
-																			senderId
-																	)?.[1]
-																}
-																<time class="text-xs opacity-50 px-2">
-																	{formatDistance(
-																		new Date(
-																			timestamp
-																		),
-																		new Date(),
-																		{
-																			addSuffix:
-																				true,
-																		}
-																	)}
-																</time>
-															</div>
-															<div class="chat-bubble">
-																{message}
-															</div>
-															<div class="chat-footer opacity-50">
-																Delivered
-															</div>
-														</div>
+														<ChatMessage
+															senderId={senderId}
+															user={user}
+															members={members}
+															timestamp={
+																timestamp
+															}
+															message={message}
+														/>
 													);
 												}}
 											</For>
@@ -394,4 +356,38 @@ export default function useChat(socket: clientSocket) {
 	};
 
 	return { Chat };
+}
+function ChatMessage(props: {
+	senderId: string;
+	user: Accessor<{ id: string; name: string }>;
+	members: Room[2];
+	timestamp: number;
+	message: string;
+}) {
+	return (
+		<div
+			class={`chat ${
+				props.senderId === props.user().id ? "chat-start" : "chat-end"
+			}`}
+		>
+			<div class="chat-image avatar">
+				<div class="w-10 rounded-full">
+					<img
+						alt="Tailwind CSS chat bubble component"
+						src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
+					/>
+				</div>
+			</div>
+			<div class="chat-header">
+				{props.members.find(([id, name]) => id === props.senderId)?.[1]}
+				<time class="text-xs opacity-50 px-2">
+					{formatDistance(new Date(props.timestamp), new Date(), {
+						addSuffix: true,
+					})}
+				</time>
+			</div>
+			<div class="chat-bubble">{props.message}</div>
+			<div class="chat-footer opacity-50">Delivered</div>
+		</div>
+	);
 }
