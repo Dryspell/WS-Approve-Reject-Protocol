@@ -32,7 +32,7 @@ export const serialize = <
 
 export const deserialize = <
 	TRep extends JSONObject,
-	R = TRep extends JSONObject[] ? Partial<TRep>[] : Partial<TRep>
+	R = TRep extends JSONObject[] ? TRep[] : TRep
 >(
 	serialized: SerializedObject,
 	representation: TRep

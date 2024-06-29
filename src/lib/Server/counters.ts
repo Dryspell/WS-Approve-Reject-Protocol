@@ -4,53 +4,79 @@ import {
 	serverSocket,
 	SignalType,
 } from "~/types/socket";
+import { serialize, SerializedObject, deserialize } from "~/types/utils";
+
+export const get_response_rep = {} as
+	| {
+			returnType: SC_ComType.Approve;
+			comId: string;
+			returnData: { counters: { [k: string]: number } };
+	  }
+	| {
+			returnType: SC_ComType.Reject;
+			comId: string;
+			returnData: { reason: string };
+	  };
+
+export const getOrCreate_request_rep = {
+	comId: "",
+	data: { sigId: "" },
+};
+
+export const delta_request_rep = {
+	comId: "",
+	data: { sigId: "", delta: 0 },
+};
 
 export type CounterHandlerArgs =
 	| [
 			type: CS_ComType.Get,
-			request: [comId: string],
+			request: SerializedObject<{ comId: string }>,
 			callback: (
 				returnData:
-					| [
-							returnType: SC_ComType.Approve,
-							comId: string,
-							returnData: [counters: { [k: string]: number }]
-					  ]
-					| [
-							returnType: SC_ComType.Reject,
-							comId: string,
-							returnData: [reason: string]
-					  ]
+					| SerializedObject<{
+							returnType: SC_ComType.Approve;
+							comId: string;
+							returnData: { counters: { [k: string]: number } };
+					  }>
+					| SerializedObject<{
+							returnType: SC_ComType.Reject;
+							comId: string;
+							returnData: { reason: string };
+					  }>
 			) => void
 	  ]
 	| [
 			type: CS_ComType.GetOrCreate,
-			request: [comId: string, [sigId: string]],
+			request: SerializedObject<typeof getOrCreate_request_rep>,
 			callback: (
 				returnData:
-					| [
-							returnType: SC_ComType.Approve,
-							comId: string,
-							returnData: [number]
-					  ]
-					| [
-							returnType: SC_ComType.Reject,
-							comId: string,
-							returnData: [reason: string]
-					  ]
+					| SerializedObject<{
+							returnType: SC_ComType.Approve;
+							comId: string;
+							returnData: { count: number };
+					  }>
+					| SerializedObject<{
+							returnType: SC_ComType.Reject;
+							comId: string;
+							returnData: { reason: string };
+					  }>
 			) => void
 	  ]
 	| [
 			type: CS_ComType.Delta,
-			request: [comId: string, [sigId: string, delta: number]],
+			request: SerializedObject<typeof delta_request_rep>,
 			callback: (
 				returnData:
-					| [returnType: SC_ComType.Approve, comId: string]
-					| [
-							returnType: SC_ComType.Reject,
-							comId: string,
-							returnData: [reason: string]
-					  ]
+					| SerializedObject<{
+							returnType: SC_ComType.Approve;
+							comId: string;
+					  }>
+					| SerializedObject<{
+							returnType: SC_ComType.Reject;
+							comId: string;
+							returnData: { reason: string };
+					  }>
 			) => void
 	  ];
 
@@ -65,16 +91,21 @@ export default function counters() {
 				switch (type) {
 					case CS_ComType.Get: {
 						const [comId] = request;
-						callback([
-							SC_ComType.Approve,
-							comId,
-							[Object.fromEntries(signals.entries())],
-						]);
+						callback(
+							serialize({
+								returnType: SC_ComType.Approve,
+								comId,
+								counters: Object.fromEntries(signals.entries()),
+							})
+						);
 						break;
 					}
 
 					case CS_ComType.GetOrCreate: {
-						const [comId, [sigId]] = request;
+						const {
+							comId,
+							data: { sigId },
+						} = deserialize(request, getOrCreate_request_rep);
 						const counter = signals.get(sigId);
 						if (counter === undefined) {
 							signals.set(sigId, defaultValue);
@@ -95,7 +126,10 @@ export default function counters() {
 					}
 
 					case CS_ComType.Delta: {
-						const [comId, [sigId, delta]] = request;
+						const {
+							comId,
+							data: { sigId, delta },
+						} = deserialize(request, delta_request_rep);
 						const counter = signals.get(sigId);
 						if (counter === undefined) {
 							callback([

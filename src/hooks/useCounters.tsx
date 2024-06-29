@@ -12,6 +12,7 @@ import { showToast } from "~/components/ui/toast";
 import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
 import { InferCallbackData } from "~/types/socket-utils";
 import { CounterHandlerArgs } from "~/lib/Server/counters";
+import { deserialize } from "~/types/utils";
 
 export const counterHandler =
 	(
@@ -86,6 +87,7 @@ export default function useSocketCounter(socket: clientSocket, sigId: string) {
 						CS_ComType.Delta
 					>
 				) => {
+					const {} = deserialize(response, delta_response_rep);
 					if (err) {
 						showToast({
 							title: "Error",
