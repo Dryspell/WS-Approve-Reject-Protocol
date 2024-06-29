@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { Component, ComponentProps, For } from "solid-js";
+import { Component, ComponentProps, For, useContext } from "solid-js";
 import {
 	clientSocket,
 	ClientToServerEvents,
@@ -12,6 +12,7 @@ import { JSONObject } from "~/types/utils";
 import { InferCallbackData } from "~/types/socket-utils";
 import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
 import { PokemonFetchHandlerArgs } from "~/lib/Server/pokemonFetch";
+import { SocketContext } from "~/app";
 
 const enum QueryStatus {
 	Idle,
@@ -28,7 +29,9 @@ export type PokemonApiResponse = {
 export default function useDataFetching<
 	TSuccessData,
 	TSignalType extends keyof ClientToServerEvents & SignalType
->(socket: clientSocket, signalType: TSignalType) {
+>(signalType: TSignalType) {
+	const socket = useContext(SocketContext);
+
 	const [queryData, setQueryData] = createStore<
 		Record<
 			string, // queryKey (pokemonId)

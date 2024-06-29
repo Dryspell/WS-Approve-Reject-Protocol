@@ -1,5 +1,5 @@
 import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
-import { Accessor, createEffect, createSignal } from "solid-js";
+import { Accessor, createEffect, createSignal, useContext } from "solid-js";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Component, ComponentProps, For, onMount } from "solid-js";
 import { ChatHandlerArgs, Message, Room } from "~/lib/Server/chat";
@@ -18,6 +18,7 @@ import {
 	ResizablePanel,
 } from "~/components/ui/resizable";
 import { Card } from "~/components/ui/card";
+import { SocketContext } from "~/app";
 
 export enum ChatActionType {
 	CreateOrJoinRoom,
@@ -184,8 +185,10 @@ const sendMessage = (
 		);
 };
 
-export default function useChat(socket: clientSocket) {
+export default function useChat() {
 	const Chat: Component<ComponentProps<"div">> = (rawProps) => {
+		const socket = useContext(SocketContext);
+
 		const [rooms, setRooms] = createStore<Record<string, Room>>({});
 		const [currentRoom, setCurrentRoom] = createSignal(
 			DEFAULT_CHAT_ROOM.id

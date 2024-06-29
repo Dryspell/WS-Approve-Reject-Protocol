@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { Component, ComponentProps, For, onMount } from "solid-js";
+import { Component, ComponentProps, For, onMount, useContext } from "solid-js";
 import { Flex } from "~/components/ui/flex";
 import {
 	clientSocket,
@@ -12,6 +12,7 @@ import { showToast } from "~/components/ui/toast";
 import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
 import { InferCallbackData } from "~/types/socket-utils";
 import { CounterHandlerArgs } from "~/lib/Server/counters";
+import { SocketContext } from "~/app";
 
 export const counterHandler =
 	(
@@ -62,11 +63,12 @@ export const counterHandler =
 		}
 	};
 
-export default function useSocketCounter(socket: clientSocket, sigId: string) {
+export default function useSocketCounter(sigId: string) {
 	const [counters, setCounters] = createStore<{
 		[counterId: string]: number;
 	}>({});
 
+	const socket = useContext(SocketContext);
 	socket.on(SignalType.Counter, counterHandler(counters, setCounters));
 
 	const delta = (delt: number) => {
