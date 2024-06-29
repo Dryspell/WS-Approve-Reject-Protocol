@@ -31,7 +31,7 @@ export type CounterHandlerArgs =
 					| [
 							returnType: SC_ComType.Approve,
 							comId: string,
-							returnData: [number]
+							returnData: [count: number]
 					  ]
 					| [
 							returnType: SC_ComType.Reject,
