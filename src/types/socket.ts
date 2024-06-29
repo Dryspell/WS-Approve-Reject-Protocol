@@ -10,7 +10,7 @@ import { PokemonApiResponse } from "~/hooks/useDataFetching";
 import { counterHandler } from "~/hooks/useCounters";
 import counters from "~/lib/Server/counters";
 import pokemonFetch from "~/lib/Server/pokemonFetch";
-import { chatHandler } from "~/hooks/useChat";
+import { chatHandler } from "~/components/Chat";
 import chat from "~/lib/Server/chat";
 import { InferHandler } from "./socket-utils";
 
@@ -56,7 +56,6 @@ export const enum SignalType {
 }
 
 export enum CS_ComType {
-	Request,
 	Get,
 	GetOrCreate,
 	Set,

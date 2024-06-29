@@ -23,6 +23,9 @@ importers:
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.2.2
+      '@solid-primitives/storage':
+        specifier: ^3.7.1
+        version: 3.7.1(solid-js@1.8.17)
       '@solidjs/router':
         specifier: ^0.13.6
         version: 0.13.6(solid-js@1.8.17)
@@ -1056,6 +1059,18 @@ packages:
     resolution: {integrity: sha512-ZecE4BqY0oBk0YG00nzaAWO5Mjcny8Fc06CdbXadH9T9lzq/9GefqcSe/5AtdXqjvY/DtJ5C6CkcjPZO0o/eqg==}
     peerDependencies:
       solid-js: ^1.6.12
+
+  '@solid-primitives/storage@3.7.1':
+    resolution: {integrity: sha512-tAmZKQg44RjDjrtWO/5hCOrktQspn/yVV0ySb7yKr7B3CVQlTQtldw3W8UetytJSD9podb9cplvvkq75fgpB1Q==}
+    peerDependencies:
+      '@tauri-apps/plugin-store': '*'
+      solid-js: ^1.6.12
+      solid-start: '*'
+    peerDependenciesMeta:
+      '@tauri-apps/plugin-store':
+        optional: true
+      solid-start:
+        optional: true
 
   '@solid-primitives/trigger@1.0.11':
     resolution: {integrity: sha512-4oc8grBzBit7ByXgE1aZ0QXfhdlhXaiFjDKYsOhRyUJa8fN4hdr2IgsYqjmHwxyjK+Dm2OUwkCI1bGkaLgtgXg==}
@@ -4031,6 +4046,11 @@ snapshots:
       solid-js: 1.8.17
 
   '@solid-primitives/static-store@0.0.8(solid-js@1.8.17)':
+    dependencies:
+      '@solid-primitives/utils': 6.2.3(solid-js@1.8.17)
+      solid-js: 1.8.17
+
+  '@solid-primitives/storage@3.7.1(solid-js@1.8.17)':
     dependencies:
       '@solid-primitives/utils': 6.2.3(solid-js@1.8.17)
       solid-js: 1.8.17

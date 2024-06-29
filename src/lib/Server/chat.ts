@@ -1,4 +1,4 @@
-import { ChatActionType } from "~/hooks/useChat";
+import { ChatActionType } from "~/components/Chat";
 import {
 	CS_ComType,
 	SC_ComType,
@@ -73,7 +73,7 @@ export default function chat() {
 
 					const existingRoom = rooms.get(roomId);
 					console.log(
-						`Received request to create or join room: ${roomId}, ${roomName}, ${user[0]}`
+						`Received request to create or join room: ${roomId}, ${roomName}, ${user}`
 					);
 
 					if (
@@ -110,7 +110,32 @@ export default function chat() {
 						userHasPermissionToJoinRoom(user[0], roomId)
 					) {
 						socket.join(roomId);
-						callback([SC_ComType.Approve, comId, existingRoom]);
+						const [, roomName, members, messages, permissions] =
+							existingRoom;
+						const updatedRoom: Room = [
+							roomId,
+							roomName,
+							Array.from(
+								new Set(
+									[...members, user].map((user) => user[0])
+								)
+							).map((userId) => [
+								userId,
+								[...members, user].find(
+									(member) => member[0] === userId
+								)?.[1] ?? "Unknown User",
+							]),
+							messages,
+							permissions,
+						];
+						rooms.set(roomId, updatedRoom);
+
+						callback([SC_ComType.Approve, comId, updatedRoom]);
+						socket.broadcast.emit(SignalType.Chat, [
+							SC_ComType.Set,
+							comId,
+							updatedRoom,
+						]);
 					} else if (
 						existingRoom &&
 						!userHasPermissionToJoinRoom(user[0], roomId)

@@ -1,8 +1,7 @@
-import useChat from "~/hooks/useChat";
+import { clientOnly } from "@solidjs/start";
+const Chat = clientOnly(() => import("~/components/Chat"));
 
 export default function ChatPage() {
-	const { Chat } = useChat();
-
 	return (
 		<main class="mx-auto text-gray-700 p-4">
 			<Chat />
