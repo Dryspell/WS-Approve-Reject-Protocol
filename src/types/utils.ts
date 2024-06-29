@@ -11,22 +11,23 @@ export type JSONObject =
 	  }
 	| JSONObject[];
 
-export type SerializedObject = (
-	| string
-	| number
-	| boolean
-	| null
-	| undefined
-	| SerializedObject
-)[];
+export type SerializedObject<
+	T = JSONObject | JSONObject[] // extends JSONObject | JSONObject | unknown = unknown
+> = (string | number | boolean | null | undefined | SerializedObject)[];
 
-export const serialize = (obj: JSONObject | JSONObject[]) => {
-	if (!obj || typeof obj !== "object") return [obj];
+export const serialize = <
+	T extends JSONObject | JSONObject[],
+	TRep extends T = T
+>(
+	obj: T,
+	rep?: TRep
+) => {
+	if (!obj || typeof obj !== "object") return [obj] as SerializedObject<TRep>;
 
 	return Object.entries(obj).reduce((acc, [key, value], i) => {
 		acc[i] = !value || typeof value !== "object" ? value : serialize(value);
 		return acc;
-	}, [] as SerializedObject);
+	}, [] as SerializedObject<TRep>);
 };
 
 export const deserialize = <
@@ -72,7 +73,7 @@ export const deserialize = <
 
 export const createRepresentation = <T extends JSONObject>(
 	representative: T
-): { [K in keyof T]: JSONObject } => {
+): T => {
 	if (!representative || typeof representative !== "object") {
 		throw new Error("Invalid representative");
 	}
@@ -90,11 +91,12 @@ export const createRepresentation = <T extends JSONObject>(
 					? value
 					: createRepresentation(value);
 			})
-			.slice(0, 1) as { [K in keyof T]: JSONObject };
+			.slice(0, 1) as typeof representative;
 	}
 
 	return Object.entries(representative).reduce((acc, [key, value]) => {
-		acc[key as keyof T] =
+		//@ts-expect-error - allow implicit any
+		acc[key] =
 			typeof value === "string"
 				? ""
 				: typeof value === "number"
@@ -105,7 +107,7 @@ export const createRepresentation = <T extends JSONObject>(
 				? value
 				: createRepresentation(value);
 		return acc;
-	}, {} as { [K in keyof T]: JSONObject });
+	}, {} as typeof representative);
 };
 
 // https://stackoverflow.com/questions/52855145/typescript-object-type-to-array-type-tuple/68695508#68695508
