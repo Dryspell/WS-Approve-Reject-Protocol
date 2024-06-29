@@ -56,12 +56,11 @@ export const enum SignalType {
 }
 
 export enum CS_ComType {
-	Request,
-	Get,
-	GetOrCreate,
-	Set,
-	SetOrCreate,
-	Delta,
+	Get = "get",
+	GetOrCreate = "getOrCreate",
+	Set = "set",
+	SetOrCreate = "setOrCreate",
+	Delta = "delta",
 }
 
 export type ClientToServerEvents = {
