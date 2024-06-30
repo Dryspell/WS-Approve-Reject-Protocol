@@ -36,7 +36,7 @@ export const voteHandler =
     } catch (e) {
       console.error(
         `Failed to properly handle: ${SC_ComType[type]}, ${comId}, ${data}:`,
-        e instanceof Error ? e.message : e
+        e instanceof Error ? e.message : e,
       );
     }
   };
@@ -46,7 +46,7 @@ const joinRoom = (
   roomId: string,
   roomName: string,
   user: { name: string; id: string },
-  setRooms: SetStoreFunction<Record<string, GameRoom>>
+  setRooms: SetStoreFunction<Record<string, GameRoom>>,
 ) => {
   socket
     .timeout(DEFAULT_REQUEST_TIMEOUT)
@@ -59,14 +59,14 @@ const joinRoom = (
         [returnType, comId, returnData]: InferCallbackData<
           VoteHandlerArgs,
           VoteActionType.CreateOrJoinRoom
-        >
+        >,
       ) => {
         if (err) {
           showToast({
             title: "Error",
             description: err.message,
             variant: "error",
-            duration: 5000
+            duration: 5000,
           });
           return;
         }
@@ -76,7 +76,7 @@ const joinRoom = (
             title: "Error",
             description: returnData[0],
             variant: "error",
-            duration: 5000
+            duration: 5000,
           });
           return;
         }
@@ -87,11 +87,11 @@ const joinRoom = (
             description: `You have
               successfully created or joined room: ${roomName}`,
             variant: "success",
-            duration: 5000
+            duration: 5000,
           });
           setRooms({ [roomId]: returnData });
         }
-      }
+      },
     );
 };
 
@@ -102,7 +102,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
   const [currentRoom, setCurrentRoom] = createSignal(DEFAULT_GAME_ROOM.id);
   const [user, setUser] = createLocalStorageSignal("chat-user", {
     name: randAnimal(),
-    id: createId()
+    id: createId(),
   });
 
   const [chatInput, setChatInput] = createSignal("");
@@ -123,7 +123,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
           onInput={e =>
             setUser({
               name: e.currentTarget.value,
-              id: user().id
+              id: user().id,
             })
           }
         />
