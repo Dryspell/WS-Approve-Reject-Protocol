@@ -1,4 +1,4 @@
-import { ChatActionType } from "~/components/Chat";
+import { ChatActionType } from "~/components/Chat/Chat";
 import { CS_ComType, SC_ComType, serverSocket, SignalType } from "~/types/socket";
 
 export type User = [userId: string, userName: string, avatarUrl?: string];

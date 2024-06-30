@@ -1,14 +1,6 @@
 import { CS_ComType, SC_ComType, serverSocket, SignalType } from "~/types/socket";
 import { User } from "./chat";
 
-export enum VoteActionType {
-  CreateOrJoinRoom,
-  ReadyGameStart,
-  SetVoteColor,
-  CreateOffer,
-  AcceptOffer,
-}
-
 export enum TicketColor {
   Red,
   Blue,
@@ -36,15 +28,33 @@ export type GameRoom = [
 
 export type GameRoomPreStart = [roomId: string, readyUsers: User[0][]];
 
-export type VoteHandlerArgs = [
-  type: VoteActionType.CreateOrJoinRoom,
-  request: [comId: string, data: [roomId: string, roomName: string, user: User]],
-  callback: (
-    returnData:
-      | [returnType: SC_ComType.Approve, comId: string, returnData: GameRoom]
-      | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
-  ) => void,
-];
+export enum VoteActionType {
+  CreateOrJoinRoom,
+  ReadyGameStart,
+  SetVoteColor,
+  CreateOffer,
+  AcceptOffer,
+}
+
+export type VoteHandlerArgs =
+  | [
+      type: VoteActionType.CreateOrJoinRoom,
+      request: [comId: string, data: [roomId: string, roomName: string, user: User]],
+      callback: (
+        returnData:
+          | [returnType: SC_ComType.Approve, comId: string, returnData: GameRoom]
+          | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
+      ) => void,
+    ]
+  | [
+      type: VoteActionType.ReadyGameStart,
+      request: [comId: string, data: [roomId: string, user: User]],
+      callback: (
+        returnData:
+          | [returnType: SC_ComType.Approve, comId: string]
+          | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
+      ) => void,
+    ];
 
 const userHasPermissionToCreateRoom = (userId: string) => true;
 const userHasPermissionToJoinRoom = (userId: string, roomId: string) => true;

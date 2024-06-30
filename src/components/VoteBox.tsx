@@ -16,6 +16,7 @@ import { Button } from "./ui/button";
 import { Resizable, ResizableHandle, ResizablePanel } from "./ui/resizable";
 import { Card } from "./ui/card";
 import { TextField, TextFieldInput } from "./ui/text-field";
+import UserAvatarCard from "./Chat/UserAvatarCard";
 
 const DEFAULT_GAME_ROOM = { id: "game1", name: "Game Room 1" };
 
@@ -148,27 +149,12 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
             <TabsContent value={roomId}>
               <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
                 <ResizablePanel initialSize={0.15} class="p-2">
-                  <For each={members}>
-                    {([id, name]) => (
-                      <Card class="m-1.5 p-2">
-                        <div class="flex flex-row items-center justify-center">
-                          <div class="avatar chat-image pr-2">
-                            <div class="w-10 rounded-full">
-                              <img
-                                alt="Tailwind CSS chat bubble component"
-                                src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
-                              />
-                            </div>
-                          </div>
-                          <div class="chat-header">{name}</div>
-                        </div>
-                      </Card>
-                    )}
-                  </For>
+                  <For each={members}>{([id, name]) => <UserAvatarCard name={name} />}</For>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel initialSize={0.85} class="p-2">
                   <div class="flex items-center justify-center">
+                    <div class="flex flex-row items-center justify-between"></div>
                     <Button
                       variant="outline"
                       class="m-1.5 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium"

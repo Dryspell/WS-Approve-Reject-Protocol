@@ -1,21 +1,21 @@
 import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
-import { Accessor, createSignal, useContext } from "solid-js";
+import { createSignal, useContext } from "solid-js";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Component, ComponentProps, For, onMount } from "solid-js";
 import { ChatHandlerArgs, Message, ChatRoom } from "~/lib/Server/chat";
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createId } from "@paralleldrive/cuid2";
-import { InferCallbackData, InferRequestData } from "~/types/socket-utils";
+import { InferCallbackData } from "~/types/socket-utils";
 import { Button } from "~/components/ui/button";
 import { randAnimal } from "@ngneat/falso";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
-import { formatDistance } from "date-fns";
 import { Resizable, ResizableHandle, ResizablePanel } from "~/components/ui/resizable";
-import { Card } from "~/components/ui/card";
 import { SocketContext } from "~/app";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
+import ChatMessage from "./ChatMessage";
+import UserAvatarCard from "./UserAvatarCard";
 
 export enum ChatActionType {
   CreateOrJoinRoom,
@@ -126,7 +126,7 @@ const joinRoom = (
           duration: 5000,
         });
         setRooms({
-          [roomId]: [roomId, roomName, ...roomData],
+          [roomId]: returnData,
         });
       },
     );
@@ -185,37 +185,6 @@ const sendMessage = (
     );
 };
 
-function ChatMessage(props: {
-  senderId: string;
-  user: Accessor<{ id: string; name: string }>;
-  members: ChatRoom[2];
-  timestamp: number;
-  message: string;
-}) {
-  return (
-    <div class={`chat ${props.senderId === props.user().id ? "chat-start" : "chat-end"}`}>
-      <div class="avatar chat-image">
-        <div class="w-10 rounded-full">
-          <img
-            alt="Tailwind CSS chat bubble component"
-            src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
-          />
-        </div>
-      </div>
-      <div class="chat-header">
-        {props.members.find(([id, name]) => id === props.senderId)?.[1]}
-        <time class="px-2 text-xs opacity-50">
-          {formatDistance(new Date(props.timestamp), new Date(), {
-            addSuffix: true,
-          })}
-        </time>
-      </div>
-      <div class="chat-bubble">{props.message}</div>
-      <div class="chat-footer opacity-50">Delivered</div>
-    </div>
-  );
-}
-
 const Chat: Component<ComponentProps<"div">> = rawProps => {
   const socket = useContext(SocketContext);
 
@@ -269,23 +238,7 @@ const Chat: Component<ComponentProps<"div">> = rawProps => {
             <TabsContent value={roomId}>
               <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
                 <ResizablePanel initialSize={0.15} class="p-2">
-                  <For each={members}>
-                    {([id, name]) => (
-                      <Card class="m-1.5 p-2">
-                        <div class="flex flex-row items-center justify-center">
-                          <div class="avatar chat-image pr-2">
-                            <div class="w-10 rounded-full">
-                              <img
-                                alt="Tailwind CSS chat bubble component"
-                                src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
-                              />
-                            </div>
-                          </div>
-                          <div class="chat-header">{name}</div>
-                        </div>
-                      </Card>
-                    )}
-                  </For>
+                  <For each={members}>{([id, name]) => <UserAvatarCard name={name} />}</For>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel initialSize={0.85} class="p-2">
