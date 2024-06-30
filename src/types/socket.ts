@@ -13,6 +13,8 @@ import pokemonFetch from "~/lib/Server/pokemonFetch";
 import { chatHandler } from "~/components/Chat";
 import chat from "~/lib/Server/chat";
 import { InferHandler } from "./socket-utils";
+import vote from "~/lib/Server/vote";
+import { voteHandler } from "~/components/VoteBox";
 
 interface SocketServer extends HTTPServer {
 	io?: IOServer;
@@ -45,14 +47,14 @@ export interface ServerToClientEvents {
 			| [type: SC_ComType.Error, comId: string, data: [reason: string]]
 	) => void;
 	[SignalType.Chat]: ReturnType<typeof chatHandler>;
+	[SignalType.Vote]: ReturnType<typeof voteHandler>;
 }
 
 export const enum SignalType {
-	User = "user",
 	Counter = "counter",
-	Unit = "unit",
 	Pokemon = "pokemon",
 	Chat = "chat",
+	Vote = "vote",
 }
 
 export enum CS_ComType {
@@ -67,6 +69,7 @@ export type ClientToServerEvents = {
 	[SignalType.Counter]: InferHandler<typeof counters>;
 	[SignalType.Pokemon]: InferHandler<typeof pokemonFetch>;
 	[SignalType.Chat]: InferHandler<typeof chat>;
+	[SignalType.Vote]: InferHandler<typeof vote>;
 };
 
 interface InterServerEvents {

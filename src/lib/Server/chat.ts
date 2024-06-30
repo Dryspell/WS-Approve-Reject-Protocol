@@ -13,7 +13,7 @@ export type Message = [
 	timestamp: number,
 	message: string
 ];
-export type Room = [
+export type ChatRoom = [
 	roomId: string,
 	roomName: string,
 	members: User[],
@@ -33,7 +33,7 @@ export type ChatHandlerArgs =
 					| [
 							returnType: SC_ComType.Approve,
 							comId: string,
-							returnData: Room
+							returnData: ChatRoom
 					  ]
 					| [
 							returnType: SC_ComType.Reject,
@@ -61,128 +61,142 @@ const userHasPermissionToJoinRoom = (userId: string, roomId: string) => true;
 const userHasPermissionToSendMessage = (userId: string, roomId: string) => true;
 
 export default function chat() {
-	const rooms = new Map<string, Room>();
+	const rooms = new Map<string, ChatRoom>();
 
 	const handler =
 		(socket: serverSocket) =>
 		(...[type, request, callback]: ChatHandlerArgs) => {
-			switch (type) {
-				case ChatActionType.CreateOrJoinRoom: {
-					const [comId, data] = request;
-					const [roomId, roomName, user] = data;
+			try {
+				switch (type) {
+					case ChatActionType.CreateOrJoinRoom: {
+						const [comId, data] = request;
+						const [roomId, roomName, user] = data;
 
-					const existingRoom = rooms.get(roomId);
-					console.log(
-						`Received request to create or join room: ${roomId}, ${roomName}, ${user}`
-					);
+						const existingRoom = rooms.get(roomId);
+						console.log(
+							`Received request to create or join room: ${roomId}, ${roomName}, ${user}`
+						);
 
-					if (
-						!existingRoom &&
-						userHasPermissionToCreateRoom(user[0])
-					) {
-						const roomData: Room = [
-							roomId,
-							roomName,
-							[user],
-							[],
-							[],
-						];
-						rooms.set(roomId, roomData);
-						socket.join(roomId);
+						if (
+							!existingRoom &&
+							userHasPermissionToCreateRoom(user[0])
+						) {
+							const roomData: ChatRoom = [
+								roomId,
+								roomName,
+								[user],
+								[],
+								[],
+							];
+							rooms.set(roomId, roomData);
+							socket.join(roomId);
 
-						callback([SC_ComType.Approve, comId, roomData]);
-						socket.broadcast.emit(SignalType.Chat, [
-							SC_ComType.Set,
-							comId,
-							roomData,
-						]);
-					} else if (
-						!existingRoom &&
-						!userHasPermissionToCreateRoom(user[0])
-					) {
-						callback([
-							SC_ComType.Reject,
-							comId,
-							["Permission denied to create room"],
-						]);
-					} else if (
-						existingRoom &&
-						userHasPermissionToJoinRoom(user[0], roomId)
-					) {
-						socket.join(roomId);
-						const [, roomName, members, messages, permissions] =
-							existingRoom;
-						const updatedRoom: Room = [
-							roomId,
-							roomName,
-							Array.from(
-								new Set(
-									[...members, user].map((user) => user[0])
-								)
-							).map((userId) => [
-								userId,
-								[...members, user].find(
-									(member) => member[0] === userId
-								)?.[1] ?? "Unknown User",
-							]),
-							messages,
-							permissions,
-						];
-						rooms.set(roomId, updatedRoom);
-
-						callback([SC_ComType.Approve, comId, updatedRoom]);
-						socket.broadcast.emit(SignalType.Chat, [
-							SC_ComType.Set,
-							comId,
-							updatedRoom,
-						]);
-					} else if (
-						existingRoom &&
-						!userHasPermissionToJoinRoom(user[0], roomId)
-					) {
-						callback([
-							SC_ComType.Reject,
-							comId,
-							["Permission denied to join room"],
-						]);
-					}
-					break;
-				}
-
-				case ChatActionType.SendMessage: {
-					const [comId, data] = request;
-					const [[senderId, roomId, timestamp, message]] = data;
-					const room = rooms.get(roomId);
-
-					if (!room) {
-						callback([
-							SC_ComType.Reject,
-							comId,
-							["Room does not exist"],
-						]);
-						break;
-					}
-
-					if (userHasPermissionToSendMessage(senderId, roomId)) {
-						room?.[3].push([senderId, roomId, timestamp, message]);
-						rooms.set(roomId, room);
-						callback([SC_ComType.Approve, comId]);
-						socket
-							.to(roomId)
-							.emit(SignalType.Chat, [
-								SC_ComType.Delta,
+							callback([SC_ComType.Approve, comId, roomData]);
+							socket.broadcast.emit(SignalType.Chat, [
+								SC_ComType.Set,
 								comId,
-								[senderId, roomId, timestamp, message],
+								roomData,
 							]);
+						} else if (
+							!existingRoom &&
+							!userHasPermissionToCreateRoom(user[0])
+						) {
+							callback([
+								SC_ComType.Reject,
+								comId,
+								["Permission denied to create room"],
+							]);
+						} else if (
+							existingRoom &&
+							userHasPermissionToJoinRoom(user[0], roomId)
+						) {
+							socket.join(roomId);
+							const [, roomName, members, messages, permissions] =
+								existingRoom;
+							const updatedRoom: ChatRoom = [
+								roomId,
+								roomName,
+								Array.from(
+									new Set(
+										[...members, user].map(
+											(user) => user[0]
+										)
+									)
+								).map((userId) => [
+									userId,
+									[...members, user].find(
+										(member) => member[0] === userId
+									)?.[1] ?? "Unknown User",
+								]),
+								messages,
+								permissions,
+							];
+							rooms.set(roomId, updatedRoom);
+
+							callback([SC_ComType.Approve, comId, updatedRoom]);
+							socket.broadcast.emit(SignalType.Chat, [
+								SC_ComType.Set,
+								comId,
+								updatedRoom,
+							]);
+						} else if (
+							existingRoom &&
+							!userHasPermissionToJoinRoom(user[0], roomId)
+						) {
+							callback([
+								SC_ComType.Reject,
+								comId,
+								["Permission denied to join room"],
+							]);
+						}
 						break;
 					}
-				}
 
-				default: {
-					console.error(
-						`Received unexpected signal: ${CS_ComType[type]}, ${request}`
-					);
+					case ChatActionType.SendMessage: {
+						const [comId, data] = request;
+						const [[senderId, roomId, timestamp, message]] = data;
+						const room = rooms.get(roomId);
+
+						if (!room) {
+							callback([
+								SC_ComType.Reject,
+								comId,
+								["Room does not exist"],
+							]);
+							break;
+						}
+
+						if (userHasPermissionToSendMessage(senderId, roomId)) {
+							room?.[3].push([
+								senderId,
+								roomId,
+								timestamp,
+								message,
+							]);
+							rooms.set(roomId, room);
+							callback([SC_ComType.Approve, comId]);
+							socket
+								.to(roomId)
+								.emit(SignalType.Chat, [
+									SC_ComType.Delta,
+									comId,
+									[senderId, roomId, timestamp, message],
+								]);
+							break;
+						}
+					}
+
+					default: {
+						console.error(
+							`Received unexpected signal: ${CS_ComType[type]}, ${request}`
+						);
+					}
 				}
+			} catch (e) {
+				console.error(
+					`Failed to properly handle: ${CS_ComType[type]}, ${request}:`,
+					e instanceof Error ? e.message : e
+				);
 			}
 		};
 

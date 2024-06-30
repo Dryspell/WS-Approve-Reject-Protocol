@@ -18,6 +18,10 @@ const routes = [
 		value: "chat",
 		label: "Chat",
 	},
+	{
+		value: "vote",
+		label: "Vote",
+	},
 ];
 
 export default function Nav() {

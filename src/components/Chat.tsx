@@ -1,8 +1,8 @@
 import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
-import { Accessor, createEffect, createSignal, useContext } from "solid-js";
+import { Accessor, createSignal, useContext } from "solid-js";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Component, ComponentProps, For, onMount } from "solid-js";
-import { ChatHandlerArgs, Message, Room } from "~/lib/Server/chat";
+import { ChatHandlerArgs, Message, ChatRoom } from "~/lib/Server/chat";
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createId } from "@paralleldrive/cuid2";
@@ -19,7 +19,6 @@ import {
 } from "~/components/ui/resizable";
 import { Card } from "~/components/ui/card";
 import { SocketContext } from "~/app";
-import { makePersisted } from "@solid-primitives/storage";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 
 export enum ChatActionType {
@@ -30,12 +29,12 @@ export enum ChatActionType {
 
 export const chatHandler =
 	(
-		rooms: Record<string, Room>,
-		setRooms: SetStoreFunction<Record<string, Room>>
+		rooms: Record<string, ChatRoom>,
+		setRooms: SetStoreFunction<Record<string, ChatRoom>>
 	) =>
 	([type, comId, data]:
 		| [type: SC_ComType.Delta, comId: string, data: Message]
-		| [type: SC_ComType.Set, comId: string, data: Room]) => {
+		| [type: SC_ComType.Set, comId: string, data: ChatRoom]) => {
 		try {
 			// console.log(
 			// 	`Received signal: ${SC_ComType[type]}, ${comId}, ${data}`
@@ -53,7 +52,7 @@ export const chatHandler =
 					const [senderId, roomId, timestamp, message] = data;
 					const [, roomName, members, messages, permissions] =
 						rooms[roomId];
-					const updatedRoom: Room = [
+					const updatedRoom: ChatRoom = [
 						roomId,
 						roomName,
 						members,
@@ -93,7 +92,7 @@ const joinRoom = (
 	roomId: string,
 	roomName: string,
 	user: { name: string; id: string },
-	setRooms: SetStoreFunction<Record<string, Room>>
+	setRooms: SetStoreFunction<Record<string, ChatRoom>>
 ) => {
 	socket
 		.timeout(DEFAULT_REQUEST_TIMEOUT)
@@ -146,8 +145,8 @@ const joinRoom = (
 const sendMessage = (
 	socket: clientSocket,
 	message: Message,
-	rooms: Record<string, Room>,
-	setRooms: SetStoreFunction<Record<string, Room>>
+	rooms: Record<string, ChatRoom>,
+	setRooms: SetStoreFunction<Record<string, ChatRoom>>
 ) => {
 	socket
 		.timeout(DEFAULT_REQUEST_TIMEOUT)
@@ -206,7 +205,7 @@ const sendMessage = (
 function ChatMessage(props: {
 	senderId: string;
 	user: Accessor<{ id: string; name: string }>;
-	members: Room[2];
+	members: ChatRoom[2];
 	timestamp: number;
 	message: string;
 }) {
@@ -241,7 +240,7 @@ function ChatMessage(props: {
 const Chat: Component<ComponentProps<"div">> = (rawProps) => {
 	const socket = useContext(SocketContext);
 
-	const [rooms, setRooms] = createStore<Record<string, Room>>({});
+	const [rooms, setRooms] = createStore<Record<string, ChatRoom>>({});
 	const [currentRoom, setCurrentRoom] = createSignal(DEFAULT_CHAT_ROOM.id);
 	const [user, setUser] = createLocalStorageSignal("chat-user", {
 		name: randAnimal(),
