@@ -1,40 +1,45 @@
 {
-  "name": "example-with-tailwindcss",
-  "type": "module",
-  "scripts": {
-    "dev": "vinxi dev",
-    "build": "vinxi build",
-    "start": "vinxi start"
-  },
-  "dependencies": {
-    "@corvu/resizable": "^0.2.2",
-    "@fontsource/inter": "^5.0.18",
-    "@kobalte/core": "^0.13.3",
-    "@ngneat/falso": "^7.2.0",
-    "@paralleldrive/cuid2": "^2.2.2",
-    "@solid-primitives/storage": "^3.7.1",
-    "@solidjs/router": "^0.13.6",
-    "@solidjs/start": "^1.0.2",
-    "autoprefixer": "^10.4.19",
-    "axios": "^1.7.2",
-    "axios-cache-interceptor": "^1.5.3",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "^2.1.1",
-    "date-fns": "^3.6.0",
-    "embla-carousel-solid": "^8.1.5",
-    "postcss": "^8.4.38",
-    "socket.io": "^4.7.5",
-    "socket.io-client": "^4.7.5",
-    "solid-js": "^1.8.17",
-    "tailwind-merge": "^2.3.0",
-    "tailwindcss": "^3.4.4",
-    "tailwindcss-animate": "^1.0.7",
-    "vinxi": "^0.3.12"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "devDependencies": {
-    "daisyui": "^4.12.10"
-  }
+	"name": "example-with-tailwindcss",
+	"type": "module",
+	"scripts": {
+		"dev": "vinxi dev",
+		"build": "vinxi build",
+		"start": "vinxi start"
+	},
+	"dependencies": {
+		"@corvu/resizable": "^0.2.2",
+		"@fontsource/inter": "^5.0.18",
+		"@kobalte/core": "^0.13.3",
+		"@ngneat/falso": "^7.2.0",
+		"@paralleldrive/cuid2": "^2.2.2",
+		"@solid-primitives/storage": "^3.7.1",
+		"@solidjs/router": "^0.13.6",
+		"@solidjs/start": "^1.0.2",
+		"autoprefixer": "^10.4.19",
+		"axios": "^1.7.2",
+		"axios-cache-interceptor": "^1.5.3",
+		"better-sqlite3": "^11.1.1",
+		"class-variance-authority": "^0.7.0",
+		"clsx": "^2.1.1",
+		"date-fns": "^3.6.0",
+		"drizzle-orm": "^0.31.2",
+		"embla-carousel-solid": "^8.1.5",
+		"postcss": "^8.4.39",
+		"socket.io": "^4.7.5",
+		"socket.io-client": "^4.7.5",
+		"solid-js": "^1.8.18",
+		"tailwind-merge": "^2.3.0",
+		"tailwindcss": "^3.4.4",
+		"tailwindcss-animate": "^1.0.7",
+		"vinxi": "^0.3.12"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.10",
+		"@types/node": "^20.14.9",
+		"daisyui": "^4.12.10",
+		"drizzle-kit": "^0.22.8"
+	}
 }

@@ -1,11 +1,21 @@
+import { createAsync, type RouteDefinition } from "@solidjs/router";
+import { getUser, logout } from "./api";
+
+export const route = {
+	load: () => getUser(),
+} satisfies RouteDefinition;
+
 export default function Home() {
+	const user = createAsync(async () => getUser(), { deferStream: true });
 	return (
-		<main class="mx-auto text-gray-700 p-4">
-			<div class="text-center">
-				<h1 class="max-6-xs text-6xl text-sky-700 font-thin uppercase my-16">
-					Hello world!
-				</h1>
-			</div>
+		<main class="w-full p-4 space-y-2">
+			<h2 class="font-bold text-3xl">Hello {user()?.username}</h2>
+			<h3 class="font-bold text-xl">Message board</h3>
+			<form action={logout} method="post">
+				<button name="logout" type="submit">
+					Logout
+				</button>
+			</form>
 		</main>
 	);
 }
