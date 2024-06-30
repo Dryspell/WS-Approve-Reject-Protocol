@@ -69,6 +69,9 @@ export type VoteHandlerArgs = [
 	) => void
 ];
 
+const userHasPermissionToCreateRoom = (userId: string) => true;
+const userHasPermissionToJoinRoom = (userId: string, roomId: string) => true;
+
 export default function vote() {
 	const rooms = new Map<string, GameRoom>();
 
@@ -88,11 +91,42 @@ export default function vote() {
 							return;
 						}
 
-						let room = rooms.get(roomId);
-						if (!room) {
-							room = [roomId, roomName, [user], [], [], null];
-							rooms.set(roomId, room);
-						} else if (!room[2].includes(user)) {
+						let existingRoom = rooms.get(roomId);
+						if (
+							!existingRoom &&
+							userHasPermissionToCreateRoom(user[0])
+						) {
+							existingRoom = [
+								roomId,
+								roomName,
+								[user],
+								[],
+								[],
+								null,
+							];
+							rooms.set(roomId, existingRoom);
+							socket.join(roomId);
+							socket.broadcast.emit(SignalType.Vote, [
+								SC_ComType.Set,
+								roomId,
+								existingRoom,
+							]);
+							callback([SC_ComType.Approve, comId, existingRoom]);
+						} else if (
+							!existingRoom &&
+							!userHasPermissionToCreateRoom(user[0])
+						) {
+							callback([
+								SC_ComType.Reject,
+								comId,
+								[
+									"User does not have permission to create room",
+								],
+							]);
+						} else if (
+							existingRoom &&
+							userHasPermissionToJoinRoom(user[0], roomId)
+						) {
 							const [
 								roomId,
 								roomName,
@@ -100,11 +134,22 @@ export default function vote() {
 								tickets,
 								offers,
 								startTime,
-							] = room;
+							] = existingRoom;
 							const newRoom: GameRoom = [
 								roomId,
 								roomName,
-								[...members, user],
+								Array.from(
+									new Set(
+										[...members, user].map(
+											(user) => user[0]
+										)
+									)
+								).map((userId) => [
+									userId,
+									[...members, user].find(
+										(member) => member[0] === userId
+									)?.[1] ?? "Unknown User",
+								]),
 								tickets,
 								offers,
 								startTime,

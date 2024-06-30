@@ -1,5 +1,5 @@
 import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
-import { createSignal, onMount, useContext } from "solid-js";
+import { createSignal, For, onMount, useContext } from "solid-js";
 import { Component, ComponentProps } from "solid-js";
 import { Message, ChatRoom } from "~/lib/Server/chat";
 import { createStore, SetStoreFunction } from "solid-js/store";
@@ -11,6 +11,11 @@ import { GameRoom, VoteActionType, VoteHandlerArgs } from "~/lib/Server/vote";
 import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
 import { InferCallbackData } from "~/types/socket-utils";
 import { showToast } from "./ui/toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Button } from "./ui/button";
+import { Resizable, ResizableHandle, ResizablePanel } from "./ui/resizable";
+import { Card } from "./ui/card";
+import { TextField, TextFieldInput } from "./ui/text-field";
 
 const DEFAULT_GAME_ROOM = { id: "game1", name: "Game Room 1" };
 
@@ -93,8 +98,6 @@ const joinRoom = (
 				}
 			}
 		);
-
-	throw new Error("Not implemented");
 };
 
 const VoteBox: Component<ComponentProps<"div">> = (rawProps) => {
@@ -121,7 +124,90 @@ const VoteBox: Component<ComponentProps<"div">> = (rawProps) => {
 		);
 	});
 
-	return <div>Vote</div>;
+	return (
+		<div>
+			<TextField>
+				<TextFieldInput
+					type={"text"}
+					placeholder="Chat as user..."
+					value={user().name}
+					onInput={(e) =>
+						setUser({
+							name: e.currentTarget.value,
+							id: user().id,
+						})
+					}
+				/>
+			</TextField>
+			<Tabs
+				defaultValue="global"
+				value={currentRoom()}
+				onChange={setCurrentRoom}
+				class="py-1"
+			>
+				<div class="flex flex-row w-full justify-center items-center">
+					<TabsList class="grid grid-flow-col auto-cols-min w-80% w-full">
+						<For each={Object.entries(rooms)}>
+							{([roomId, room]) => (
+								<TabsTrigger value={roomId}>
+									{room[1]}
+								</TabsTrigger>
+							)}
+						</For>
+					</TabsList>
+					<Button
+						variant="outline"
+						class="m-1.5 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium"
+					>
+						Create Room
+					</Button>
+				</div>
+
+				<For each={Object.entries(rooms)}>
+					{([
+						roomId,
+						[, roomName, members, tickets, offers, startTime],
+					]) => (
+						<TabsContent value={roomId}>
+							<Resizable
+								orientation="horizontal"
+								class="max-w-full rounded-lg border"
+							>
+								<ResizablePanel initialSize={0.15} class="p-2">
+									<For each={members}>
+										{([id, name]) => (
+											<Card class="m-1.5 p-2">
+												<div class="flex flex-row items-center justify-center">
+													<div
+														class="chat-image
+                              avatar pr-2"
+													>
+														<div class="w-10 rounded-full">
+															<img
+																alt="Tailwind CSS chat bubble component"
+																src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
+															/>
+														</div>
+													</div>
+													<div class="chat-header">
+														{name}
+													</div>
+												</div>
+											</Card>
+										)}
+									</For>
+								</ResizablePanel>
+								<ResizableHandle withHandle />
+								<ResizablePanel initialSize={0.85} class="p-2">
+									<div>Main Panel</div>
+								</ResizablePanel>
+							</Resizable>
+						</TabsContent>
+					)}
+				</For>
+			</Tabs>
+		</div>
+	);
 };
 
 export default VoteBox;
