@@ -1,5 +1,7 @@
 import { serializeProxy } from "../lib/serializeProxy";
 
+//! TODO: IMPLEMENT SOCKETIO CUSTOM PARSER
+
 export default function SerializationProxyPage() {
   const testSerialObject = {
     greeting: "Welcome!",
@@ -33,11 +35,14 @@ export default function SerializationProxyPage() {
   };
   console.log(serializeProxy(testSerialObject).arrayNest.fish);
 
+  const testSerial = { hello: "world", toJSON: () => ["Hello, world!"] };
+
   return (
     <main class="mx-auto p-4 text-gray-700">
       <div>
         <pre>{JSON.stringify(testSerialObject, null, 2)}</pre>
         <pre>{JSON.stringify(serializeProxy(testSerialObject).arrayNest, null, 2)}</pre>
+        <pre>{JSON.stringify(testSerial, null, 2)}</pre>
       </div>
     </main>
   );
