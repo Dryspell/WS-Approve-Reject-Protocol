@@ -4,7 +4,7 @@ import { Flex } from "~/components/ui/flex";
 import { clientSocket, CS_ComType, SC_ComType, SignalType } from "~/types/socket";
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { showToast } from "~/components/ui/toast";
-import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
+import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { InferCallbackData } from "~/types/socket-utils";
 import { CounterHandlerArgs } from "~/lib/Server/counters";
 import { SocketContext } from "~/app";
@@ -70,7 +70,7 @@ export default function useSocketCounter(sigId: string) {
               title: "Error",
               description: err.message,
               variant: "error",
-              duration: 5000,
+              duration: DEFAULT_TOAST_DURATION,
             });
             return;
           }
@@ -79,7 +79,7 @@ export default function useSocketCounter(sigId: string) {
               title: "Error",
               description: response[2][0],
               variant: "error",
-              duration: 5000,
+              duration: DEFAULT_TOAST_DURATION,
             });
             return;
           }

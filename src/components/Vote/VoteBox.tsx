@@ -14,7 +14,7 @@ import {
   VoteActionType,
   VoteHandlerArgs,
 } from "~/lib/Server/vote";
-import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
+import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { InferCallbackData } from "~/types/socket-utils";
 import { showToast } from "../ui/toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -121,7 +121,7 @@ const joinRoom = (
             title: "Error",
             description: err.message,
             variant: "error",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
@@ -131,7 +131,7 @@ const joinRoom = (
             title: "Error",
             description: returnData[0],
             variant: "error",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
@@ -142,7 +142,7 @@ const joinRoom = (
             description: `You have
               successfully created or joined room: ${roomName}`,
             variant: "success",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           const [gameRoom, gameRoomPreStart] = returnData;
           setRooms({ [roomId]: gameRoom });
@@ -177,6 +177,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
   });
 
   createEffect(() => {
+    console.log(rooms);
     console.log(roomsPreStart);
   });
 
@@ -221,6 +222,16 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
           >
             Create Room
           </Button>
+          <Button
+            onClick={() => {
+              socket.emit(SignalType.Vote, VoteActionType.Dev_DeleteRooms, [createId()], () => {});
+              setRooms({});
+              setRoomsPreStart({});
+              window.location.reload();
+            }}
+          >
+            Dev: Delete All Rooms
+          </Button>
         </div>
 
         <For each={Object.entries(rooms)}>
@@ -243,7 +254,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
                         setRoomsPreStart={setRoomsPreStart}
                       />
                     ) : (
-                      <Game rooms={rooms} roomId={roomId} />
+                      <Game room={rooms[roomId]} setRooms={setRooms} />
                     )}
                   </div>
                 </ResizablePanel>

@@ -35,6 +35,7 @@ export enum VoteActionType {
   SetVoteColor,
   CreateOffer,
   AcceptOffer,
+  Dev_DeleteRooms,
 }
 
 export enum SC_GameEventType {
@@ -47,6 +48,7 @@ export enum SC_GameEventType {
 }
 
 export type VoteHandlerArgs =
+  | [type: VoteActionType.Dev_DeleteRooms, request: [comId: string], callback: () => void]
   | [
       type: VoteActionType.CreateOrJoinRoom,
       request: [comId: string, data: [roomId: string, roomName: string, user: User]],
@@ -68,6 +70,15 @@ export type VoteHandlerArgs =
           | [returnType: SC_ComType.Approve, comId: string, [ready: boolean]]
           | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
       ) => void,
+    ]
+  | [
+      type: VoteActionType.SetVoteColor,
+      request: [comId: string, data: [roomId: string, ticket: Ticket]],
+      callback: (
+        returnData:
+          | [returnType: SC_ComType.Approve, comId: string, returnData: [ticket: Ticket]]
+          | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
+      ) => void,
     ];
 
 const userHasPermissionToCreateRoom = (userId: string) => true;
@@ -82,6 +93,16 @@ export default function vote() {
     (...[type, request, callback]: VoteHandlerArgs) => {
       try {
         switch (type) {
+          case VoteActionType.Dev_DeleteRooms: {
+            rooms.clear();
+            roomsPreStart.clear();
+
+            console.log({ rooms });
+            console.log({ roomsPreStart });
+            callback();
+            return;
+          }
+
           case VoteActionType.CreateOrJoinRoom: {
             const [comId, [roomId, roomName, user]] = request;
             if (!user) {
@@ -197,6 +218,40 @@ export default function vote() {
               }
               return;
             }
+          }
+
+          case VoteActionType.SetVoteColor: {
+            const [comId, [roomId, ticket]] = request;
+            const [ticketId, ticketOwner, ticketColor] = ticket;
+            if (!ticket) {
+              callback([SC_ComType.Reject, comId, ["Ticket is not provided"]]);
+              return;
+            }
+
+            const existingRoom = rooms.get(roomId);
+            if (!existingRoom) {
+              callback([SC_ComType.Reject, comId, ["Room does not exist"]]);
+              return;
+            }
+
+            const [, roomName, members, tickets, offers, startTime] = existingRoom;
+            const existingTicket = tickets.find(([tickId]) => tickId === ticketId);
+            if (!existingTicket) {
+              callback([SC_ComType.Reject, comId, ["Ticket does not exist"]]);
+              return;
+            }
+
+            const newRoom: GameRoom = [
+              roomId,
+              roomName,
+              members,
+              tickets.map(tick => (tick[0] === ticketId ? ticket : tick)),
+              offers,
+              startTime,
+            ];
+            rooms.set(roomId, newRoom);
+            callback([SC_ComType.Approve, comId, [ticket]]);
+            return;
           }
 
           default: {

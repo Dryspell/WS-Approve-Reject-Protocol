@@ -1,0 +1,2 @@
+export const DEFAULT_REQUEST_TIMEOUT = 5000;
+export const DEFAULT_TOAST_DURATION = 2000;

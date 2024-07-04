@@ -10,7 +10,7 @@ import { InferCallbackData } from "~/types/socket-utils";
 import { Button } from "~/components/ui/button";
 import { randAnimal } from "@ngneat/falso";
 import { showToast } from "~/components/ui/toast";
-import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
+import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { Resizable, ResizableHandle, ResizablePanel } from "~/components/ui/resizable";
 import { SocketContext } from "~/app";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
@@ -102,7 +102,7 @@ const joinRoom = (
             title: "Error",
             description: err.message,
             variant: "error",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
@@ -112,7 +112,7 @@ const joinRoom = (
             title: "Error",
             description: reason,
             variant: "error",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
@@ -123,7 +123,7 @@ const joinRoom = (
           description: `You have
               successfully created or joined room: ${roomName}`,
           variant: "success",
-          duration: 5000,
+          duration: DEFAULT_TOAST_DURATION,
         });
         setRooms({
           [roomId]: returnData,
@@ -160,7 +160,7 @@ const sendMessage = (
             title: "Error",
             description: reason,
             variant: "error",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
@@ -169,7 +169,7 @@ const sendMessage = (
             title: "Error",
             description: err.message,
             variant: "error",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
@@ -280,7 +280,7 @@ const Chat: Component<ComponentProps<"div">> = rawProps => {
                 title: "You say anything!",
                 description: "Please enter a message before sending!",
                 variant: "error",
-                duration: 5000,
+                duration: DEFAULT_TOAST_DURATION,
               });
             }
             const message: Message = [user().id, currentRoom(), Date.now(), chatInput()];

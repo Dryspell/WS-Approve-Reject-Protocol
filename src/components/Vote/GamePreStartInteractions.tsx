@@ -3,7 +3,7 @@ import { Accessor } from "solid-js";
 import { SetStoreFunction } from "solid-js/store";
 import { createId } from "@paralleldrive/cuid2";
 import { GameRoom, GameRoomPreStart, VoteActionType, VoteHandlerArgs } from "~/lib/Server/vote";
-import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
+import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { InferCallbackData } from "~/types/socket-utils";
 import { showToast } from "../ui/toast";
 import { Button } from "../ui/button";
@@ -37,7 +37,7 @@ const readyGameStart = (
             title: "Error",
             description: err.message,
             variant: "error",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
@@ -47,7 +47,7 @@ const readyGameStart = (
             title: "Error",
             description: returnData[0],
             variant: "error",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
@@ -60,7 +60,7 @@ const readyGameStart = (
             title: ready ? "Readied Up" : "Unreadied",
             description: ready ? "You are ready to start the game!" : "You are not ready.",
             variant: "success",
-            duration: 5000,
+            duration: DEFAULT_TOAST_DURATION,
           });
           const [, readyUsers] = roomsPreStart[roomId];
           ready

@@ -10,7 +10,7 @@ import {
 import { createStore } from "solid-js/store";
 import { JSONObject } from "~/types/utils";
 import { InferCallbackData } from "~/types/socket-utils";
-import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/Client/socket";
+import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/timeout-constants";
 import { PokemonFetchHandlerArgs } from "~/lib/Server/pokemonFetch";
 import { SocketContext } from "~/app";
 
