@@ -1,5 +1,5 @@
 import { clientOnly } from "@solidjs/start";
-const VoteBox = clientOnly(() => import("~/components/VoteBox"));
+const VoteBox = clientOnly(() => import("~/components/Vote/VoteBox"));
 
 export default function VotePage() {
   return (

@@ -1,5 +1,6 @@
 import { CS_ComType, SC_ComType, serverSocket, SignalType } from "~/types/socket";
 import { User } from "./chat";
+import { createId } from "@paralleldrive/cuid2";
 
 export enum TicketColor {
   Red,
@@ -37,7 +38,7 @@ export enum VoteActionType {
 }
 
 export enum SC_GameEventType {
-  CreatedRoom,
+  RoomCreated,
   UserJoinedRoom,
   GameStart,
   GameEnd,
@@ -93,7 +94,11 @@ export default function vote() {
               const newRoom: GameRoom = [roomId, roomName, [user], [], [], null];
               rooms.set(roomId, newRoom);
               socket.join(roomId);
-              socket.broadcast.emit(SignalType.Vote, [SC_ComType.Set, roomId, newRoom]);
+              socket.broadcast.emit(SignalType.Vote, [
+                SC_GameEventType.RoomCreated,
+                comId,
+                newRoom,
+              ]);
 
               const roomPreStart: GameRoomPreStart = [roomId, [user[0]]];
               roomsPreStart.set(roomId, roomPreStart);
@@ -120,7 +125,11 @@ export default function vote() {
               ];
               rooms.set(roomId, newRoom);
               socket.join(roomId);
-              socket.broadcast.emit(SignalType.Vote, [SC_ComType.Set, roomId, newRoom]);
+              socket.broadcast.emit(SignalType.Vote, [
+                SC_GameEventType.RoomCreated,
+                comId,
+                newRoom,
+              ]);
 
               const roomPreStart = roomsPreStart.get(roomId) ?? [roomId, [user[0]]];
 
@@ -168,9 +177,23 @@ export default function vote() {
               roomsPreStart.set(roomId, newPreStart);
               callback([SC_ComType.Approve, comId, [true]]);
               if (newPreStart[1].length === members.length) {
-                const newRoom: GameRoom = [roomId, roomName, members, tickets, offers, Date.now()];
+                const newRoom: GameRoom = [
+                  roomId,
+                  roomName,
+                  members,
+                  members
+                    .map(([userId]) =>
+                      Array.from(
+                        { length: 3 },
+                        () => [createId(), userId, TicketColor.None] as Ticket,
+                      ),
+                    )
+                    .flat(),
+                  offers,
+                  Date.now() + 1000 * 10,
+                ];
                 rooms.set(roomId, newRoom);
-                socket.emit(SignalType.Vote, [SC_ComType.Set, roomId, newRoom]);
+                socket.emit(SignalType.Vote, [SC_GameEventType.GameStart, comId, newRoom]);
               }
               return;
             }

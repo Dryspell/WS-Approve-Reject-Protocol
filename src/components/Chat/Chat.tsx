@@ -238,7 +238,7 @@ const Chat: Component<ComponentProps<"div">> = rawProps => {
             <TabsContent value={roomId}>
               <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
                 <ResizablePanel initialSize={0.15} class="p-2">
-                  <For each={members}>{([id, name]) => <UserAvatarCard name={name} />}</For>
+                  <For each={members}>{member => <UserAvatarCard user={member} />}</For>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel initialSize={0.85} class="p-2">
