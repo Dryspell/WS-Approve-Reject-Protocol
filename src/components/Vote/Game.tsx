@@ -5,11 +5,61 @@ import UserAvatarCard from "../Chat/UserAvatarCard";
 import { Badge } from "../ui/badge";
 import { SocketContext } from "~/app";
 import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
-import { SC_ComType, SignalType } from "~/types/socket";
+import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
 import { createId } from "@paralleldrive/cuid2";
 import { InferCallbackData } from "~/types/socket-utils";
 import { SetStoreFunction } from "solid-js/store";
 import { showToast } from "../ui/toast";
+
+function toggleVoteColor(
+  ticketId: string,
+  ticketOwner: string,
+  ticketColor: TicketColor,
+  socket: clientSocket,
+  roomId: string,
+  props: { room: GameRoom; setRooms: SetStoreFunction<Record<string, GameRoom>> },
+) {
+  const newTicket: Ticket = [ticketId, ticketOwner, (ticketColor + 1) % 3];
+  socket
+    .timeout(DEFAULT_REQUEST_TIMEOUT)
+    .emit(
+      SignalType.Vote,
+      VoteActionType.SetVoteColor,
+      [createId(), [roomId, newTicket]],
+      (
+        err: Error,
+        [returnType, comId, returnData]: InferCallbackData<
+          VoteHandlerArgs,
+          VoteActionType.SetVoteColor
+        >,
+      ) => {
+        if (err) {
+          showToast({
+            title: "Error",
+            description: err.message,
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          return;
+        }
+        if (returnType === SC_ComType.Reject) {
+          showToast({
+            title: "Error",
+            description: returnData[0],
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          return;
+        }
+        props.setRooms(
+          roomId,
+          3,
+          ([tickId]) => tickId === ticketId,
+          () => newTicket,
+        );
+      },
+    );
+}
 
 export default function Game(props: {
   room: GameRoom;
@@ -43,49 +93,17 @@ export default function Game(props: {
                   >
                     {([ticketId, ticketOwner, ticketColor]) => (
                       <Badge
-                        class={`mx-1 px-1 ${ticketColor === TicketColor.Red ? "bg-red-500" : ticketColor === TicketColor.Blue ? "bg-blue-500" : ""}`}
+                        class={`mx-1 cursor-pointer px-1 ${ticketColor === TicketColor.Red ? "bg-red-500" : ticketColor === TicketColor.Blue ? "bg-blue-500" : ""}`}
                         variant={"outline"}
                         onClick={() => {
-                          const newTicket: Ticket = [ticketId, ticketOwner, (ticketColor + 1) % 3];
-                          socket
-                            .timeout(DEFAULT_REQUEST_TIMEOUT)
-                            .emit(
-                              SignalType.Vote,
-                              VoteActionType.SetVoteColor,
-                              [createId(), [roomId, newTicket]],
-                              (
-                                err: Error,
-                                [returnType, comId, returnData]: InferCallbackData<
-                                  VoteHandlerArgs,
-                                  VoteActionType.SetVoteColor
-                                >,
-                              ) => {
-                                if (err) {
-                                  showToast({
-                                    title: "Error",
-                                    description: err.message,
-                                    variant: "error",
-                                    duration: DEFAULT_TOAST_DURATION,
-                                  });
-                                  return;
-                                }
-                                if (returnType === SC_ComType.Reject) {
-                                  showToast({
-                                    title: "Error",
-                                    description: returnData[0],
-                                    variant: "error",
-                                    duration: DEFAULT_TOAST_DURATION,
-                                  });
-                                  return;
-                                }
-                                props.setRooms(
-                                  roomId,
-                                  3,
-                                  ([tickId]) => tickId === ticketId,
-                                  () => newTicket,
-                                );
-                              },
-                            );
+                          toggleVoteColor(
+                            ticketId,
+                            ticketOwner,
+                            ticketColor,
+                            socket,
+                            roomId,
+                            props,
+                          );
                         }}
                       >{`${ticketId}: ${TicketColor[ticketColor]}`}</Badge>
                     )}
