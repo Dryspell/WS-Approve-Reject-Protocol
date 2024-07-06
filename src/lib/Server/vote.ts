@@ -2,6 +2,10 @@ import { CS_ComType, SC_ComType, serverSocket, SignalType } from "~/types/socket
 import { User } from "./chat";
 import { createId } from "@paralleldrive/cuid2";
 
+const DEFAULT_TICKET_COUNT = 3;
+const DEFAULT_ROUND_INTERIM_LENGTH = 1000 * 10;
+const DEFAULT_ROUND_LENGTH = 1000 * 60 * 5;
+
 export enum TicketColor {
   Red,
   Blue,
@@ -18,6 +22,8 @@ export enum OfferType {
 }
 export type Offer = [offerId: string, offerOwner: User[0], offerType: OfferType, price: number];
 
+export type GameRound = [roundNumber: number, startTime: number, endTime: number];
+
 export type GameRoom = [
   roomId: string,
   roomName: string,
@@ -25,6 +31,7 @@ export type GameRoom = [
   tickets: Ticket[],
   offers: Offer[],
   startTime: number | null,
+  rounds: GameRound[],
 ];
 
 export type GameRoomPreStart = [roomId: string, readyUsers: User[0][]];
@@ -84,9 +91,71 @@ export type VoteHandlerArgs =
 const userHasPermissionToCreateRoom = (userId: string) => true;
 const userHasPermissionToJoinRoom = (userId: string, roomId: string) => true;
 
+function startRound(
+  socket: serverSocket,
+  roomId: string,
+  rooms: Map<string, GameRoom>,
+  clocks: Map<string, NodeJS.Timeout>,
+  round: GameRound,
+) {
+  const [, startTime, endTime] = round;
+  clocks.set(
+    roomId,
+    setInterval(() => {
+      if (Date.now() > startTime) {
+        clearInterval(clocks.get(roomId));
+        socket
+          .to(roomId)
+          .emit(SignalType.Vote, [SC_GameEventType.RoundStart, createId(), [roomId, round]]);
+
+        clocks.set(
+          roomId,
+          setInterval(() => {
+            if (Date.now() > endTime) {
+              endRound(socket, roomId, rooms, clocks, round);
+            }
+          }),
+        );
+      }
+    }, 1000),
+  );
+}
+
+function endRound(
+  socket: serverSocket,
+  roomId: string,
+  rooms: Map<string, GameRoom>,
+  clocks: Map<string, NodeJS.Timeout>,
+  round: GameRound,
+) {
+  clearInterval(clocks.get(roomId));
+  round[2] = Date.now();
+  const [roundNumber, startTime, endTime] = round;
+  const newRoundStart = Date.now() + 1000 * 10;
+  const newRound: GameRound = [roundNumber + 1, newRoundStart, newRoundStart + 1000 * 60 * 5];
+
+  const existingRoom = rooms.get(roomId);
+  if (!existingRoom) {
+    console.error(`Room ${roomId} no longer exists`);
+    return;
+  }
+  const [, roomName, members, tickets, offers, , rounds] = existingRoom;
+
+  // Calculate scores
+
+  rounds.push(newRound);
+
+  startRound(socket, roomId, rooms, clocks, newRound);
+
+  socket
+    .to(roomId)
+    .emit(SignalType.Vote, [SC_GameEventType.RoundEnd, createId(), [roomId, round, newRound]]);
+}
+
 export default function vote() {
   const rooms = new Map<string, GameRoom>();
   const roomsPreStart = new Map<string, GameRoomPreStart>();
+  const clocks = new Map<string, NodeJS.Timeout>();
 
   const handler =
     (socket: serverSocket) =>
@@ -112,7 +181,7 @@ export default function vote() {
 
             let existingRoom = rooms.get(roomId);
             if (!existingRoom && userHasPermissionToCreateRoom(user[0])) {
-              const newRoom: GameRoom = [roomId, roomName, [user], [], [], null];
+              const newRoom: GameRoom = [roomId, roomName, [user], [], [], null, []];
               rooms.set(roomId, newRoom);
               socket.join(roomId);
               socket.broadcast.emit(SignalType.Vote, [
@@ -121,7 +190,7 @@ export default function vote() {
                 newRoom,
               ]);
 
-              const roomPreStart: GameRoomPreStart = [roomId, [user[0]]];
+              const roomPreStart: GameRoomPreStart = [roomId, []];
               roomsPreStart.set(roomId, roomPreStart);
 
               callback([SC_ComType.Approve, comId, [newRoom, roomPreStart]]);
@@ -132,29 +201,41 @@ export default function vote() {
                 ["User does not have permission to create room"],
               ]);
             } else if (existingRoom && userHasPermissionToJoinRoom(user[0], roomId)) {
-              const [roomId, roomName, members, tickets, offers, startTime] = existingRoom;
-              const newRoom: GameRoom = [
-                roomId,
-                roomName,
-                Array.from(new Set([...members, user].map(user => user[0]))).map(userId => [
-                  userId,
-                  [...members, user].find(member => member[0] === userId)?.[1] ?? "Unknown User",
-                ]),
-                tickets,
-                offers,
-                startTime,
-              ];
-              rooms.set(roomId, newRoom);
+              let [roomId, roomName, members, tickets, offers, startTime, rounds] = existingRoom;
+              // const newRoom: GameRoom = [
+              //   roomId,
+              //   roomName,
+              //   Array.from(new Set([...members, user].map(user => user[0]))).map(userId => [
+              //     userId,
+              //     [...members, user].find(member => member[0] === userId)?.[1] ?? "Unknown User",
+              //   ]),
+              //   tickets,
+              //   offers,
+              //   startTime,
+              //   rounds,
+              // ];
+              // rooms.set(roomId, newRoom);
+              members = Array.from(new Set([...members, user].map(user => user[0]))).map(userId => [
+                userId,
+                [...members, user].find(member => member[0] === userId)?.[1] ?? "Unknown User",
+              ]);
               socket.join(roomId);
               socket.broadcast.emit(SignalType.Vote, [
                 SC_GameEventType.RoomCreated,
                 comId,
-                newRoom,
+                existingRoom, //newRoom,
               ]);
 
-              const roomPreStart = roomsPreStart.get(roomId) ?? [roomId, [user[0]]];
+              const roomPreStart = roomsPreStart.get(roomId) ?? [roomId, []];
 
-              callback([SC_ComType.Approve, comId, [newRoom, roomPreStart]]);
+              callback([
+                SC_ComType.Approve,
+                comId,
+                [
+                  existingRoom, //newRoom,
+                  roomPreStart,
+                ],
+              ]);
             }
 
             break;
@@ -197,7 +278,13 @@ export default function vote() {
               const newPreStart: GameRoomPreStart = [roomIdPreStart, [...readyUsers, user[0]]];
               roomsPreStart.set(roomId, newPreStart);
               callback([SC_ComType.Approve, comId, [true]]);
+
+              // Start game if all users are ready
               if (newPreStart[1].length === members.length) {
+                const startTime = Date.now() + DEFAULT_ROUND_INTERIM_LENGTH;
+                const newRound: GameRound = [1, startTime, startTime + DEFAULT_ROUND_LENGTH];
+
+                startRound(socket, roomId, rooms, clocks, newRound);
                 const newRoom: GameRoom = [
                   roomId,
                   roomName,
@@ -205,16 +292,19 @@ export default function vote() {
                   members
                     .map(([userId]) =>
                       Array.from(
-                        { length: 3 },
+                        { length: DEFAULT_TICKET_COUNT },
                         () => [createId(), userId, TicketColor.None] as Ticket,
                       ),
                     )
                     .flat(),
                   offers,
-                  Date.now() + 1000 * 10,
+                  startTime,
+                  [newRound],
                 ];
                 rooms.set(roomId, newRoom);
-                socket.emit(SignalType.Vote, [SC_GameEventType.GameStart, comId, newRoom]);
+                socket
+                  .to(roomId)
+                  .emit(SignalType.Vote, [SC_GameEventType.GameStart, comId, newRoom]);
               }
               return;
             }
@@ -234,22 +324,24 @@ export default function vote() {
               return;
             }
 
-            const [, roomName, members, tickets, offers, startTime] = existingRoom;
+            let [, roomName, members, tickets, offers, startTime, rounds] = existingRoom;
             const existingTicket = tickets.find(([tickId]) => tickId === ticketId);
             if (!existingTicket) {
               callback([SC_ComType.Reject, comId, ["Ticket does not exist"]]);
               return;
             }
 
-            const newRoom: GameRoom = [
-              roomId,
-              roomName,
-              members,
-              tickets.map(tick => (tick[0] === ticketId ? ticket : tick)),
-              offers,
-              startTime,
-            ];
-            rooms.set(roomId, newRoom);
+            // const newRoom: GameRoom = [
+            //   roomId,
+            //   roomName,
+            //   members,
+            //   tickets.map(tick => (tick[0] === ticketId ? ticket : tick)),
+            //   offers,
+            //   startTime,
+            //   rounds,
+            // ];
+            // rooms.set(roomId, newRoom);
+            tickets = tickets.map(tick => (tick[0] === ticketId ? ticket : tick));
             callback([SC_ComType.Approve, comId, [ticket]]);
             return;
           }

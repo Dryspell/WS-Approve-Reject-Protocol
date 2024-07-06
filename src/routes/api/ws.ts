@@ -14,6 +14,7 @@ import counters from "~/lib/Server/counters";
 import pokemonFetch from "~/lib/Server/pokemonFetch";
 import chat from "~/lib/Server/chat";
 import vote from "~/lib/Server/vote";
+import { createPolled } from "@solid-primitives/timer";
 
 const prohibitedWords = ["fish", "cat", "dog"];
 

@@ -10,6 +10,7 @@ import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import {
   GameRoom,
   GameRoomPreStart,
+  GameRound,
   SC_GameEventType,
   VoteActionType,
   VoteHandlerArgs,
@@ -36,15 +37,11 @@ export const voteHandler =
     | [type: SC_GameEventType.RoomCreated, comId: string, data: GameRoom]
     | [type: SC_GameEventType.GameStart, comId: string, data: GameRoom]
     | [type: SC_GameEventType.GameEnd, comId: string, data: [roomId: string, endTime: number]]
-    | [
-        type: SC_GameEventType.RoundStart,
-        comId: string,
-        data: [roomId: string, round: number, startTime: number],
-      ]
+    | [type: SC_GameEventType.RoundStart, comId: string, data: [roomId: string, round: GameRound]]
     | [
         type: SC_GameEventType.RoundEnd,
         comId: string,
-        data: [roomId: string, round: number, endTime: number],
+        data: [roomId: string, previousRound: GameRound, nextRound: GameRound],
       ]) => {
     try {
       // console.log(

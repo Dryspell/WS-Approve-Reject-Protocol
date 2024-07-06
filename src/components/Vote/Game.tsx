@@ -66,7 +66,7 @@ export default function Game(props: {
   setRooms: SetStoreFunction<Record<string, GameRoom>>;
 }) {
   const socket = useContext(SocketContext);
-  const [roomId, roomName, members, tickets, offers, startTime] = props.room;
+  const [roomId, roomName, members, tickets, offers, startTime, rounds] = props.room;
 
   const clock = createPolled(() => Date.now(), 1000);
 

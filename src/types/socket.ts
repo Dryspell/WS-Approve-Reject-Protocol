@@ -6,11 +6,11 @@ import { PokemonApiResponse } from "~/hooks/useDataFetching";
 import { counterHandler } from "~/hooks/useCounters";
 import counters from "~/lib/Server/counters";
 import pokemonFetch from "~/lib/Server/pokemonFetch";
-import { chatHandler } from "~/components/Chat";
+import { chatHandler } from "~/components/Chat/Chat";
 import chat from "~/lib/Server/chat";
 import { InferHandler } from "./socket-utils";
 import vote from "~/lib/Server/vote";
-import { voteHandler } from "~/components/VoteBox";
+import { voteHandler } from "~/components/Vote/VoteBox";
 
 interface SocketServer extends HTTPServer {
   io?: IOServer;
