@@ -44,9 +44,8 @@ export const voteHandler =
         data: [roomId: string, previousRound: GameRound, nextRound: GameRound],
       ]) => {
     try {
-      // console.log(
-      // 	`Received signal: ${SC_ComType[type]}, ${comId}, ${data}`
-      // );
+      console.log(`Received signal: ${SC_GameEventType[type]}, ${comId}, ${data}`);
+
       switch (type) {
         case SC_GameEventType.RoomCreated: {
           const [roomId, ...roomData] = data;
@@ -61,6 +60,7 @@ export const voteHandler =
         }
 
         case SC_GameEventType.GameStart: {
+          console.log(`Game started: ${comId}`, data);
           const [roomId, ...roomData] = data;
           setRooms({
             [roomId]: [roomId, ...roomData],
@@ -69,15 +69,18 @@ export const voteHandler =
         }
 
         case SC_GameEventType.GameEnd: {
+          console.warn("Not implemented", SC_GameEventType[type], comId, data);
           throw new Error("Not implemented");
         }
 
         case SC_GameEventType.RoundStart: {
-          throw new Error("Not implemented");
+          console.warn("Not implemented", SC_GameEventType[type], comId, data);
+          // throw new Error("Not implemented");
         }
 
         case SC_GameEventType.RoundEnd: {
-          throw new Error("Not implemented");
+          console.warn("Not implemented", SC_GameEventType[type], comId, data);
+          // throw new Error("Not implemented");
         }
 
         default: {

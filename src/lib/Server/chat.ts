@@ -1,5 +1,5 @@
 import { ChatActionType } from "~/components/Chat/Chat";
-import { CS_ComType, SC_ComType, serverSocket, SignalType } from "~/types/socket";
+import { CS_ComType, SC_ComType, serverSocket, SignalType, sServer } from "~/types/socket";
 
 export type User = [userId: string, userName: string, avatarUrl?: string];
 export type Message = [senderId: string, roomId: string, timestamp: number, message: string];
@@ -39,7 +39,7 @@ export default function chat() {
   const rooms = new Map<string, ChatRoom>();
 
   const handler =
-    (socket: serverSocket) =>
+    (socket: serverSocket, io: sServer) =>
     (...[type, request, callback]: ChatHandlerArgs) => {
       try {
         switch (type) {
@@ -96,13 +96,11 @@ export default function chat() {
               room?.[3].push([senderId, roomId, timestamp, message]);
               rooms.set(roomId, room);
               callback([SC_ComType.Approve, comId]);
-              socket
-                .to(roomId)
-                .emit(SignalType.Chat, [
-                  SC_ComType.Delta,
-                  comId,
-                  [senderId, roomId, timestamp, message],
-                ]);
+              io.to(roomId).emit(SignalType.Chat, [
+                SC_ComType.Delta,
+                comId,
+                [senderId, roomId, timestamp, message],
+              ]);
               break;
             }
           }

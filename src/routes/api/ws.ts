@@ -14,7 +14,6 @@ import counters from "~/lib/Server/counters";
 import pokemonFetch from "~/lib/Server/pokemonFetch";
 import chat from "~/lib/Server/chat";
 import vote from "~/lib/Server/vote";
-import { createPolled } from "@solid-primitives/timer";
 
 const prohibitedWords = ["fish", "cat", "dog"];
 
@@ -44,8 +43,8 @@ export async function GET({ request, nativeEvent }: APIEvent) {
 
       socket.on(SignalType.Counter, counterHandler(socket));
       socket.on(SignalType.Pokemon, pokemonHandler(socket));
-      socket.on(SignalType.Chat, chatHandler(socket));
-      socket.on(SignalType.Vote, voteHandler(socket));
+      socket.on(SignalType.Chat, chatHandler(socket, io));
+      socket.on(SignalType.Vote, voteHandler(socket, io));
     });
 
     return new Response();

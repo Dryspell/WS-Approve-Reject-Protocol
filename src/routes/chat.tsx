@@ -1,5 +1,5 @@
 import { clientOnly } from "@solidjs/start";
-const Chat = clientOnly(() => import("~/components/Chat"));
+const Chat = clientOnly(() => import("~/components/Chat/Chat"));
 
 export default function ChatPage() {
   return (

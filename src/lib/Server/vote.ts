@@ -1,10 +1,10 @@
-import { CS_ComType, SC_ComType, serverSocket, SignalType } from "~/types/socket";
+import { CS_ComType, SC_ComType, serverSocket, SignalType, sServer } from "~/types/socket";
 import { User } from "./chat";
 import { createId } from "@paralleldrive/cuid2";
 
 const DEFAULT_TICKET_COUNT = 3;
 const DEFAULT_ROUND_INTERIM_LENGTH = 1000 * 10;
-const DEFAULT_ROUND_LENGTH = 1000 * 60 * 5;
+const DEFAULT_ROUND_LENGTH = (1000 * 60 * 1) / 4;
 
 export enum TicketColor {
   Red,
@@ -92,6 +92,7 @@ const userHasPermissionToCreateRoom = (userId: string) => true;
 const userHasPermissionToJoinRoom = (userId: string, roomId: string) => true;
 
 function startRound(
+  io: sServer,
   socket: serverSocket,
   roomId: string,
   rooms: Map<string, GameRoom>,
@@ -104,15 +105,17 @@ function startRound(
     setInterval(() => {
       if (Date.now() > startTime) {
         clearInterval(clocks.get(roomId));
-        socket
-          .to(roomId)
-          .emit(SignalType.Vote, [SC_GameEventType.RoundStart, createId(), [roomId, round]]);
+        io.to(roomId).emit(SignalType.Vote, [
+          SC_GameEventType.RoundStart,
+          createId(),
+          [roomId, round],
+        ]);
 
         clocks.set(
           roomId,
           setInterval(() => {
             if (Date.now() > endTime) {
-              endRound(socket, roomId, rooms, clocks, round);
+              endRound(io, socket, roomId, rooms, clocks, round);
             }
           }),
         );
@@ -122,6 +125,7 @@ function startRound(
 }
 
 function endRound(
+  io: sServer,
   socket: serverSocket,
   roomId: string,
   rooms: Map<string, GameRoom>,
@@ -145,11 +149,13 @@ function endRound(
 
   rounds.push(newRound);
 
-  startRound(socket, roomId, rooms, clocks, newRound);
+  startRound(io, socket, roomId, rooms, clocks, newRound);
 
-  socket
-    .to(roomId)
-    .emit(SignalType.Vote, [SC_GameEventType.RoundEnd, createId(), [roomId, round, newRound]]);
+  io.to(roomId).emit(SignalType.Vote, [
+    SC_GameEventType.RoundEnd,
+    createId(),
+    [roomId, round, newRound],
+  ]);
 }
 
 export default function vote() {
@@ -158,7 +164,7 @@ export default function vote() {
   const clocks = new Map<string, NodeJS.Timeout>();
 
   const handler =
-    (socket: serverSocket) =>
+    (socket: serverSocket, io: sServer) =>
     (...[type, request, callback]: VoteHandlerArgs) => {
       try {
         switch (type) {
@@ -281,10 +287,11 @@ export default function vote() {
 
               // Start game if all users are ready
               if (newPreStart[1].length === members.length) {
+                console.log(`All users are ready in room ${roomId}`);
                 const startTime = Date.now() + DEFAULT_ROUND_INTERIM_LENGTH;
                 const newRound: GameRound = [1, startTime, startTime + DEFAULT_ROUND_LENGTH];
 
-                startRound(socket, roomId, rooms, clocks, newRound);
+                startRound(io, socket, roomId, rooms, clocks, newRound);
                 const newRoom: GameRoom = [
                   roomId,
                   roomName,
@@ -302,9 +309,7 @@ export default function vote() {
                   [newRound],
                 ];
                 rooms.set(roomId, newRoom);
-                socket
-                  .to(roomId)
-                  .emit(SignalType.Vote, [SC_GameEventType.GameStart, comId, newRoom]);
+                io.to(roomId).emit(SignalType.Vote, [SC_GameEventType.GameStart, comId, newRoom]);
               }
               return;
             }
