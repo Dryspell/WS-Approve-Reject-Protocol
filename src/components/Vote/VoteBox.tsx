@@ -9,11 +9,13 @@ import { SocketContext } from "~/app";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import {
   GameRoom,
-  GameRoomPreStart,
+  RoundsReadyState,
   GameRound,
   SC_GameEventType,
   VoteActionType,
   VoteHandlerArgs,
+  calculateRoundResult,
+  TicketColor,
 } from "~/lib/Server/vote";
 import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { InferCallbackData } from "~/types/socket-utils";
@@ -31,7 +33,12 @@ import Game from "./Game";
 const DEFAULT_GAME_ROOM = { id: "game1", name: "Game Room 1" };
 
 export const voteHandler =
-  (rooms: Record<string, GameRoom>, setRooms: SetStoreFunction<Record<string, GameRoom>>) =>
+  (
+    rooms: Record<string, GameRoom>,
+    setRooms: SetStoreFunction<Record<string, GameRoom>>,
+    roomsReadyState: Record<string, RoundsReadyState>,
+    setRoomsReadyState: SetStoreFunction<Record<string, RoundsReadyState>>,
+  ) =>
   ([type, comId, data]:
     | [type: SC_GameEventType.UserJoinedRoom, comId: string, data: [roomId: string, user: User]]
     | [type: SC_GameEventType.RoomCreated, comId: string, data: GameRoom]
@@ -65,6 +72,9 @@ export const voteHandler =
           setRooms({
             [roomId]: [roomId, ...roomData],
           });
+          setRoomsReadyState({
+            [roomId]: [roomId, 1, []],
+          });
           break;
         }
 
@@ -79,8 +89,36 @@ export const voteHandler =
         }
 
         case SC_GameEventType.RoundEnd: {
-          console.warn("Not implemented", SC_GameEventType[type], comId, data);
-          // throw new Error("Not implemented");
+          const [roomId, previousRound, newRound] = data;
+          if (!newRound) {
+            console.error("Expected to receive new round data", data);
+            throw new Error("Expected to receive new round data");
+          }
+          const [previousTickets, newTickets] = previousRound[3];
+          const { colorSplit, majorityColor, minorityColor } =
+            calculateRoundResult(previousTickets);
+
+          console.log(
+            `Round ${previousRound[0]} ended: ${TicketColor[majorityColor]} eliminated`,
+            colorSplit,
+            `${previousTickets.length - newTickets.length} tickets eliminated`,
+          );
+
+          const room = rooms[roomId];
+          const [, roomName, members, tickets, offers, startTime, rounds] = room;
+
+          const newRounds = [...rounds, newRound];
+          let pRound = newRounds[newRounds.length - 2];
+          if (pRound) {
+            pRound = previousRound;
+          }
+          setRooms({
+            [roomId]: [roomId, roomName, members, tickets, offers, startTime, newRounds],
+          });
+          setRoomsReadyState({
+            [roomId]: [roomId, newRounds.length, []],
+          });
+          break;
         }
 
         default: {
@@ -101,7 +139,7 @@ const joinRoom = (
   roomName: string,
   user: { name: string; id: string },
   setRooms: SetStoreFunction<Record<string, GameRoom>>,
-  setRoomsPreStart: SetStoreFunction<Record<string, GameRoomPreStart>>,
+  setRoomsPreStart: SetStoreFunction<Record<string, RoundsReadyState>>,
 ) => {
   socket
     .timeout(DEFAULT_REQUEST_TIMEOUT)
@@ -155,9 +193,9 @@ const joinRoom = (
 export const userIsReady = (
   roomId: string,
   userId: string,
-  roomsPreStart: Record<string, GameRoomPreStart>,
+  roomsReadyState: Record<string, RoundsReadyState>,
 ) => {
-  return roomsPreStart[roomId]?.[1]?.find(readyUser => {
+  return roomsReadyState[roomId]?.[2]?.find(readyUser => {
     const truth = readyUser === userId;
     console.log(readyUser, userId, truth);
     return truth;
@@ -168,7 +206,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
   const socket = useContext(SocketContext);
 
   const [rooms, setRooms] = createStore<Record<string, GameRoom>>({});
-  const [roomsPreStart, setRoomsPreStart] = createStore<Record<string, GameRoomPreStart>>({});
+  const [roomsReadyState, setRoomsReadyState] = createStore<Record<string, RoundsReadyState>>({});
 
   const [currentRoom, setCurrentRoom] = createSignal(DEFAULT_GAME_ROOM.id);
   const [user, setUser] = createLocalStorageSignal("chat-user", {
@@ -178,10 +216,10 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
 
   createEffect(() => {
     console.log(rooms);
-    console.log(roomsPreStart);
+    console.log(roomsReadyState);
   });
 
-  socket.on(SignalType.Vote, voteHandler(rooms, setRooms));
+  socket.on(SignalType.Vote, voteHandler(rooms, setRooms, roomsReadyState, setRoomsReadyState));
 
   onMount(() => {
     joinRoom(
@@ -190,7 +228,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
       DEFAULT_GAME_ROOM.name,
       user(),
       setRooms,
-      setRoomsPreStart,
+      setRoomsReadyState,
     );
   });
 
@@ -226,7 +264,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
             onClick={() => {
               socket.emit(SignalType.Vote, VoteActionType.Dev_DeleteRooms, [createId()], () => {});
               setRooms({});
-              setRoomsPreStart({});
+              setRoomsReadyState({});
               window.location.reload();
             }}
           >
@@ -250,11 +288,17 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
                         roomId={roomId}
                         rooms={rooms}
                         user={user}
-                        roomsPreStart={roomsPreStart}
-                        setRoomsPreStart={setRoomsPreStart}
+                        roomsPreStart={roomsReadyState}
+                        setRoomsPreStart={setRoomsReadyState}
                       />
                     ) : (
-                      <Game room={rooms[roomId]} setRooms={setRooms} />
+                      <Game
+                        room={rooms[roomId]}
+                        setRooms={setRooms}
+                        user={user}
+                        roomsReadyState={roomsReadyState}
+                        setRoomsReadyState={setRoomsReadyState}
+                      />
                     )}
                   </div>
                 </ResizablePanel>

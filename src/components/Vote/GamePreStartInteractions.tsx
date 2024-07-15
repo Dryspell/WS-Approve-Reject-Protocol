@@ -2,7 +2,7 @@ import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
 import { Accessor } from "solid-js";
 import { SetStoreFunction } from "solid-js/store";
 import { createId } from "@paralleldrive/cuid2";
-import { GameRoom, GameRoomPreStart, VoteActionType, VoteHandlerArgs } from "~/lib/Server/vote";
+import { GameRoom, RoundsReadyState, VoteActionType, VoteHandlerArgs } from "~/lib/Server/vote";
 import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { InferCallbackData } from "~/types/socket-utils";
 import { showToast } from "../ui/toast";
@@ -16,8 +16,8 @@ const readyGameStart = (
   socket: clientSocket,
   roomId: string,
   user: { name: string; id: string },
-  roomsPreStart: Record<string, GameRoomPreStart>,
-  setRoomsPreStart: SetStoreFunction<Record<string, GameRoomPreStart>>,
+  roomsPreStart: Record<string, RoundsReadyState>,
+  setRoomsPreStart: SetStoreFunction<Record<string, RoundsReadyState>>,
 ) => {
   socket
     .timeout(DEFAULT_REQUEST_TIMEOUT)
@@ -62,13 +62,13 @@ const readyGameStart = (
             variant: "success",
             duration: DEFAULT_TOAST_DURATION,
           });
-          const [, readyUsers] = roomsPreStart[roomId];
+          const [, , readyUsers] = roomsPreStart[roomId];
           ready
             ? setRoomsPreStart({
-                [roomId]: [roomId, Array.from(new Set([...readyUsers, user.id]))],
+                [roomId]: [roomId, 0, Array.from(new Set([...readyUsers, user.id]))],
               })
             : setRoomsPreStart({
-                [roomId]: [roomId, readyUsers.filter(id => id !== user.id)],
+                [roomId]: [roomId, 0, readyUsers.filter(id => id !== user.id)],
               });
         }
       },
@@ -80,8 +80,8 @@ export default function GamePreStartInteractions(props: {
   roomId: string;
   rooms: Record<string, GameRoom>;
   user: Accessor<{ name: string; id: string }>;
-  roomsPreStart: Record<string, GameRoomPreStart>;
-  setRoomsPreStart: SetStoreFunction<Record<string, GameRoomPreStart>>;
+  roomsPreStart: Record<string, RoundsReadyState>;
+  setRoomsPreStart: SetStoreFunction<Record<string, RoundsReadyState>>;
 }) {
   const room = props.rooms[props.roomId];
   if (!room) return null;

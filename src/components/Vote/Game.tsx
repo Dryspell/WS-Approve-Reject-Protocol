@@ -1,6 +1,13 @@
-import { GameRoom, Ticket, TicketColor, VoteActionType, VoteHandlerArgs } from "~/lib/Server/vote";
+import {
+  GameRoom,
+  RoundsReadyState,
+  Ticket,
+  TicketColor,
+  VoteActionType,
+  VoteHandlerArgs,
+} from "~/lib/Server/vote";
 import { createPolled } from "@solid-primitives/timer";
-import { For, useContext } from "solid-js";
+import { Accessor, For, useContext } from "solid-js";
 import UserAvatarCard from "../Chat/UserAvatarCard";
 import { Badge } from "../ui/badge";
 import { SocketContext } from "~/app";
@@ -10,6 +17,8 @@ import { createId } from "@paralleldrive/cuid2";
 import { InferCallbackData } from "~/types/socket-utils";
 import { SetStoreFunction } from "solid-js/store";
 import { showToast } from "../ui/toast";
+import { Button } from "../ui/button";
+import { userIsReady } from "./VoteBox";
 
 function toggleVoteColor(
   ticketId: string,
@@ -61,9 +70,75 @@ function toggleVoteColor(
     );
 }
 
+const readyRoundEnd = (
+  socket: clientSocket,
+  roomId: string,
+  user: { name: string; id: string },
+  roomsPreStart: Record<string, RoundsReadyState>,
+  setRoomsPreStart: SetStoreFunction<Record<string, RoundsReadyState>>,
+) => {
+  socket
+    .timeout(DEFAULT_REQUEST_TIMEOUT)
+    .emit(
+      SignalType.Vote,
+      VoteActionType.ToggleReadyRoundEnd,
+      [createId(), [roomId, [user.id, user.name]]],
+      (
+        err: Error,
+        [returnType, comId, returnData]: InferCallbackData<
+          VoteHandlerArgs,
+          VoteActionType.ToggleReadyRoundEnd
+        >,
+      ) => {
+        if (err) {
+          showToast({
+            title: "Error",
+            description: err.message,
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          return;
+        }
+
+        if (returnType === SC_ComType.Reject) {
+          showToast({
+            title: "Error",
+            description: returnData[0],
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          return;
+        }
+
+        if (returnType === SC_ComType.Approve) {
+          const [ready] = returnData;
+          console.log("Ready?", ready);
+
+          showToast({
+            title: ready ? "Readied Up" : "Unreadied",
+            description: ready ? "You are ready to end the round!" : "There is still more to do.",
+            variant: "success",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          const [, roundNumber, readyUsers] = roomsPreStart[roomId];
+          ready
+            ? setRoomsPreStart({
+                [roomId]: [roomId, roundNumber, Array.from(new Set([...readyUsers, user.id]))],
+              })
+            : setRoomsPreStart({
+                [roomId]: [roomId, roundNumber, readyUsers.filter(id => id !== user.id)],
+              });
+        }
+      },
+    );
+};
+
 export default function Game(props: {
   room: GameRoom;
   setRooms: SetStoreFunction<Record<string, GameRoom>>;
+  user: Accessor<{ id: string; name: string }>;
+  roomsReadyState: Record<string, RoundsReadyState>;
+  setRoomsReadyState: SetStoreFunction<Record<string, RoundsReadyState>>;
 }) {
   const socket = useContext(SocketContext);
   const [roomId, roomName, members, tickets, offers, startTime, rounds] = props.room;
@@ -109,6 +184,29 @@ export default function Game(props: {
                     )}
                   </For>
                 </div>
+                {userIsReady(roomId, member[0], props.roomsReadyState) ? (
+                  <Badge class="bg-green-700">Ready</Badge>
+                ) : (
+                  <Badge class="bg-orange-600">Not Ready</Badge>
+                )}
+                <Button
+                  variant="outline"
+                  class="m-1.5 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium"
+                  onClick={() => {
+                    console.log("Ready Round End");
+                    readyRoundEnd(
+                      socket,
+                      roomId,
+                      props.user(),
+                      props.roomsReadyState,
+                      props.setRoomsReadyState,
+                    );
+                  }}
+                >
+                  {userIsReady(roomId, props.user().id, props.roomsReadyState)
+                    ? `Unready`
+                    : `Ready?`}
+                </Button>
               </UserAvatarCard>
             )}
           </For>

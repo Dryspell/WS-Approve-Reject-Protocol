@@ -22,7 +22,12 @@ export enum OfferType {
 }
 export type Offer = [offerId: string, offerOwner: User[0], offerType: OfferType, price: number];
 
-export type GameRound = [roundNumber: number, startTime: number, endTime: number];
+export type GameRound = [
+  roundNumber: number,
+  startTime: number,
+  endTime: number,
+  roundResult: [previousTickets: Ticket[], newTickets: Ticket[]],
+];
 
 export type GameRoom = [
   roomId: string,
@@ -34,11 +39,12 @@ export type GameRoom = [
   rounds: GameRound[],
 ];
 
-export type GameRoomPreStart = [roomId: string, readyUsers: User[0][]];
+export type RoundsReadyState = [roomId: string, round: number, readyUsers: User[0][]];
 
 export enum VoteActionType {
   CreateOrJoinRoom,
   ToggleReadyGameStart,
+  ToggleReadyRoundEnd,
   SetVoteColor,
   CreateOffer,
   AcceptOffer,
@@ -64,13 +70,22 @@ export type VoteHandlerArgs =
           | [
               returnType: SC_ComType.Approve,
               comId: string,
-              returnData: [GameRoom, GameRoomPreStart],
+              returnData: [GameRoom, RoundsReadyState],
             ]
           | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
       ) => void,
     ]
   | [
       type: VoteActionType.ToggleReadyGameStart,
+      request: [comId: string, data: [roomId: string, user: User]],
+      callback: (
+        returnData:
+          | [returnType: SC_ComType.Approve, comId: string, [ready: boolean]]
+          | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
+      ) => void,
+    ]
+  | [
+      type: VoteActionType.ToggleReadyRoundEnd,
       request: [comId: string, data: [roomId: string, user: User]],
       callback: (
         returnData:
@@ -124,6 +139,39 @@ function startRound(
   );
 }
 
+export const calculateRoundResult = (tickets: Ticket[]) => {
+  // Calculate
+  const colorSplit = tickets.reduce(
+    (acc, ticket) => {
+      const [ticketId, ticketOwner, ticketColor] = ticket;
+
+      if (ticketColor !== TicketColor.None) {
+        acc[ticketColor].push(ticket);
+      }
+      return acc;
+    },
+    { [TicketColor.Blue]: [], [TicketColor.Red]: [] } as Record<
+      TicketColor.Blue | TicketColor.Red,
+      Ticket[]
+    >,
+  );
+  const { majorityColor, minorityColor } = (() => {
+    const sort = Object.entries(colorSplit).sort((a, b) => b[1].length - a[1].length);
+    return { majorityColor: sort[0][0], minorityColor: sort[1][0] };
+  })();
+
+  const newTickets = tickets.filter(
+    ([ticketId, ticketOwner, ticketColor]) => ticketColor === minorityColor,
+  );
+
+  return {
+    colorSplit,
+    majorityColor,
+    minorityColor,
+    newTickets,
+  };
+};
+
 function endRound(
   io: sServer,
   socket: serverSocket,
@@ -136,7 +184,6 @@ function endRound(
   round[2] = Date.now();
   const [roundNumber, startTime, endTime] = round;
   const newRoundStart = Date.now() + 1000 * 10;
-  const newRound: GameRound = [roundNumber + 1, newRoundStart, newRoundStart + 1000 * 60 * 5];
 
   const existingRoom = rooms.get(roomId);
   if (!existingRoom) {
@@ -145,7 +192,14 @@ function endRound(
   }
   const [, roomName, members, tickets, offers, , rounds] = existingRoom;
 
-  // Calculate scores
+  const { newTickets } = calculateRoundResult(tickets);
+
+  const newRound: GameRound = [
+    roundNumber + 1,
+    newRoundStart,
+    newRoundStart + 1000 * 60 * 5,
+    [tickets, newTickets],
+  ];
 
   rounds.push(newRound);
 
@@ -160,7 +214,7 @@ function endRound(
 
 export default function vote() {
   const rooms = new Map<string, GameRoom>();
-  const roomsPreStart = new Map<string, GameRoomPreStart>();
+  const roomsReadyState = new Map<string, RoundsReadyState>();
   const clocks = new Map<string, NodeJS.Timeout>();
 
   const handler =
@@ -170,10 +224,10 @@ export default function vote() {
         switch (type) {
           case VoteActionType.Dev_DeleteRooms: {
             rooms.clear();
-            roomsPreStart.clear();
+            roomsReadyState.clear();
 
             console.log({ rooms });
-            console.log({ roomsPreStart });
+            console.log({ roomsPreStart: roomsReadyState });
             callback();
             return;
           }
@@ -196,8 +250,8 @@ export default function vote() {
                 newRoom,
               ]);
 
-              const roomPreStart: GameRoomPreStart = [roomId, []];
-              roomsPreStart.set(roomId, roomPreStart);
+              const roomPreStart: RoundsReadyState = [roomId, 0, []];
+              roomsReadyState.set(roomId, roomPreStart);
 
               callback([SC_ComType.Approve, comId, [newRoom, roomPreStart]]);
             } else if (!existingRoom && !userHasPermissionToCreateRoom(user[0])) {
@@ -232,7 +286,7 @@ export default function vote() {
                 existingRoom, //newRoom,
               ]);
 
-              const roomPreStart = roomsPreStart.get(roomId) ?? [roomId, []];
+              const roomPreStart = roomsReadyState.get(roomId) ?? [roomId, 0, []];
 
               callback([
                 SC_ComType.Approve,
@@ -266,30 +320,36 @@ export default function vote() {
               return;
             }
 
-            const roomPreStart = roomsPreStart.get(roomId);
+            const roomPreStart = roomsReadyState.get(roomId);
             if (!roomPreStart) {
               callback([SC_ComType.Reject, comId, ["Room is not in pre-start state"]]);
               return;
             }
 
-            const [roomIdPreStart, readyUsers] = roomPreStart;
+            const [roomIdPreStart, roundNumber, readyUsers] = roomPreStart;
             if (readyUsers.find(userId => userId === user[0])) {
-              roomsPreStart.set(roomId, [
+              roomsReadyState.set(roomId, [
                 roomIdPreStart,
+                roundNumber,
                 readyUsers.filter(userId => userId !== user[0]),
               ]);
               callback([SC_ComType.Approve, comId, [false]]);
               return;
             } else {
-              const newPreStart: GameRoomPreStart = [roomIdPreStart, [...readyUsers, user[0]]];
-              roomsPreStart.set(roomId, newPreStart);
+              const newPreStart: RoundsReadyState = [roomIdPreStart, 0, [...readyUsers, user[0]]];
+              roomsReadyState.set(roomId, newPreStart);
               callback([SC_ComType.Approve, comId, [true]]);
 
               // Start game if all users are ready
-              if (newPreStart[1].length === members.length) {
+              if (newPreStart[2].length === members.length) {
                 console.log(`All users are ready in room ${roomId}`);
                 const startTime = Date.now() + DEFAULT_ROUND_INTERIM_LENGTH;
-                const newRound: GameRound = [1, startTime, startTime + DEFAULT_ROUND_LENGTH];
+                const newRound: GameRound = [
+                  1,
+                  startTime,
+                  startTime + DEFAULT_ROUND_LENGTH,
+                  [tickets, []],
+                ];
 
                 startRound(io, socket, roomId, rooms, clocks, newRound);
                 const newRoom: GameRoom = [
@@ -310,6 +370,59 @@ export default function vote() {
                 ];
                 rooms.set(roomId, newRoom);
                 io.to(roomId).emit(SignalType.Vote, [SC_GameEventType.GameStart, comId, newRoom]);
+              }
+              return;
+            }
+          }
+
+          case VoteActionType.ToggleReadyRoundEnd: {
+            const [comId, [roomId, user]] = request;
+            if (!user) {
+              callback([SC_ComType.Reject, comId, ["User is not logged in"]]);
+              return;
+            }
+
+            const existingRoom = rooms.get(roomId);
+            if (!existingRoom) {
+              callback([SC_ComType.Reject, comId, ["Room does not exist"]]);
+              return;
+            }
+
+            const [, roomName, members, tickets, offers, startTime, rounds] = existingRoom;
+            if (!members.find(([userId]) => userId === user[0])) {
+              callback([SC_ComType.Reject, comId, ["User is not in room"]]);
+              return;
+            }
+
+            const roundReadyState = roomsReadyState.get(roomId);
+            if (!roundReadyState) {
+              callback([SC_ComType.Reject, comId, ["Room is not in pre-start state"]]);
+              return;
+            }
+
+            const [, roundNumber, readyUsers] = roundReadyState;
+            if (readyUsers.find(userId => userId === user[0])) {
+              roomsReadyState.set(roomId, [
+                roomId,
+                roundNumber,
+                readyUsers.filter(userId => userId !== user[0]),
+              ]);
+              callback([SC_ComType.Approve, comId, [false]]);
+              return;
+            } else {
+              const newRoundReadyState: RoundsReadyState = [
+                roomId,
+                roundNumber,
+                [...readyUsers, user[0]],
+              ];
+              roomsReadyState.set(roomId, newRoundReadyState);
+              callback([SC_ComType.Approve, comId, [true]]);
+
+              // End round if all users ready
+              if (newRoundReadyState[2].length === members.length) {
+                console.log(`All users are ready in room ${roomId}`);
+                const currentRound = rounds[rounds.length - 1];
+                endRound(io, socket, roomId, rooms, clocks, currentRound);
               }
               return;
             }
@@ -352,12 +465,12 @@ export default function vote() {
           }
 
           default: {
-            console.error(`Received unexpected signal: ${CS_ComType[type]}, ${request}`);
+            console.error(`Received unexpected signal: ${VoteActionType[type]}, ${request}`);
           }
         }
       } catch (e) {
         console.error(
-          `Failed to properly handle: ${CS_ComType[type]}, ${request}:`,
+          `Failed to properly handle: ${VoteActionType[type]}, ${request}:`,
           e instanceof Error ? e.message : e,
         );
       }
