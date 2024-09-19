@@ -69,10 +69,10 @@ interface InterServerEvents {
 }
 
 interface SocketData {
-  // user: {
-  //   id: string;
-  //   username: string;
-  // };
+  user: {
+    id: string;
+    username: string;
+  };
 }
 
 export type sServer = Server<

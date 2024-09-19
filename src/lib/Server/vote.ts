@@ -235,10 +235,13 @@ export default function vote() {
 
           case VoteActionType.CreateOrJoinRoom: {
             const [comId, [roomId, roomName, user]] = request;
+
             if (!user) {
               callback([SC_ComType.Reject, comId, ["User is not logged in"]]);
               return;
             }
+            socket.data.user.id = user[0];
+            socket.data.user.username = user[1];
 
             let existingRoom = rooms.get(roomId);
             if (!existingRoom && userHasPermissionToCreateRoom(user[0])) {
@@ -329,6 +332,15 @@ export default function vote() {
               return;
             }
 
+            if (socket.data.user.id !== user[0]) {
+              callback([
+                SC_ComType.Reject,
+                comId,
+                ["User attempted to toggle ready for a different user"],
+              ]);
+              return;
+            }
+
             const [roomIdPreStart, roundNumber, readyUsers] = roomPreStart;
             if (readyUsers.find(userId => userId === user[0])) {
               roomsReadyState.set(roomId, [
@@ -352,7 +364,7 @@ export default function vote() {
                 comId,
                 [roomId, user, true],
               ]);
-              
+
               // Start game if all users are ready
               if (newPreStart[2].length === members.length) {
                 console.log(`All users are ready in room ${roomId}`);

@@ -1,8 +1,10 @@
-import { ClientToServerEvents, serverSocket, SignalType } from "./socket";
+import { ClientToServerEvents, serverSocket, SignalType, sServer } from "./socket";
 
-export type InferHandler<T extends () => { handler: (socket: serverSocket) => void }> = ReturnType<
-  ReturnType<T>["handler"]
->;
+export type InferHandler<
+  T extends
+    | (() => { handler: (socket: serverSocket) => void })
+    | (() => { handler: (socket: serverSocket, io: sServer) => void }),
+> = ReturnType<ReturnType<T>["handler"]>;
 
 export type InferRequestType<T extends keyof ClientToServerEvents> = Parameters<
   ClientToServerEvents[T]
