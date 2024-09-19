@@ -54,6 +54,7 @@ export enum VoteActionType {
 export enum SC_GameEventType {
   RoomCreated,
   UserJoinedRoom,
+  UserToggleReadyGameStart,
   GameStart,
   GameEnd,
   RoundStart,
@@ -274,11 +275,20 @@ export default function vote() {
               //   startTime,
               //   rounds,
               // ];
-              // rooms.set(roomId, newRoom);
               members = Array.from(new Set([...members, user].map(user => user[0]))).map(userId => [
                 userId,
                 [...members, user].find(member => member[0] === userId)?.[1] ?? "Unknown User",
               ]);
+              const newRoom: GameRoom = [
+                roomId,
+                roomName,
+                members,
+                tickets,
+                offers,
+                startTime,
+                rounds,
+              ];
+              rooms.set(roomId, newRoom);
               socket.join(roomId);
               socket.broadcast.emit(SignalType.Vote, [
                 SC_GameEventType.UserJoinedRoom,
@@ -288,11 +298,7 @@ export default function vote() {
 
               const roomPreStart = roomsReadyState.get(roomId) ?? [roomId, 0, []];
 
-              callback([
-                SC_ComType.Approve,
-                comId,
-                [[roomId, roomName, members, tickets, offers, startTime, rounds], roomPreStart],
-              ]);
+              callback([SC_ComType.Approve, comId, [newRoom, roomPreStart]]);
             }
 
             break;
@@ -331,12 +337,22 @@ export default function vote() {
                 readyUsers.filter(userId => userId !== user[0]),
               ]);
               callback([SC_ComType.Approve, comId, [false]]);
+              socket.broadcast.emit(SignalType.Vote, [
+                SC_GameEventType.UserToggleReadyGameStart,
+                comId,
+                [roomId, user, false],
+              ]);
               return;
             } else {
               const newPreStart: RoundsReadyState = [roomIdPreStart, 0, [...readyUsers, user[0]]];
               roomsReadyState.set(roomId, newPreStart);
               callback([SC_ComType.Approve, comId, [true]]);
-
+              socket.broadcast.emit(SignalType.Vote, [
+                SC_GameEventType.UserToggleReadyGameStart,
+                comId,
+                [roomId, user, true],
+              ]);
+              
               // Start game if all users are ready
               if (newPreStart[2].length === members.length) {
                 console.log(`All users are ready in room ${roomId}`);

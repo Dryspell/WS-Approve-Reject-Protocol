@@ -42,6 +42,11 @@ export const voteHandler =
   ([type, comId, data]:
     | [type: SC_GameEventType.UserJoinedRoom, comId: string, data: [roomId: string, user: User]]
     | [type: SC_GameEventType.RoomCreated, comId: string, data: GameRoom]
+    | [
+        type: SC_GameEventType.UserToggleReadyGameStart,
+        comId: string,
+        data: [roomId: string, user: User, readyState: boolean],
+      ]
     | [type: SC_GameEventType.GameStart, comId: string, data: GameRoom]
     | [type: SC_GameEventType.GameEnd, comId: string, data: [roomId: string, endTime: number]]
     | [type: SC_GameEventType.RoundStart, comId: string, data: [roomId: string, round: GameRound]]
@@ -78,6 +83,20 @@ export const voteHandler =
                 rounds,
               ],
             });
+          break;
+        }
+
+        case SC_GameEventType.UserToggleReadyGameStart: {
+          const [roomId, user, readyState] = data;
+          const room = rooms[roomId];
+          const [, , readyUsers] = roomsReadyState[roomId];
+          readyState
+            ? setRoomsReadyState({
+                [roomId]: [roomId, 0, Array.from(new Set([...readyUsers, user[0]]))],
+              })
+            : setRoomsReadyState({
+                [roomId]: [roomId, 0, readyUsers.filter(id => id !== user[0])],
+              });
           break;
         }
 
