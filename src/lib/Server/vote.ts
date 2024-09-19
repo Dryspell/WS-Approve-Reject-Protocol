@@ -281,9 +281,9 @@ export default function vote() {
               ]);
               socket.join(roomId);
               socket.broadcast.emit(SignalType.Vote, [
-                SC_GameEventType.RoomCreated,
+                SC_GameEventType.UserJoinedRoom,
                 comId,
-                existingRoom, //newRoom,
+                [roomId, user],
               ]);
 
               const roomPreStart = roomsReadyState.get(roomId) ?? [roomId, 0, []];
@@ -291,10 +291,7 @@ export default function vote() {
               callback([
                 SC_ComType.Approve,
                 comId,
-                [
-                  existingRoom, //newRoom,
-                  roomPreStart,
-                ],
+                [[roomId, roomName, members, tickets, offers, startTime, rounds], roomPreStart],
               ]);
             }
 

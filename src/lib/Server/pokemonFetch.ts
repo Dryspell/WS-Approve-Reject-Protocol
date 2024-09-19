@@ -3,8 +3,8 @@ import Axios from "axios";
 import { setupCache } from "axios-cache-interceptor";
 import { PokemonApiResponse } from "~/hooks/useDataFetching";
 
-const instance = Axios.create();
-const axios = setupCache(instance);
+const axiosInstance = Axios.create();
+const axios = setupCache(axiosInstance);
 
 export type PokemonFetchHandlerArgs = [
   type: CS_ComType.Get,

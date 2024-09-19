@@ -63,7 +63,22 @@ export const voteHandler =
         }
 
         case SC_GameEventType.UserJoinedRoom: {
-          throw new Error("Not implemented");
+          const [roomId, newlyJoinedUser] = data;
+          const room = rooms[roomId];
+          const [, roomName, members, tickets, offers, startTime, rounds] = room;
+          if (!members.some(([userId]) => userId === newlyJoinedUser[0]))
+            setRooms({
+              [roomId]: [
+                roomId,
+                roomName,
+                [...members, newlyJoinedUser],
+                tickets,
+                offers,
+                startTime,
+                rounds,
+              ],
+            });
+          break;
         }
 
         case SC_GameEventType.GameStart: {
@@ -183,6 +198,7 @@ const joinRoom = (
             duration: DEFAULT_TOAST_DURATION,
           });
           const [gameRoom, gameRoomPreStart] = returnData;
+          console.log(returnData);
           setRooms({ [roomId]: gameRoom });
           setRoomsPreStart({ [roomId]: gameRoomPreStart });
         }
@@ -214,10 +230,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
     id: createId(),
   });
 
-  createEffect(() => {
-    console.log(rooms);
-    console.log(roomsReadyState);
-  });
+  console.log(user());
 
   socket.on(SignalType.Vote, voteHandler(rooms, setRooms, roomsReadyState, setRoomsReadyState));
 
