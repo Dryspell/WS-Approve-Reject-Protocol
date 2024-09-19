@@ -7,6 +7,7 @@ import "@fontsource/inter";
 import { Toaster } from "./components/ui/toast";
 import { socket } from "./lib/Client/socket";
 import { clientSocket } from "./types/socket";
+import { MetaProvider, Title } from "@solidjs/meta";
 
 export const SocketContext = createContext(socket as clientSocket);
 
@@ -16,18 +17,19 @@ export default function App() {
 	});
 
 	return (
-		<Router
-			root={(props) => (
-				<>
-					<SocketContext.Provider value={socket}>
-						<Nav />
-						<Suspense>{props.children}</Suspense>
-					</SocketContext.Provider>
-				</>
-			)}
-		>
-			<FileRoutes />
-			<Toaster />
-		</Router>
-	);
+    <Router
+      root={props => (
+        <MetaProvider>
+          <Title>Solid Socket</Title>
+          <SocketContext.Provider value={socket}>
+            <Nav />
+            <Suspense>{props.children}</Suspense>
+          </SocketContext.Provider>
+        </MetaProvider>
+      )}
+    >
+      <FileRoutes />
+      <Toaster />
+    </Router>
+  );
 }
