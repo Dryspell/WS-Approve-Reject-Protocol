@@ -1,5 +1,5 @@
 {
-  "name": "example-with-tailwindcss",
+  "name": "Socket Signals",
   "type": "module",
   "scripts": {
     "dev": "vinxi dev",
@@ -20,9 +20,11 @@
     "autoprefixer": "^10.4.20",
     "axios": "^1.7.7",
     "axios-cache-interceptor": "^1.6.0",
+    "better-sqlite3": "^11.3.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "4.1.0",
+    "drizzle-orm": "^0.34.1",
     "embla-carousel-solid": "^8.3.0",
     "postcss": "^8.4.47",
     "socket.io": "^4.7.5",
@@ -37,7 +39,9 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
     "daisyui": "^4.12.10",
+    "drizzle-kit": "^0.25.0",
     "prettier": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.6.6"
   }
