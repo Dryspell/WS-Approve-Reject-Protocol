@@ -2,7 +2,7 @@ import { Show, splitProps, ValidComponent } from "solid-js"
 
 import ResizablePrimitive, { DynamicProps, HandleProps, RootProps } from "@corvu/resizable"
 
-import { cn } from "~/lib/utils"
+import { cn } from "~/lib/ui_utils"
 
 type ResizableProps = RootProps & { class?: string }
 
