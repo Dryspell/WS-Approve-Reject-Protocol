@@ -3,6 +3,10 @@ const distance2 = (a: { x: number; y: number }, b: { x: number; y: number }) => 
 };
 
 const computeCentroid = <Tdata extends { x: number; y: number }>(points: Tdata[]) => {
+  if (!points.length) {
+    throw new Error("No points to compute centroid");
+  }
+
   return {
     x: points.reduce((acc, point) => acc + point.x, 0) / points.length,
     y: points.reduce((acc, point) => acc + point.y, 0) / points.length,
@@ -23,7 +27,7 @@ const chooseCentroids = <Tdata extends { x: number; y: number }>(k: number, data
         };
       })
       .sort((a, b) => b.distance - a.distance)
-      .slice(0, k - i);
+      .slice(0, k - i - 1);
 
     if (!distances.length) {
       break;
@@ -51,18 +55,26 @@ export const kmeans = <Tdata extends { x: number; y: number }>(k: number, data: 
     data.forEach(point => {
       const distances = centroids.map(centroid => distance2(point, centroid));
       const closest = distances.indexOf(Math.min(...distances));
-      clusters[closest].push(point);
+
+      try {
+        clusters[closest].push(point);
+      } catch {
+        console.log({ closest, distances, centroids, clusters });
+      }
     });
 
-    const newCentroids = clusters.map(cluster => computeCentroid(cluster));
+    const newCentroids = clusters
+      .filter(cluster => cluster.length)
+      .map(cluster => computeCentroid(cluster));
 
     if (newCentroids.every((centroid, i) => distance2(centroid, centroids[i]) < 1)) {
       converged = true;
+      // console.log("Converged!");
     }
 
     centroids = newCentroids;
     iterations++;
   }
 
-  return { clusters, centroids };
+  return { clusters: clusters.filter(cluster => cluster.length), centroids };
 };

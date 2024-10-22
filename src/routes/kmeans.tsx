@@ -54,9 +54,18 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
 
   console.log(dataPoints);
 
-  const { clusters, centroids } = kmeans(3, dataPoints);
+  const k = 8;
+  const { clusters, centroids } = kmeans(k, dataPoints);
 
-  console.log(clusters.reduce((acc, cluster) => acc + cluster.length, 0)); // Should be 100
+  console.log(
+    `Points in Clusters: ${clusters.reduce((acc, cluster) => acc + cluster.length, 0)}, Clusters generated: ${clusters.length}/${k} `,
+  ); // Should be 100
+
+  if (clusters.length !== k) {
+    console.log("Clusters generated are not equal to k");
+    console.log({ clusters, centroids });
+  }
+
   const randomColors = Array.from(
     { length: clusters.length },
     () => `#${Math.floor(Math.random() * 16777215).toString(16)}`,
@@ -98,7 +107,7 @@ export default function Game() {
   return (
     <main class="relative mx-auto p-4 text-gray-700">
       <div class="relative" style={{ width: `${CANVAS_WIDTH}px`, height: `${CANVAS_HEIGHT}px` }}>
-        <Button
+        {/* <Button
           style={{
             position: "absolute",
             top: "1%", // Align to the top
@@ -115,7 +124,7 @@ export default function Game() {
           }}
         >
           Tick
-        </Button>
+        </Button> */}
 
         <canvas
           ref={setGameCanvas}
