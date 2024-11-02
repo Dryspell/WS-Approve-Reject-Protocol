@@ -25,6 +25,7 @@
     "date-fns": "4.1.0",
     "embla-carousel-solid": "^8.3.0",
     "postcss": "^8.4.47",
+    "simplex-noise": "^4.0.3",
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.7.5",
     "solid-js": "^1.8.22",
@@ -37,6 +38,7 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@flydotio/dockerfile": "^0.5.9",
     "daisyui": "^4.12.10",
     "prettier": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.6.6"

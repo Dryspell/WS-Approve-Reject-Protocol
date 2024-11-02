@@ -1,39 +1,8 @@
 import { createSignal, onMount } from "solid-js";
 import { Button } from "~/components/ui/button";
+import { circle, rect } from "~/lib/canvas/shapes";
+import { randomColors } from "~/lib/canvas/utils";
 import { kmeans } from "~/lib/spatial-utils";
-
-const createRect = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  color: CanvasRenderingContext2D["fillStyle"] = "red",
-) => {
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, width, height);
-};
-
-const createCircle = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  radius: number,
-  strokeStyle: CanvasRenderingContext2D["strokeStyle"] = "black",
-  lineWidth: number = 1,
-  fillStyle?: CanvasRenderingContext2D["fillStyle"],
-) => {
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, 2 * Math.PI);
-  if (fillStyle) {
-    ctx.fillStyle = fillStyle;
-    ctx.fill();
-  }
-
-  ctx.lineWidth = lineWidth;
-  ctx.strokeStyle = strokeStyle;
-  ctx.stroke();
-};
 
 const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
   if (!gameCanvas) {
@@ -47,7 +16,7 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
   }
   const canvasSize = [gameCanvas.width, gameCanvas.height] as [width: number, height: number];
 
-  const dataPoints = Array.from({ length: 100 }, () => ({
+  const dataPoints = Array.from({ length: 1000 }, () => ({
     x: Math.floor(Math.random() * canvasSize[0]),
     y: Math.floor(Math.random() * canvasSize[1]),
   }));
@@ -66,10 +35,7 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
     console.log({ clusters, centroids });
   }
 
-  const randomColors = Array.from(
-    { length: clusters.length },
-    () => `#${Math.floor(Math.random() * 16777215).toString(16)}`,
-  );
+  const colors = randomColors(clusters.length);
 
   const gameLoop = () => {
     ctx.clearRect(0, 0, ...canvasSize);
@@ -78,12 +44,20 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
     //   createCircle(ctx, x, y, 5);
     // });
 
-    randomColors.forEach((color, i) => {
+    colors.forEach((color, i) => {
       clusters[i].forEach(({ x, y }) => {
-        createCircle(ctx, x, y, 5, "black", 1, color);
+        circle(ctx, x, y, 5, { fillStyle: color });
       });
 
-      createRect(ctx, centroids[i].x, centroids[i].y, 10, 10, color);
+      const rectDims = { width: 20, height: 20 };
+      rect(
+        ctx,
+        centroids[i].x - rectDims.width / 2,
+        centroids[i].y - rectDims.height / 2,
+        rectDims.width,
+        rectDims.height,
+        { fillStyle: color },
+      );
     });
 
     // requestAnimationFrame(gameLoop);
@@ -97,12 +71,13 @@ const CANVAS_HEIGHT = 600;
 
 export default function Game() {
   const [gameCanvas, setGameCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);
-  const [chatBoxRef, setChatBoxRef] = createSignal<HTMLDivElement | undefined>(undefined);
 
   onMount(() => {
     gameCanvas() && initializeGame(gameCanvas());
     // console.log(gameObjects.players);
   });
+
+  console.log([0, 1, 2].slice(1));
 
   return (
     <main class="relative mx-auto p-4 text-gray-700">
@@ -139,25 +114,6 @@ export default function Game() {
             border: "1px solid black",
           }}
         />
-      </div>
-      <div
-        ref={setChatBoxRef}
-        style={{
-          "max-height": "200px",
-          "overflow-y": "scroll",
-          "border-top": "1px solid black",
-          "border-bottom": "1px solid black",
-          "margin-top": "1rem",
-        }}
-      >
-        {/* <For each={gameChat}>
-          {message => (
-            <div class="my-2 rounded-lg bg-gray-200 p-2">
-              <span class="text-sm font-semibold">{`${message.sender}: `}</span>
-              <span class="text-sm">{message.message}</span>
-            </div>
-          )}
-        </For> */}
       </div>
     </main>
   );
