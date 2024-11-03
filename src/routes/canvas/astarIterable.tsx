@@ -1,6 +1,6 @@
 import { createSignal, onMount } from "solid-js";
 import { Button } from "~/components/ui/button";
-import { aStar, aStarIterable } from "~/lib/canvas/astar";
+import { aStar, aStarIterable } from "~/lib/canvas/pathfinding/astar";
 import { applyTerrain, averageGrid, renderGrid, staticGrid } from "~/lib/canvas/grids";
 import { perlinGrid } from "~/lib/canvas/perlin";
 import { circle, line, text } from "~/lib/canvas/shapes";
@@ -120,8 +120,8 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
       drawUnit(
         ctx,
         {
-          x: node.position.x,
-          y: node.position.y,
+          x: node.x,
+          y: node.y,
           fillStyle: "green",
           lineWidth: 1,
           strokeStyle: "black",
@@ -131,8 +131,8 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
       );
       text(
         ctx,
-        (node.position.x + 0.5) * cellWidth,
-        (node.position.y + 0.5) * cellHeight,
+        (node.x + 0.5) * cellWidth,
+        (node.y + 0.5) * cellHeight,
         `${node.fCost.toFixed(2)}`,
         {
           fillStyle: "orange",
@@ -145,8 +145,8 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
       drawUnit(
         ctx,
         {
-          x: node.position.x,
-          y: node.position.y,
+          x: node.x,
+          y: node.y,
           fillStyle: "yellow",
           lineWidth: 1,
           strokeStyle: "black",
@@ -163,10 +163,10 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
         path[i + 1] &&
           line(
             ctx,
-            (path[i].position.x + 0.5) * cellWidth,
-            (path[i].position.y + 0.5) * cellHeight,
-            (path[i + 1].position.x + 0.5) * cellWidth,
-            (path[i + 1].position.y + 0.5) * cellHeight,
+            (path[i].x + 0.5) * cellWidth,
+            (path[i].y + 0.5) * cellHeight,
+            (path[i + 1].x + 0.5) * cellWidth,
+            (path[i + 1].y + 0.5) * cellHeight,
             {
               strokeStyle: "magenta",
               lineWidth: 1,

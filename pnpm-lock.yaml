@@ -71,6 +71,9 @@ importers:
       socket.io-client:
         specifier: ^4.7.5
         version: 4.7.5
+      solid-icons:
+        specifier: ^1.1.0
+        version: 1.1.0(solid-js@1.8.22)
       solid-js:
         specifier: ^1.8.22
         version: 1.8.22
@@ -2618,6 +2621,11 @@ packages:
   socket.io@4.7.5:
     resolution: {integrity: sha512-DmeAkF6cwM9jSfmp6Dr/5/mfMwb5Z5qRrSXLpo3Fq5SqyU8CMF15jIN4ZhfSwu35ksM1qmHZDQ/DK5XTccSTvA==}
     engines: {node: '>=10.2.0'}
+
+  solid-icons@1.1.0:
+    resolution: {integrity: sha512-IesTfr/F1ElVwH2E1110s2RPXH4pujKfSs+koT8rwuTAdleO5s26lNSpqJV7D1+QHooJj18mcOiz2PIKs0ic+A==}
+    peerDependencies:
+      solid-js: '*'
 
   solid-js@1.8.22:
     resolution: {integrity: sha512-VBzN5j+9Y4rqIKEnK301aBk+S7fvFSTs9ljg+YEdFxjNjH0hkjXPiQRcws9tE5fUzMznSS6KToL5hwMfHDgpLA==}
@@ -5595,6 +5603,10 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+
+  solid-icons@1.1.0(solid-js@1.8.22):
+    dependencies:
+      solid-js: 1.8.22
 
   solid-js@1.8.22:
     dependencies:

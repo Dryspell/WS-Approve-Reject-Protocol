@@ -1,6 +1,6 @@
 import { createSignal, onMount } from "solid-js";
 import { Button } from "~/components/ui/button";
-import { aStar, aStarIterable } from "~/lib/canvas/pathfinding/astar";
+import { aStar, Point } from "~/lib/canvas/pathfinding/astar";
 import { applyTerrain, averageGrid, renderGrid, staticGrid } from "~/lib/canvas/grids";
 import { perlinGrid } from "~/lib/canvas/perlin";
 import { circle, line, text } from "~/lib/canvas/shapes";
@@ -10,7 +10,7 @@ import {
   RiMediaRewindFill,
   RiMediaSpeedFill,
 } from "solid-icons/ri";
-import { perf } from "~/lib/perf";
+import { findPathToClosestTarget } from "~/lib/canvas/pathfinding/utils";
 
 function getMousePosition(
   canvas: HTMLCanvasElement,
@@ -24,11 +24,13 @@ function getMousePosition(
 }
 
 type Unit = {
+  type: "minion" | "enemy";
   x: number;
   y: number;
   fillStyle: CanvasRenderingContext2D["fillStyle"];
   lineWidth: number;
   strokeStyle: CanvasRenderingContext2D["strokeStyle"];
+  movementData?: ReturnType<typeof findPathToClosestTarget>;
 };
 
 const drawUnit = (
@@ -66,10 +68,6 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
   const cellWidth = 25;
   const cellHeight = 25;
 
-  const sg = staticGrid(canvasWidth, canvasHeight, cellWidth, cellHeight);
-  const pg = perlinGrid(sg);
-  const terrain = applyTerrain(averageGrid(pg));
-
   gameCanvas.addEventListener("mousemove", event => {
     getMousePosition(gameCanvas, event, (x, y) => {
       console.log(
@@ -78,76 +76,169 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
     });
   });
 
-  const minion: Unit = {
-    x: Math.floor(Math.random() * sg.length),
-    y: Math.floor(Math.random() * sg[0].length),
-    fillStyle: "cyan",
-    lineWidth: 1,
-    strokeStyle: "black",
-  };
+  const sg = staticGrid(canvasWidth, canvasHeight, cellWidth, cellHeight);
+  const pg = perlinGrid(sg);
+  const terrain = applyTerrain(averageGrid(pg));
 
-  const generateTarget = () => ({
-    x: Math.floor(Math.random() * sg.length),
-    y: Math.floor(Math.random() * sg[0].length),
-    fillStyle: "red",
-    lineWidth: 1,
-    strokeStyle: "blue",
-  });
+  const walkableTerrain = terrain.map(row => row.filter(cell => cell.movementCost !== 255)).flat();
 
-  let target: Unit = generateTarget();
+  const [minionCount, enemyCount] = [1, 10];
+  const [minions, targets] = [[], []] as [Unit[], Unit[]];
 
-  console.log({ minion, target });
+  for (let i = 0; i < minionCount; i++) {
+    const terrainIndex = Math.floor(Math.random() * walkableTerrain.length);
+    const { x, y } = walkableTerrain[terrainIndex];
+    walkableTerrain.splice(terrainIndex, 1);
 
-  let path = perf(() => aStar(terrain, { x: minion.x, y: minion.y }, { x: target.x, y: target.y }));
+    minions.push({
+      type: "minion",
+      x,
+      y,
+      fillStyle: "cyan",
+      lineWidth: 1,
+      strokeStyle: "black",
+    });
+  }
 
-  const gameLoop = () => {
+  for (let i = 0; i < enemyCount; i++) {
+    const terrainIndex = Math.floor(Math.random() * walkableTerrain.length);
+    const { x, y } = walkableTerrain[terrainIndex];
+    walkableTerrain.splice(terrainIndex, 1);
+
+    targets.push({
+      type: "enemy",
+      x,
+      y,
+      fillStyle: "red",
+      lineWidth: 1,
+      strokeStyle: "blue",
+    });
+  }
+
+  for (let i = 0; i < minions.length; i++) {
+    minions[i] = { ...minions[i], ...findPathToClosestTarget(minions[i], targets, terrain) };
+  }
+  for (let i = 0; i < targets.length; i++) {
+    targets[i] = { ...targets[i], ...findPathToClosestTarget(targets[i], minions, terrain) };
+  }
+
+  const renderGame = () => {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
     renderGrid(ctx, terrain, canvasWidth, canvasHeight, cellWidth, cellHeight);
 
-    drawUnit(ctx, minion, cellWidth, cellHeight);
-    drawUnit(ctx, target, cellWidth, cellHeight);
-
-    if (path) {
-      for (let i = 0; i < path.length; i++) {
-        path[i + 1] &&
-          line(
-            ctx,
-            (path[i].x + 0.5) * cellWidth,
-            (path[i].y + 0.5) * cellHeight,
-            (path[i + 1].x + 0.5) * cellWidth,
-            (path[i + 1].y + 0.5) * cellHeight,
-            {
-              strokeStyle: "magenta",
-              lineWidth: 1,
-            },
-          );
+    for (const unit of [...minions, ...targets]) {
+      drawUnit(ctx, unit, cellWidth, cellHeight);
+      if (unit.movementData?.path) {
+        for (let i = 0; i < unit.movementData.path.length; i++) {
+          unit.movementData.path[i + 1] &&
+            line(
+              ctx,
+              (unit.movementData.path[i].x + 0.5) * cellWidth,
+              (unit.movementData.path[i].y + 0.5) * cellHeight,
+              (unit.movementData.path[i + 1].x + 0.5) * cellWidth,
+              (unit.movementData.path[i + 1].y + 0.5) * cellHeight,
+              {
+                strokeStyle: "green",
+                lineWidth: 1,
+              },
+            );
+        }
       }
     }
+
     // requestAnimationFrame(gameLoop);
   };
 
+  renderGame();
+  console.log("Game initialized");
+
   const tick = () => {
     console.log("Ticked");
-    path?.shift();
-    minion.x = path?.[0].x ?? minion.x;
-    minion.y = path?.[0].y ?? minion.y;
-
-    if (minion.x === target.x && minion.y === target.y) {
-      target = generateTarget();
-      path = perf(() => aStar(terrain, { x: minion.x, y: minion.y }, { x: target.x, y: target.y }));
+    for (let unit of minions) {
+      unit = handleUnitMovement(unit, targets, minions, terrain);
+    }
+    for (let unit of targets) {
+      unit = handleUnitMovement(unit, targets, minions, terrain);
     }
 
-    gameLoop();
+    renderGame();
   };
 
-  gameLoop();
-  console.log("Game initialized");
   return tick;
 };
 
 const CANVAS_WIDTH = 1000;
 const CANVAS_HEIGHT = 1000;
+
+function handleUnitMovement(
+  unit: Unit,
+  targets: Unit[],
+  minions: Unit[],
+  terrain: ReturnType<typeof applyTerrain>,
+) {
+  // Handle no targets
+  if (!targets.length) {
+    unit.movementData = undefined;
+
+    return unit;
+  }
+
+  // Handle no path or target
+  if (!unit.movementData?.path || !unit.movementData?.target) {
+    unit.movementData = findPathToClosestTarget(
+      unit,
+      unit.type === "minion" ? targets : minions,
+      terrain,
+    );
+  }
+
+  if (!unit.movementData.path?.length) {
+    return unit;
+  }
+
+  // Move unit
+  unit.movementData.path?.shift();
+  unit.x = unit.movementData.path?.[0].x ?? unit.x;
+  unit.y = unit.movementData.path?.[0].y ?? unit.y;
+
+  // Handle reaching target
+  if (
+    unit.movementData?.target &&
+    unit.x === unit.movementData?.target.x &&
+    unit.y === unit.movementData?.target.y
+  ) {
+    targets.splice(
+      targets.findIndex(
+        t => t.x === unit.movementData?.target!.x && t.y === unit.movementData?.target!.y,
+      ),
+      1,
+    );
+    minions.forEach(minion => {
+      if (
+        minion.movementData &&
+        unit.movementData &&
+        minion.movementData.target?.x === unit.movementData.target!.x &&
+        minion.movementData.target?.y === unit.movementData.target!.y
+      ) {
+        minion.movementData = undefined;
+      }
+    });
+
+    unit.movementData = findPathToClosestTarget(
+      unit,
+      unit.type === "minion" ? targets : minions,
+      terrain,
+    );
+  }
+
+  // Update with new path to target
+  else if (unit.movementData?.target) {
+    unit.movementData.path = aStar(terrain, unit, unit.movementData.target);
+  }
+
+  return unit;
+}
 
 export default function Game() {
   const [gameCanvas, setGameCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);

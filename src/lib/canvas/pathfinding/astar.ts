@@ -1,12 +1,11 @@
-import { applyTerrain } from "./grids";
+import { applyTerrain } from "../grids";
 
-type Point = {
+export type Point = {
   x: number;
   y: number;
 };
 
-type Node = {
-  position: Point;
+type Node = Point & {
   gCost: number; // Cost from start to this node
   hCost: number; // Heuristic cost from this node to the target
   fCost: number; // gCost + hCost
@@ -14,7 +13,7 @@ type Node = {
 };
 
 // Utility functions for the A* algorithm
-const heuristic = (a: Point, b: Point, minMovementCost = 1) => {
+export const octileHeuristic = (a: Point, b: Point, minMovementCost = 1) => {
   const dx = Math.abs(a.x - b.x);
   const dy = Math.abs(a.y - b.y);
   const D = minMovementCost; // Cost for orthogonal moves
@@ -28,20 +27,20 @@ const isInBounds = (point: Point, cols: number, rows: number) =>
 const getNeighbors = (node: Node, cols: number, rows: number): Node[] => {
   // Include diagonal directions
   const neighbors: Point[] = [
-    { x: node.position.x + 1, y: node.position.y }, // Right
-    { x: node.position.x - 1, y: node.position.y }, // Left
-    { x: node.position.x, y: node.position.y + 1 }, // Down
-    { x: node.position.x, y: node.position.y - 1 }, // Up
-    { x: node.position.x + 1, y: node.position.y + 1 }, // Down-Right
-    { x: node.position.x - 1, y: node.position.y + 1 }, // Down-Left
-    { x: node.position.x + 1, y: node.position.y - 1 }, // Up-Right
-    { x: node.position.x - 1, y: node.position.y - 1 }, // Up-Left
+    { x: node.x + 1, y: node.y }, // Right
+    { x: node.x - 1, y: node.y }, // Left
+    { x: node.x, y: node.y + 1 }, // Down
+    { x: node.x, y: node.y - 1 }, // Up
+    { x: node.x + 1, y: node.y + 1 }, // Down-Right
+    { x: node.x - 1, y: node.y + 1 }, // Down-Left
+    { x: node.x + 1, y: node.y - 1 }, // Up-Right
+    { x: node.x - 1, y: node.y - 1 }, // Up-Left
   ];
 
   return neighbors
     .filter(n => isInBounds(n, cols, rows))
     .map(position => ({
-      position,
+      ...position,
       gCost: 0,
       hCost: 0,
       fCost: 0,
@@ -54,10 +53,10 @@ export function aStar(
   end: Point,
   openSet: Node[] = [
     {
-      position: start,
+      ...start,
       gCost: 0,
-      hCost: heuristic(start, end),
-      fCost: heuristic(start, end),
+      hCost: octileHeuristic(start, end),
+      fCost: octileHeuristic(start, end),
     },
   ],
   closedSet: Set<string> = new Set(),
@@ -74,8 +73,8 @@ export function aStar(
     const current = openSet.shift()!;
 
     // Check if we reached the end
-    if (current.position.x === end.x && current.position.y === end.y) {
-      const path: Node[] = [];
+    if (current.x === end.x && current.y === end.y) {
+      const path: Point[] = [];
       let node: Node | undefined = current;
       while (node) {
         path.push(node);
@@ -84,25 +83,25 @@ export function aStar(
       return path.reverse();
     }
 
-    closedSet.add(key(current.position));
+    closedSet.add(key(current));
 
     for (const neighbor of getNeighbors(current, cols, rows)) {
-      if (closedSet.has(key(neighbor.position))) continue;
+      if (closedSet.has(key(neighbor))) continue;
 
-      const movementCost = terrain[neighbor.position.x][neighbor.position.y].movementCost ?? 1;
+      const movementCost = terrain[neighbor.x][neighbor.y].movementCost ?? 1;
 
       const isDiagonal =
-        current.position.x !== neighbor.position.x && current.position.y !== neighbor.position.y;
+        current.x !== neighbor.x && current.y !== neighbor.y;
       const diagonalCost = isDiagonal ? 1.414 : 1; // Approximate cost for diagonal movement
       const gCost = current.gCost + movementCost * diagonalCost;
 
       const existingNode = openSet.find(
-        node => node.position.x === neighbor.position.x && node.position.y === neighbor.position.y,
+        node => node.x === neighbor.x && node.y === neighbor.y,
       );
 
       if (!existingNode || gCost < existingNode.gCost) {
         neighbor.gCost = gCost;
-        neighbor.hCost = heuristic(neighbor.position, end);
+        neighbor.hCost = octileHeuristic(neighbor, end);
         neighbor.fCost = neighbor.gCost + neighbor.hCost;
         neighbor.parent = current;
 
@@ -113,7 +112,7 @@ export function aStar(
     }
   }
 
-  return null; // No path found
+  return undefined; // No path found
 }
 
 export function aStarIterable(
@@ -122,10 +121,10 @@ export function aStarIterable(
   end: Point,
   openSet: Node[] = [
     {
-      position: start,
+      ...start,
       gCost: 0,
-      hCost: heuristic(start, end),
-      fCost: heuristic(start, end),
+      hCost: octileHeuristic(start, end),
+      fCost: octileHeuristic(start, end),
     },
   ],
   closedSet: Set<string> = new Set(),
@@ -184,7 +183,7 @@ export function aStarIterable(
   }
 
   // Check if we reached the end
-  if (current.position.x === end.x && current.position.y === end.y) {
+  if (current.x === end.x && current.y === end.y) {
     return {
       terrain,
       start,
@@ -199,11 +198,11 @@ export function aStarIterable(
     };
   }
 
-  closedSet.add(key(current.position));
+  closedSet.add(key(current));
 
   if (!unProcessedNeighbors.length) {
     unProcessedNeighbors = getNeighbors(current, cols, rows).filter(
-      neighbor => !closedSet.has(key(neighbor.position)),
+      neighbor => !closedSet.has(key(neighbor)),
     );
     // return {
     //   terrain,
@@ -236,16 +235,16 @@ export function aStarIterable(
   }
 
   const processNeighbor = (neighbor: ReturnType<typeof getNeighbors>[0], current: Node) => {
-    const neighborTerrain = terrain[neighbor.position.x][neighbor.position.y].type;
+    const neighborTerrain = terrain[neighbor.x][neighbor.y].type;
 
     console.log(
-      `Processing neighbor at ${neighbor.position.x},${neighbor.position.y} (${neighborTerrain})`,
+      `Processing neighbor at ${neighbor.x},${neighbor.y} (${neighborTerrain})`,
     );
 
-    const movementCost = terrain[neighbor.position.x][neighbor.position.y].movementCost ?? 1;
+    const movementCost = terrain[neighbor.x][neighbor.y].movementCost ?? 1;
 
     const isDiagonal =
-      current.position.x !== neighbor.position.x && current.position.y !== neighbor.position.y;
+      current.x !== neighbor.x && current.y !== neighbor.y;
     const diagonalCost = isDiagonal ? 1.414 : 1; // Approximate cost for diagonal movement
 
     movementCost > 1 && console.log({ movementCost, diagonalCost });
@@ -253,12 +252,12 @@ export function aStarIterable(
     const gCost = current.gCost + movementCost * diagonalCost;
 
     const existingNode = openSet.find(
-      node => node.position.x === neighbor.position.x && node.position.y === neighbor.position.y,
+      node => node.x === neighbor.x && node.y === neighbor.y,
     );
 
     if (!existingNode || gCost < existingNode.gCost) {
       neighbor.gCost = gCost;
-      neighbor.hCost = heuristic(neighbor.position, end);
+      neighbor.hCost = octileHeuristic(neighbor, end);
       neighbor.fCost = neighbor.gCost + neighbor.hCost;
       neighbor.parent = current;
 
