@@ -1,4 +1,4 @@
-import { createSignal, onMount } from "solid-js";
+import { createSignal, For, onMount, Setter, Show } from "solid-js";
 import { Button } from "~/components/ui/button";
 import { aStar, Point } from "~/lib/canvas/pathfinding/astar";
 import { applyTerrain, averageGrid, renderGrid, staticGrid } from "~/lib/canvas/grids";
@@ -11,6 +11,12 @@ import {
   RiMediaSpeedFill,
 } from "solid-icons/ri";
 import { findPathToClosestTarget } from "~/lib/canvas/pathfinding/utils";
+import { createStore } from "solid-js/store";
+import { _hasCombatData, _hasIdentificationData, GameChatMessage, GameEvent } from "./combat/types";
+import { Resizable, ResizableHandle, ResizablePanel } from "~/components/ui/resizable";
+import { createId } from "@paralleldrive/cuid2";
+import { defaultCombatData } from "./combat/combat-test";
+import { randAnimal } from "@ngneat/falso";
 
 function getMousePosition(
   canvas: HTMLCanvasElement,
@@ -24,6 +30,7 @@ function getMousePosition(
 }
 
 type Unit = {
+  id: string;
   type: "minion" | "enemy";
   x: number;
   y: number;
@@ -31,7 +38,8 @@ type Unit = {
   lineWidth: number;
   strokeStyle: CanvasRenderingContext2D["strokeStyle"];
   movementData?: ReturnType<typeof findPathToClosestTarget>;
-};
+} & _hasCombatData &
+  _hasIdentificationData;
 
 const drawUnit = (
   ctx: CanvasRenderingContext2D,
@@ -50,7 +58,22 @@ const drawUnit = (
   });
 };
 
-const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
+const [minionCount, enemyCount] = [5, 5];
+
+const initializeGame = (
+  gameCanvas: HTMLCanvasElement | undefined,
+  setTerrainHoverData: Setter<
+    | {
+        type: "water" | "plain" | "hill" | "mountain";
+        movementCost: 1 | 255 | 8 | undefined;
+        x: number;
+        y: number;
+        w: number;
+      }
+    | undefined
+  >,
+  setMinionHoverData: Setter<Unit | undefined>,
+) => {
   if (!gameCanvas) {
     console.error("Canvas element is not defined");
     return () => {};
@@ -67,23 +90,40 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
 
   const cellWidth = 25;
   const cellHeight = 25;
-
-  gameCanvas.addEventListener("mousemove", event => {
-    getMousePosition(gameCanvas, event, (x, y) => {
-      console.log(
-        `(${Math.floor(x / cellWidth)}, ${Math.floor(y / cellHeight)}): ${terrain[Math.floor(x / cellWidth)][Math.floor(y / cellHeight)].type} (${terrain[Math.floor(x / cellWidth)][Math.floor(y / cellHeight)].movementCost})`,
-      );
-    });
-  });
-
   const sg = staticGrid(canvasWidth, canvasHeight, cellWidth, cellHeight);
   const pg = perlinGrid(sg);
   const terrain = applyTerrain(averageGrid(pg));
 
   const walkableTerrain = terrain.map(row => row.filter(cell => cell.movementCost !== 255)).flat();
 
-  const [minionCount, enemyCount] = [1, 10];
   const [minions, targets] = [[], []] as [Unit[], Unit[]];
+
+  gameCanvas.addEventListener("mousemove", event => {
+    getMousePosition(gameCanvas, event, (x, y) => {
+      const hoveredCellPos = [Math.floor(x / cellWidth), Math.floor(y / cellHeight)];
+      try {
+        const hoveredCell = terrain[hoveredCellPos[0]][hoveredCellPos[1]];
+        // console.log(
+        //   `(${hoveredCellPos[0]}, ${hoveredCellPos[1]}): ${hoveredCell.type} (${hoveredCell.movementCost})`,
+        // );
+
+        setTerrainHoverData(() => hoveredCell);
+      } catch (e) {
+        // console.error(e);
+        setTerrainHoverData(undefined);
+      }
+
+      const hoveredMinion = minions
+        .concat(targets)
+        .find(minion => minion.x === hoveredCellPos[0] && minion.y === hoveredCellPos[1]);
+      if (hoveredMinion) {
+        console.log(`Hovering over minion at (${hoveredMinion.x}, ${hoveredMinion.y})`);
+        setMinionHoverData(() => hoveredMinion);
+      } else {
+        setMinionHoverData(undefined);
+      }
+    });
+  });
 
   for (let i = 0; i < minionCount; i++) {
     const terrainIndex = Math.floor(Math.random() * walkableTerrain.length);
@@ -91,12 +131,15 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
     walkableTerrain.splice(terrainIndex, 1);
 
     minions.push({
+      id: createId(),
+      name: randAnimal(),
       type: "minion",
       x,
       y,
       fillStyle: "cyan",
       lineWidth: 1,
       strokeStyle: "black",
+      ...defaultCombatData(),
     });
   }
 
@@ -106,12 +149,15 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
     walkableTerrain.splice(terrainIndex, 1);
 
     targets.push({
+      id: createId(),
+      name: randAnimal(),
       type: "enemy",
       x,
       y,
       fillStyle: "red",
       lineWidth: 1,
       strokeStyle: "blue",
+      ...defaultCombatData(),
     });
   }
 
@@ -168,8 +214,8 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
   return tick;
 };
 
-const CANVAS_WIDTH = 1000;
-const CANVAS_HEIGHT = 1000;
+const CANVAS_WIDTH = 600;
+const CANVAS_HEIGHT = 600;
 
 function handleUnitMovement(
   unit: Unit,
@@ -245,89 +291,171 @@ export default function Game() {
   const [tickRate, setTickRate] = createSignal(1000);
   const [tickInterval, setTickInterval] = createSignal<NodeJS.Timeout | undefined>(undefined);
 
+  const [chatBoxRef, setChatBoxRef] = createSignal<HTMLDivElement | undefined>(undefined);
+  const [gameChat, setGameChat] = createStore([] as GameChatMessage[]);
+  const [gameEvents, setGameEvents] = createStore([] as GameEvent[]);
+
+  const [terrainHoverData, setTerrainHoverData] = createSignal<
+    ReturnType<typeof applyTerrain>[number][number] | undefined
+  >();
+  const [minionHoverData, setMinionHoverData] = createSignal<Unit | undefined>();
+
   let tick = () => {};
 
   onMount(() => {
     if (gameCanvas()) {
       console.log("Initializing game...");
-      tick = initializeGame(gameCanvas());
+      tick = initializeGame(gameCanvas(), setTerrainHoverData, setMinionHoverData);
     }
     // console.log(gameObjects.players);
   });
 
   return (
-    <main class="relative mx-auto p-4 text-gray-700">
-      <div class="relative" style={{ width: `${CANVAS_WIDTH}px`, height: `${CANVAS_HEIGHT}px` }}>
-        <div
-          style={{
-            position: "absolute",
-            top: "1%",
-            left: "50%",
-            transform: "translateX(-50%)",
-            display: "flex",
-            gap: "1rem", // Adds space between buttons
-            "align-items": "center", // Aligns items vertically
-            "z-index": 1,
-          }}
-        >
-          <Button
-            style={{}}
-            onClick={() => {
-              setTickRate(tickRate() + 250);
-              clearInterval(tickInterval());
-              setTickInterval(setInterval(tick, tickRate()));
-            }}
-          >
-            <RiMediaRewindFill />
-          </Button>
-          <Button
-            style={{}}
-            onClick={() => {
-              console.log("Ticking game...", tick.toString());
-              tick();
-            }}
-          >
-            Tick
-          </Button>
-          <Button
-            style={{}}
-            onClick={() => {
-              if (tickInterval()) {
-                clearInterval(tickInterval());
-                setTickInterval(undefined);
-              } else {
-                setTickInterval(setInterval(tick, tickRate()));
-              }
-            }}
-          >
-            {tickInterval() ? <RiMediaPauseLine /> : <RiMediaPlayFill />}
-          </Button>
-          <Button
-            style={{}}
-            onClick={() => {
-              setTickRate(Math.max(tickRate() - 250, 0));
-              clearInterval(tickInterval());
-              setTickInterval(setInterval(tick, tickRate()));
-            }}
-          >
-            <RiMediaSpeedFill />
-          </Button>
-        </div>
+    <main
+      // style={{
+      //   "min-height": "100vh",
+      //   display: "flex",
+      //   "flex-direction": "column",
+      //   overflow: "hidden",
+      // }}
+      class="relative mx-auto h-screen p-4 text-gray-700"
+    >
+      <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
+        <ResizablePanel initialSize={0.75} class="overflow-hidden">
+          <Resizable orientation="vertical">
+            <ResizablePanel
+              initialSize={0.7}
+              class="flex justify-center overflow-scroll align-middle"
+            >
+              <div
+                class="relative"
+                style={{ width: `${CANVAS_WIDTH}px`, height: `${CANVAS_HEIGHT}px`, margin: "5px" }}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "1%",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    display: "flex",
+                    gap: "1rem", // Adds space between buttons
+                    "align-items": "center", // Aligns items vertically
+                    "z-index": 1,
+                  }}
+                >
+                  <Button
+                    style={{}}
+                    onClick={() => {
+                      setTickRate(tickRate() + 250);
+                      clearInterval(tickInterval());
+                      setTickInterval(setInterval(tick, tickRate()));
+                    }}
+                  >
+                    <RiMediaRewindFill />
+                  </Button>
+                  <Button
+                    style={{}}
+                    onClick={() => {
+                      console.log("Ticking game...", tick.toString());
+                      tick();
+                    }}
+                  >
+                    Tick
+                  </Button>
+                  <Button
+                    style={{}}
+                    onClick={() => {
+                      if (tickInterval()) {
+                        clearInterval(tickInterval());
+                        setTickInterval(undefined);
+                      } else {
+                        setTickInterval(setInterval(tick, tickRate()));
+                      }
+                    }}
+                  >
+                    {tickInterval() ? <RiMediaPauseLine /> : <RiMediaPlayFill />}
+                  </Button>
+                  <Button
+                    style={{}}
+                    onClick={() => {
+                      setTickRate(Math.max(tickRate() - 250, 0));
+                      clearInterval(tickInterval());
+                      setTickInterval(setInterval(tick, tickRate()));
+                    }}
+                  >
+                    <RiMediaSpeedFill />
+                  </Button>
+                </div>
 
-        <canvas
-          ref={setGameCanvas}
-          width={CANVAS_WIDTH}
-          height={CANVAS_HEIGHT}
-          style={{
-            "justify-content": "center",
-            "align-items": "center",
-            position: "relative",
-            width: `${CANVAS_WIDTH}px`,
-            height: `${CANVAS_HEIGHT}px`,
-            border: "1px solid black",
-          }}
-        />
-      </div>
+                <canvas
+                  ref={setGameCanvas}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                  style={{
+                    "justify-content": "center",
+                    "align-items": "center",
+                    position: "relative",
+                    width: `${CANVAS_WIDTH}px`,
+                    height: `${CANVAS_HEIGHT}px`,
+                    border: "1px solid black",
+                  }}
+                />
+              </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel initialSize={0.3} class="overflow-hidden">
+              <div
+                ref={setChatBoxRef}
+                style={{
+                  "max-height": "200px",
+                  "overflow-y": "scroll",
+                  "border-top": "1px solid black",
+                  "border-bottom": "1px solid black",
+                  "margin-top": "1rem",
+                }}
+              >
+                <For each={gameChat}>
+                  {message => (
+                    <div class="my-2 rounded-lg bg-gray-200 p-2">
+                      <span class="text-sm font-semibold">{`${message.sender}: `}</span>
+                      <span class="text-sm">{message.message}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </ResizablePanel>
+          </Resizable>
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel initialSize={0.25} class="overflow-hidden">
+          <div>Hover Info</div>
+          <Show when={terrainHoverData()}>
+            <div class="border">
+              <div>{`(${terrainHoverData()?.x}, ${terrainHoverData()?.y})`}</div>
+              <div>{`Terrain: ${terrainHoverData()?.type}, Movement Cost:${terrainHoverData()?.movementCost}`}</div>
+            </div>
+          </Show>
+          <Show when={minionHoverData()}>
+            <div class="border">
+              <div>{`Unit: ${minionHoverData()?.type}`}</div>
+              <div>{`Name: ${minionHoverData()?.name}`}</div>
+              <div>{`ID: ${minionHoverData()?.id}`}</div>
+              <div>{`Position: (${minionHoverData()?.x}, ${minionHoverData()?.y})`}</div>
+              <div>{`Health: ${minionHoverData()?.hp}/${minionHoverData()?.maxHp}`}</div>
+              <div>{`Mana: ${minionHoverData()?.mana}/${minionHoverData()?.maxMana}`}</div>
+              <div>{`Stamina: ${minionHoverData()?.stamina}/${minionHoverData()?.maxStamina}`}</div>
+              <div>{`Attack: ${minionHoverData()?.attack}`}</div>
+              <div>{`Defense: ${minionHoverData()?.defense}`}</div>
+              <div>{`Speed: ${minionHoverData()?.speed}`}</div>
+              <div>{`Accuracy: ${minionHoverData()?.accuracy}`}</div>
+              <div>{`Block Chance: ${minionHoverData()?.blockChance}`}</div>
+              <div>{`Evasion: ${minionHoverData()?.evasion}`}</div>
+              <div>{`Crit Chance: ${minionHoverData()?.critChance}`}</div>
+              <div>{`Crit Multiplier: ${minionHoverData()?.critMultiplier}`}</div>
+            </div>
+          </Show>
+        </ResizablePanel>
+      </Resizable>
     </main>
   );
 }

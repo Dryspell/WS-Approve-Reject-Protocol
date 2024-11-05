@@ -3,6 +3,8 @@ import { createStore, SetStoreFunction } from "solid-js/store";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Progress, ProgressLabel, ProgressValueLabel } from "~/components/ui/progress";
+import { GameChatMessage, GameEvent, Player } from "./types";
+import { generateCombatEvent, processCombatEvents } from "./combatEvents";
 
 const createRect = (
   ctx: CanvasRenderingContext2D,
@@ -136,6 +138,23 @@ const FollowingUI = (props: {
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 
+export const defaultCombatData = () => ({
+  hp: 80,
+  maxHp: 100,
+  mana: 50,
+  maxMana: 100,
+  stamina: 30,
+  maxStamina: 100,
+  attack: 10,
+  defense: 5,
+  speed: 10,
+  accuracy: 90,
+  blockChance: 10,
+  evasion: 10,
+  critChance: 10,
+  critMultiplier: 2,
+});
+
 const DEFAULT_OBJECTS = {
   players: [
     {
@@ -146,20 +165,7 @@ const DEFAULT_OBJECTS = {
       pos: [150, 300],
       dims: [100, 100],
       velocity: [1, 1],
-      hp: 80,
-      maxHp: 100,
-      mana: 50,
-      maxMana: 100,
-      stamina: 30,
-      maxStamina: 100,
-      attack: 10,
-      defense: 5,
-      speed: 10,
-      accuracy: 90,
-      blockChance: 10,
-      evasion: 10,
-      critChance: 10,
-      critMultiplier: 2,
+      ...defaultCombatData(),
     },
     {
       type: "player",
@@ -169,86 +175,10 @@ const DEFAULT_OBJECTS = {
       pos: [550, 300],
       dims: [100, 100],
       velocity: [1, 1],
-      hp: 80,
-      maxHp: 100,
-      mana: 50,
-      maxMana: 100,
-      stamina: 30,
-      maxStamina: 100,
-      attack: 10,
-      defense: 5,
-      speed: 10,
-      accuracy: 90,
-      blockChance: 10,
-      evasion: 10,
-      critChance: 10,
-      critMultiplier: 2,
+      ...defaultCombatData(),
     },
   ] as Player[],
 } as const;
-
-type Player = {
-  id: string;
-  name: string;
-  type: "player";
-  color: string;
-  pos: [x: number, y: number];
-  dims: [width: number, height: number];
-  velocity: [dx: number, dy: number];
-  hp: number;
-  maxHp: number;
-  mana: number;
-  maxMana: number;
-  stamina: number;
-  maxStamina: number;
-  attack: number;
-  defense: number;
-  speed: number;
-  accuracy: number;
-  blockChance: number;
-  evasion: number;
-  critChance: number;
-  critMultiplier: number;
-};
-
-type Enemy = {
-  type: "enemy";
-  color: string;
-  pos: [x: number, y: number];
-  dims: [width: number, height: number];
-  hp: number;
-  maxHp: number;
-};
-
-type GameObject = Player | Enemy;
-
-type GameChatMessage = {
-  sender: string;
-  message: string;
-  timestamp: number;
-};
-
-type AttackEvent = {
-  type: "attack";
-  attackerId: string;
-  defenderId: string;
-  attackerDamageRoll: number;
-  attackerAccuracyRoll: number;
-  attackerIsAccurate: boolean;
-  attackerDidCriticalHit: boolean;
-  defenderEvasionRoll: number;
-  defenderEvadesAttack: boolean;
-  defenderBlockRoll: number;
-  defenderDidBlock: boolean;
-  timestamp: number;
-};
-
-type GameEvent =
-  | {
-      type: "player-joined" | "player-left";
-      player: Player;
-    }
-  | AttackEvent;
 
 const gameTick = (
   gameObjects: typeof DEFAULT_OBJECTS,
@@ -261,146 +191,25 @@ const gameTick = (
   const attackers = gameObjects.players;
   const defenders = gameObjects.players;
 
-  const generateAttackEvents = () => {
-    return attackers.map(attacker => {
-      const defender = defenders.find(p => p.id !== attacker.id);
-      if (!defender) {
-        throw new Error("No defender found");
-      }
-      const attackerDidCriticalHit = Math.random() < attacker.critChance / 100;
-      const attackerDamageRoll = attackerDidCriticalHit
-        ? attacker.critMultiplier * attacker.attack
-        : Math.round(Math.random() * attacker.attack);
-
-      const attackerAccuracyRoll = Math.round(Math.random() * 100);
-      const attackerIsAccurate = attackerAccuracyRoll > 100 - attacker.accuracy;
-
-      const defenderEvasionRoll = Math.round(Math.random() * 100);
-      const defenderEvadesAttack = defenderEvasionRoll > 100 - defender.evasion;
-
-      const defenderBlockRoll = Math.round(Math.random() * 100);
-      const defenderDidBlock = defenderBlockRoll > 100 - defender.blockChance;
-
-      const gameEvent: AttackEvent = {
-        type: "attack" as const,
-        attackerId: attacker.id,
-        defenderId: defender.id,
-        attackerDamageRoll,
-        attackerAccuracyRoll,
-        attackerIsAccurate,
-        attackerDidCriticalHit,
-        defenderEvasionRoll,
-        defenderEvadesAttack,
-        defenderBlockRoll,
-        defenderDidBlock,
-        timestamp: Date.now(),
-      };
-      return gameEvent;
-    });
-  };
-
-  const processAttackEvents = (attackEvents: ReturnType<typeof generateAttackEvents>) => {
-    for (const {
-      attackerId,
-      defenderId,
-      attackerDamageRoll,
-      attackerAccuracyRoll,
-      attackerIsAccurate,
-      attackerDidCriticalHit,
-      defenderEvasionRoll,
-      defenderEvadesAttack,
-      defenderBlockRoll,
-      defenderDidBlock,
-    } of attackEvents) {
-      const attacker = attackers.find(p => p.id === attackerId);
-      const defender = defenders.find(p => p.id === defenderId);
-      if (!attacker) {
-        throw new Error("No attacker found");
-      }
-      if (!defender) {
-        throw new Error("No defender found");
-      }
-
-      if (attackerDamageRoll === 0) {
-        setGameChat(gameChat.length, {
-          sender: attacker.id,
-          message: `${attacker.name} falters with a glancing blow that does nothing.`,
-          timestamp: Date.now(),
-        });
-        continue;
-      }
-
-      if (attackerDidCriticalHit) {
-        setGameChat(gameChat.length, {
-          sender: attacker.id,
-          message: `${attacker.name} charges up a Critical-Hit for ${attackerDamageRoll} damage!`,
-          timestamp: Date.now(),
-        });
-      } else if (attackerDamageRoll > 0.8 * attacker.attack) {
-        setGameChat(gameChat.length, {
-          sender: attacker.id,
-          message: `${attacker.name} develops a strong hit for ${attackerDamageRoll} damage!`,
-          timestamp: Date.now(),
-        });
-      } else {
-        setGameChat(gameChat.length, {
-          sender: attacker.id,
-          message: `${attacker.name} aims a hit for ${attackerDamageRoll} damage!`,
-          timestamp: Date.now(),
-        });
-      }
-
-      if (!attackerIsAccurate) {
-        setGameChat(gameChat.length, {
-          sender: attacker.id,
-          message: `${attacker.name} misses the attack (${attackerAccuracyRoll})!`,
-          timestamp: Date.now(),
-        });
-        continue;
-      }
-      if (defenderEvadesAttack) {
-        setGameChat(gameChat.length, {
-          sender: attacker.id,
-          message: `${defender.name} dodged the attack (${defenderEvasionRoll})!`,
-          timestamp: Date.now(),
-        });
-        continue;
-      }
-
-      if (defenderDidBlock) {
-        setGameChat(gameChat.length, {
-          sender: attacker.id,
-          message: `${defender.name} blocked the attack (${defenderBlockRoll})!`,
-          timestamp: Date.now(),
-        });
-        continue;
-      }
-
-      setGameObjects(
-        "players",
-        player => player.id === defenderId,
-        "hp",
-        hp => hp - attackerDamageRoll,
-      );
-      setGameObjects(
-        "players",
-        player => player.id === attackerId,
-        "stamina",
-        stamina => stamina - 5,
-      );
+  const newAttackEvents = attackers.map(attacker => {
+    const defender = defenders.find(p => p.id !== attacker.id);
+    if (!defender) {
+      throw new Error("No defender found");
     }
-  };
+    return generateCombatEvent(attacker, defender);
+  });
 
-  const newAttackEvents = generateAttackEvents();
-  processAttackEvents(newAttackEvents);
+  processCombatEvents(newAttackEvents, attackers, defenders, setGameChat, gameChat, setGameObjects);
+
   setGameEvents([...gameEvents, ...newAttackEvents]);
 };
 
 export default function Game() {
   const [gameCanvas, setGameCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);
-  const [chatBoxRef, setChatBoxRef] = createSignal<HTMLDivElement | undefined>(undefined);
 
   const [gameObjects, setGameObjects] = createStore(DEFAULT_OBJECTS);
+
+  const [chatBoxRef, setChatBoxRef] = createSignal<HTMLDivElement | undefined>(undefined);
   const [gameChat, setGameChat] = createStore([] as GameChatMessage[]);
   const [gameEvents, setGameEvents] = createStore([] as GameEvent[]);
 
