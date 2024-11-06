@@ -6,7 +6,7 @@ import {
   AttackEvent,
   CombatEvent,
   GameChatMessage,
-  Player,
+  Unit,
   StaminaRecoverEvent,
 } from "./types";
 
@@ -52,29 +52,28 @@ export const generateCombatEvent = (attacker: _canFight, defender: _canFight) =>
 
 export function processCombatEvents(
   combatEvents: CombatEvent[],
-  attackers: _canFight[],
-  defenders: _canFight[],
+  units: _canFight[],
   setGameChat: SetStoreFunction<GameChatMessage[]>,
   gameChat: GameChatMessage[],
-  setGameObjects: SetStoreFunction<{ readonly players: Player[] }>,
+  setGameObjects: SetStoreFunction<{ readonly units: Unit[] }>,
 ) {
   combatEvents.reduce((acc, event) => {
     switch (event.type) {
       case "rest": {
-        const unit = attackers.find(p => p.id === event.attackerId);
-        if (!unit) {
+        const activeUnit = units.find(p => p.id === event.attackerId);
+        if (!activeUnit) {
           throw new Error("No player found");
         }
         setGameChat(gameChat.length, {
-          sender: unit.id,
-          message: `${unit.name} rests and recovers ${event.staminaRecover} stamina!`,
+          sender: activeUnit.id,
+          message: `${activeUnit.name} rests and recovers ${event.staminaRecover} stamina!`,
           timestamp: Date.now(),
         });
         setGameObjects(
-          "players",
-          player => player.id === player.id,
+          "units",
+          unit => unit.id === activeUnit.id,
           "stamina",
-          stamina => Math.min(stamina + event.staminaRecover, unit.maxStamina),
+          stamina => Math.min(stamina + event.staminaRecover, activeUnit.maxStamina),
         );
         return acc;
       }
@@ -92,8 +91,8 @@ export function processCombatEvents(
           defenderBlockRoll,
           defenderDidBlock,
         } = event;
-        const attacker = attackers.find(p => p.id === attackerId);
-        const defender = defenders.find(p => p.id === defenderId);
+        const attacker = units.find(p => p.id === attackerId);
+        const defender = units.find(p => p.id === defenderId);
         if (!attacker) {
           throw new Error("No attacker found");
         }
@@ -157,14 +156,14 @@ export function processCombatEvents(
         }
 
         setGameObjects(
-          "players",
-          player => player.id === defenderId,
+          "units",
+          unit => unit.id === defenderId,
           "hp",
           hp => hp - attackerDamageRoll,
         );
         setGameObjects(
-          "players",
-          player => player.id === attackerId,
+          "units",
+          unit => unit.id === attackerId,
           "stamina",
           stamina => stamina - 5,
         );

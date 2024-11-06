@@ -3,8 +3,9 @@ import { createStore, SetStoreFunction } from "solid-js/store";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Progress, ProgressLabel, ProgressValueLabel } from "~/components/ui/progress";
-import { GameChatMessage, GameEvent, Player } from "./types";
+import { GameChatMessage, GameEvent, Unit } from "./types";
 import { generateCombatEvent, processCombatEvents } from "./combatEvents";
+import { defaultCombatData } from "../armies/init";
 
 const createRect = (
   ctx: CanvasRenderingContext2D,
@@ -52,8 +53,8 @@ const initializeGame = (
     //   };
     // });
 
-    gameObjects.players.forEach(player =>
-      createRect(ctx, ...player.pos, ...player.dims, player.color),
+    gameObjects.units.forEach(player =>
+      createRect(ctx, ...player.pos, ...player.dims, player.fillStyle),
     );
 
     requestAnimationFrame(dvdBounceGameLoop);
@@ -75,7 +76,7 @@ const getPagePosition = (canvas: HTMLCanvasElement | undefined, posX: number, po
 
 const FollowingUI = (props: {
   gameCanvas: Accessor<HTMLCanvasElement | undefined>;
-  player: Player;
+  player: Unit;
 }) => {
   const pos = () => getPagePosition(props.gameCanvas(), ...props.player.pos);
   const progressScaleFactor = 1.5;
@@ -138,30 +139,13 @@ const FollowingUI = (props: {
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 
-export const defaultCombatData = () => ({
-  hp: 80,
-  maxHp: 100,
-  mana: 50,
-  maxMana: 100,
-  stamina: 30,
-  maxStamina: 100,
-  attack: 10,
-  defense: 5,
-  speed: 10,
-  accuracy: 90,
-  blockChance: 10,
-  evasion: 10,
-  critChance: 10,
-  critMultiplier: 2,
-});
-
 const DEFAULT_OBJECTS = {
-  players: [
+  units: [
     {
       type: "player",
       id: "player1",
       name: "Player 1",
-      color: "maroon",
+      fillStyle: "maroon",
       pos: [150, 300],
       dims: [100, 100],
       velocity: [1, 1],
@@ -171,13 +155,13 @@ const DEFAULT_OBJECTS = {
       type: "player",
       id: "player2",
       name: "Player 2",
-      color: "navy",
+      fillStyle: "navy",
       pos: [550, 300],
       dims: [100, 100],
       velocity: [1, 1],
       ...defaultCombatData(),
     },
-  ] as Player[],
+  ] as Unit[],
 } as const;
 
 const gameTick = (
@@ -188,8 +172,8 @@ const gameTick = (
   gameEvents: GameEvent[],
   setGameEvents: SetStoreFunction<GameEvent[]>,
 ) => {
-  const attackers = gameObjects.players;
-  const defenders = gameObjects.players;
+  const attackers = gameObjects.units;
+  const defenders = gameObjects.units;
 
   const newAttackEvents = attackers.map(attacker => {
     const defender = defenders.find(p => p.id !== attacker.id);
@@ -199,7 +183,7 @@ const gameTick = (
     return generateCombatEvent(attacker, defender);
   });
 
-  processCombatEvents(newAttackEvents, attackers, defenders, setGameChat, gameChat, setGameObjects);
+  processCombatEvents(newAttackEvents, gameObjects.units, setGameChat, gameChat, setGameObjects);
 
   setGameEvents([...gameEvents, ...newAttackEvents]);
 };
@@ -241,7 +225,7 @@ export default function Game() {
           Tick
         </Button>
 
-        {gameObjects.players.map((player: Player) => (
+        {gameObjects.units.map((player: Unit) => (
           <FollowingUI player={player} gameCanvas={gameCanvas} />
         ))}
         <canvas

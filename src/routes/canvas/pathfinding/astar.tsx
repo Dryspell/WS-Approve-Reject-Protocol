@@ -11,6 +11,7 @@ import {
   RiMediaSpeedFill,
 } from "solid-icons/ri";
 import { perf } from "~/lib/perf";
+import { _hasPos } from "../combat/types";
 
 function getMousePosition(
   canvas: HTMLCanvasElement,
@@ -24,12 +25,10 @@ function getMousePosition(
 }
 
 type Unit = {
-  x: number;
-  y: number;
   fillStyle: CanvasRenderingContext2D["fillStyle"];
   lineWidth: number;
   strokeStyle: CanvasRenderingContext2D["strokeStyle"];
-};
+} & _hasPos;
 
 const drawUnit = (
   ctx: CanvasRenderingContext2D,
@@ -37,7 +36,7 @@ const drawUnit = (
   cellWidth: number,
   cellHeight: number,
 ) => {
-  const [x, y] = [(unit.x + 0.5) * cellWidth, (unit.y + 0.5) * cellHeight] as [
+  const [x, y] = [(unit.pos[0] + 0.5) * cellWidth, (unit.pos[1] + 0.5) * cellHeight] as [
     x: number,
     y: number,
   ];
@@ -79,16 +78,20 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
   });
 
   const minion: Unit = {
-    x: Math.floor(Math.random() * sg.length),
-    y: Math.floor(Math.random() * sg[0].length),
+    pos: [Math.floor(Math.random() * sg.length), Math.floor(Math.random() * sg[0].length)] as [
+      number,
+      number,
+    ],
     fillStyle: "cyan",
     lineWidth: 1,
     strokeStyle: "black",
   };
 
   const generateTarget = () => ({
-    x: Math.floor(Math.random() * sg.length),
-    y: Math.floor(Math.random() * sg[0].length),
+    pos: [Math.floor(Math.random() * sg.length), Math.floor(Math.random() * sg[0].length)] as [
+      number,
+      number,
+    ],
     fillStyle: "red",
     lineWidth: 1,
     strokeStyle: "blue",
@@ -98,7 +101,7 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
 
   console.log({ minion, target });
 
-  let path = perf(() => aStar(terrain, { x: minion.x, y: minion.y }, { x: target.x, y: target.y }));
+  let path = perf(() => aStar(terrain, minion, target));
 
   const gameLoop = () => {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -113,10 +116,10 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
         path[i + 1] &&
           line(
             ctx,
-            (path[i].x + 0.5) * cellWidth,
-            (path[i].y + 0.5) * cellHeight,
-            (path[i + 1].x + 0.5) * cellWidth,
-            (path[i + 1].y + 0.5) * cellHeight,
+            (path[i].pos[0] + 0.5) * cellWidth,
+            (path[i].pos[1] + 0.5) * cellHeight,
+            (path[i + 1].pos[0] + 0.5) * cellWidth,
+            (path[i + 1].pos[1] + 0.5) * cellHeight,
             {
               strokeStyle: "magenta",
               lineWidth: 1,
@@ -130,12 +133,12 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
   const tick = () => {
     console.log("Ticked");
     path?.shift();
-    minion.x = path?.[0].x ?? minion.x;
-    minion.y = path?.[0].y ?? minion.y;
+    minion.pos[0] = path?.[0].pos[0] ?? minion.pos[0];
+    minion.pos[1] = path?.[0].pos[1] ?? minion.pos[1];
 
-    if (minion.x === target.x && minion.y === target.y) {
+    if (minion.pos[0] === target.pos[0] && minion.pos[1] === target.pos[1]) {
       target = generateTarget();
-      path = perf(() => aStar(terrain, { x: minion.x, y: minion.y }, { x: target.x, y: target.y }));
+      path = perf(() => aStar(terrain, minion, target));
     }
 
     gameLoop();

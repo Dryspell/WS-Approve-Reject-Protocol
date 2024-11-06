@@ -1,3 +1,5 @@
+import { findPathToClosestTarget } from "~/lib/canvas/pathfinding/utils";
+
 export type _hasIdentificationData = {
   id: string;
   name: string;
@@ -24,13 +26,24 @@ export type _hasCombatData = {
 export type _canFight = _hasCombatData & _hasIdentificationData;
 
 export type _hasRenderData = {
-  color: string;
-  pos: [x: number, y: number];
   dims: [width: number, height: number];
-  velocity: [dx: number, dy: number];
+  velocity?: [dx: number, dy: number];
+  fillStyle?: CanvasRenderingContext2D["fillStyle"];
+  lineWidth?: number;
+  strokeStyle?: CanvasRenderingContext2D["strokeStyle"];
 };
 
-export type Player = _hasIdentificationData & _hasRenderData & _hasCombatData;
+export type _hasMovementData = { movementData?: ReturnType<typeof findPathToClosestTarget> };
+
+export type _hasPos = {
+  pos: [x: number, y: number];
+};
+
+export type Unit = _hasCombatData &
+  _hasIdentificationData &
+  _hasPos &
+  _hasRenderData &
+  _hasMovementData;
 
 type Enemy = {
   type: "enemy";
@@ -41,7 +54,7 @@ type Enemy = {
   maxHp: number;
 };
 
-type GameObject = Player | Enemy;
+type GameObject = Unit | Enemy;
 
 export type GameChatMessage = {
   sender: string;
@@ -75,6 +88,6 @@ export type CombatEvent = AttackEvent | StaminaRecoverEvent;
 export type GameEvent =
   | {
       type: "player-joined" | "player-left";
-      player: Player;
+      player: Unit;
     }
   | CombatEvent;

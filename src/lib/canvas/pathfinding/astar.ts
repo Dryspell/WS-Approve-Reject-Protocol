@@ -1,11 +1,7 @@
+import { _hasPos } from "~/routes/canvas/combat/types";
 import { applyTerrain } from "../grids";
 
-export type Point = {
-  x: number;
-  y: number;
-};
-
-type Node = Point & {
+type Node = _hasPos & {
   gCost: number; // Cost from start to this node
   hCost: number; // Heuristic cost from this node to the target
   fCost: number; // gCost + hCost
@@ -13,28 +9,28 @@ type Node = Point & {
 };
 
 // Utility functions for the A* algorithm
-export const octileHeuristic = (a: Point, b: Point, minMovementCost = 1) => {
-  const dx = Math.abs(a.x - b.x);
-  const dy = Math.abs(a.y - b.y);
+export const octileHeuristic = (a: _hasPos, b: _hasPos, minMovementCost = 1) => {
+  const dx = Math.abs(a.pos[0] - b.pos[0]);
+  const dy = Math.abs(a.pos[1] - b.pos[1]);
   const D = minMovementCost; // Cost for orthogonal moves
   const D2 = minMovementCost * 1.414; // Cost for diagonal moves
   return D * (dx + dy) + (D2 - 2 * D) * Math.min(dx, dy);
 };
 
-const isInBounds = (point: Point, cols: number, rows: number) =>
-  point.x >= 0 && point.y >= 0 && point.x < cols && point.y < rows;
+const isInBounds = (point: _hasPos, cols: number, rows: number) =>
+  point.pos[0] >= 0 && point.pos[1] >= 0 && point.pos[0] < cols && point.pos[1] < rows;
 
 const getNeighbors = (node: Node, cols: number, rows: number): Node[] => {
   // Include diagonal directions
-  const neighbors: Point[] = [
-    { x: node.x + 1, y: node.y }, // Right
-    { x: node.x - 1, y: node.y }, // Left
-    { x: node.x, y: node.y + 1 }, // Down
-    { x: node.x, y: node.y - 1 }, // Up
-    { x: node.x + 1, y: node.y + 1 }, // Down-Right
-    { x: node.x - 1, y: node.y + 1 }, // Down-Left
-    { x: node.x + 1, y: node.y - 1 }, // Up-Right
-    { x: node.x - 1, y: node.y - 1 }, // Up-Left
+  const neighbors: _hasPos[] = [
+    { pos: [node.pos[0] + 1, node.pos[1]] }, // Right
+    { pos: [node.pos[0] - 1, node.pos[1]] }, // Left
+    { pos: [node.pos[0], node.pos[1] + 1] }, // Down
+    { pos: [node.pos[0], node.pos[1] - 1] }, // Up
+    { pos: [node.pos[0] + 1, node.pos[1] + 1] }, // Down-Right
+    { pos: [node.pos[0] - 1, node.pos[1] + 1] }, // Down-Left
+    { pos: [node.pos[0] + 1, node.pos[1] - 1] }, // Up-Right
+    { pos: [node.pos[0] - 1, node.pos[1] - 1] }, // Up-Left
   ];
 
   return neighbors
@@ -49,8 +45,8 @@ const getNeighbors = (node: Node, cols: number, rows: number): Node[] => {
 
 export function aStar(
   terrain: ReturnType<typeof applyTerrain>,
-  start: Point,
-  end: Point,
+  start: _hasPos,
+  end: _hasPos,
   openSet: Node[] = [
     {
       ...start,
@@ -65,7 +61,7 @@ export function aStar(
   const rows = terrain.length;
   const cols = terrain[0].length;
 
-  const key = (point: Point) => `${point.x},${point.y}`;
+  const key = (point: _hasPos) => `${point.pos[0]},${point.pos[1]}`;
 
   while (openSet.length > 0) {
     // Sort openSet by fCost and pop the node with the lowest fCost
@@ -73,8 +69,8 @@ export function aStar(
     const current = openSet.shift()!;
 
     // Check if we reached the end
-    if (current.x === end.x && current.y === end.y) {
-      const path: Point[] = [];
+    if (current.pos[0] === end.pos[0] && current.pos[1] === end.pos[1]) {
+      const path: _hasPos[] = [];
       let node: Node | undefined = current;
       while (node) {
         path.push(node);
@@ -88,15 +84,14 @@ export function aStar(
     for (const neighbor of getNeighbors(current, cols, rows)) {
       if (closedSet.has(key(neighbor))) continue;
 
-      const movementCost = terrain[neighbor.x][neighbor.y].movementCost ?? 1;
+      const movementCost = terrain[neighbor.pos[0]][neighbor.pos[1]].movementCost ?? 1;
 
-      const isDiagonal =
-        current.x !== neighbor.x && current.y !== neighbor.y;
+      const isDiagonal = current.pos[0] !== neighbor.pos[0] && current.pos[1] !== neighbor.pos[1];
       const diagonalCost = isDiagonal ? 1.414 : 1; // Approximate cost for diagonal movement
       const gCost = current.gCost + movementCost * diagonalCost;
 
       const existingNode = openSet.find(
-        node => node.x === neighbor.x && node.y === neighbor.y,
+        node => node.pos[0] === neighbor.pos[0] && node.pos[1] === neighbor.pos[1],
       );
 
       if (!existingNode || gCost < existingNode.gCost) {
@@ -117,8 +112,8 @@ export function aStar(
 
 export function aStarIterable(
   terrain: ReturnType<typeof applyTerrain>,
-  start: Point,
-  end: Point,
+  start: _hasPos,
+  end: _hasPos,
   openSet: Node[] = [
     {
       ...start,
@@ -133,8 +128,8 @@ export function aStarIterable(
   processingNeighbor: Node | undefined = undefined,
 ): {
   terrain: ReturnType<typeof applyTerrain>;
-  start: Point;
-  end: Point;
+  start: _hasPos;
+  end: _hasPos;
   openSet: Node[];
   closedSet: Set<string>;
   current?: Node;
@@ -148,7 +143,7 @@ export function aStarIterable(
 
   console.log("iterating");
 
-  const key = (point: Point) => `${point.x},${point.y}`;
+  const key = (point: _hasPos) => `${point.pos[0]},${point.pos[1]}`;
 
   const constructPath = () => {
     const path: Node[] = [];
@@ -183,7 +178,7 @@ export function aStarIterable(
   }
 
   // Check if we reached the end
-  if (current.x === end.x && current.y === end.y) {
+  if (current.pos[0] === end.pos[0] && current.pos[1] === end.pos[1]) {
     return {
       terrain,
       start,
@@ -235,16 +230,15 @@ export function aStarIterable(
   }
 
   const processNeighbor = (neighbor: ReturnType<typeof getNeighbors>[0], current: Node) => {
-    const neighborTerrain = terrain[neighbor.x][neighbor.y].type;
+    const neighborTerrain = terrain[neighbor.pos[0]][neighbor.pos[1]].type;
 
     console.log(
-      `Processing neighbor at ${neighbor.x},${neighbor.y} (${neighborTerrain})`,
+      `Processing neighbor at ${neighbor.pos[0]},${neighbor.pos[1]} (${neighborTerrain})`,
     );
 
-    const movementCost = terrain[neighbor.x][neighbor.y].movementCost ?? 1;
+    const movementCost = terrain[neighbor.pos[0]][neighbor.pos[1]].movementCost ?? 1;
 
-    const isDiagonal =
-      current.x !== neighbor.x && current.y !== neighbor.y;
+    const isDiagonal = current.pos[0] !== neighbor.pos[0] && current.pos[1] !== neighbor.pos[1];
     const diagonalCost = isDiagonal ? 1.414 : 1; // Approximate cost for diagonal movement
 
     movementCost > 1 && console.log({ movementCost, diagonalCost });
@@ -252,7 +246,7 @@ export function aStarIterable(
     const gCost = current.gCost + movementCost * diagonalCost;
 
     const existingNode = openSet.find(
-      node => node.x === neighbor.x && node.y === neighbor.y,
+      node => node.pos[0] === neighbor.pos[0] && node.pos[1] === neighbor.pos[1],
     );
 
     if (!existingNode || gCost < existingNode.gCost) {

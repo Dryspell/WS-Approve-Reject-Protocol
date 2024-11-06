@@ -1,9 +1,10 @@
 import { createSignal, onMount } from "solid-js";
 import { Button } from "~/components/ui/button";
-import { aStar, aStarIterable } from "~/lib/canvas/pathfinding/astar";
+import { aStarIterable } from "~/lib/canvas/pathfinding/astar";
 import { applyTerrain, averageGrid, renderGrid, staticGrid } from "~/lib/canvas/grids";
 import { perlinGrid } from "~/lib/canvas/perlin";
 import { circle, line, text } from "~/lib/canvas/shapes";
+import { _hasPos } from "../combat/types";
 
 function getMousePosition(
   canvas: HTMLCanvasElement,
@@ -17,12 +18,10 @@ function getMousePosition(
 }
 
 type Unit = {
-  x: number;
-  y: number;
   fillStyle: CanvasRenderingContext2D["fillStyle"];
   lineWidth: number;
   strokeStyle: CanvasRenderingContext2D["strokeStyle"];
-};
+} & _hasPos;
 
 const drawUnit = (
   ctx: CanvasRenderingContext2D,
@@ -30,7 +29,7 @@ const drawUnit = (
   cellWidth: number,
   cellHeight: number,
 ) => {
-  const [x, y] = [(unit.x + 0.5) * cellWidth, (unit.y + 0.5) * cellHeight] as [
+  const [x, y] = [(unit.pos[0] + 0.5) * cellWidth, (unit.pos[1] + 0.5) * cellHeight] as [
     x: number,
     y: number,
   ];
@@ -72,16 +71,20 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
   });
 
   const minion: Unit = {
-    x: Math.floor(Math.random() * sg.length),
-    y: Math.floor(Math.random() * sg[0].length),
+    pos: [Math.floor(Math.random() * sg.length), Math.floor(Math.random() * sg[0].length)] as [
+      number,
+      number,
+    ],
     fillStyle: "cyan",
     lineWidth: 1,
     strokeStyle: "black",
   };
 
   const target: Unit = {
-    x: Math.floor(Math.random() * sg.length),
-    y: Math.floor(Math.random() * sg[0].length),
+    pos: [Math.floor(Math.random() * sg.length), Math.floor(Math.random() * sg[0].length)] as [
+      number,
+      number,
+    ],
     fillStyle: "red",
     lineWidth: 1,
     strokeStyle: "blue",
@@ -89,11 +92,7 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
 
   console.log({ minion, target });
 
-  let { path, done, ...aStarParams } = aStarIterable(
-    terrain,
-    { x: minion.x, y: minion.y },
-    { x: target.x, y: target.y },
-  );
+  let { path, done, ...aStarParams } = aStarIterable(terrain, minion, target);
 
   console.log({ path });
 
@@ -106,10 +105,10 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
     drawUnit(ctx, target, cellWidth, cellHeight);
     // line(
     //   ctx,
-    //   (minion.x + 0.5) * cellWidth,
-    //   (minion.y + 0.5) * cellHeight,
-    //   (target.x + 0.5) * cellWidth,
-    //   (target.y + 0.5) * cellHeight,
+    //   (minion.pos[0] + 0.5) * cellWidth,
+    //   (minion.pos[1] + 0.5) * cellHeight,
+    //   (target.pos[0] + 0.5) * cellWidth,
+    //   (target.pos[1] + 0.5) * cellHeight,
     //   {
     //     strokeStyle: "red",
     //     lineWidth: 5,
@@ -120,8 +119,7 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
       drawUnit(
         ctx,
         {
-          x: node.x,
-          y: node.y,
+          pos: node.pos,
           fillStyle: "green",
           lineWidth: 1,
           strokeStyle: "black",
@@ -131,8 +129,8 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
       );
       text(
         ctx,
-        (node.x + 0.5) * cellWidth,
-        (node.y + 0.5) * cellHeight,
+        (node.pos[0] + 0.5) * cellWidth,
+        (node.pos[1] + 0.5) * cellHeight,
         `${node.fCost.toFixed(2)}`,
         {
           fillStyle: "orange",
@@ -145,8 +143,7 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
       drawUnit(
         ctx,
         {
-          x: node.x,
-          y: node.y,
+          pos: node.pos,
           fillStyle: "yellow",
           lineWidth: 1,
           strokeStyle: "black",
@@ -163,10 +160,10 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined) => {
         path[i + 1] &&
           line(
             ctx,
-            (path[i].x + 0.5) * cellWidth,
-            (path[i].y + 0.5) * cellHeight,
-            (path[i + 1].x + 0.5) * cellWidth,
-            (path[i + 1].y + 0.5) * cellHeight,
+            (path[i].pos[0] + 0.5) * cellWidth,
+            (path[i].pos[1] + 0.5) * cellHeight,
+            (path[i + 1].pos[0] + 0.5) * cellWidth,
+            (path[i + 1].pos[1] + 0.5) * cellHeight,
             {
               strokeStyle: "magenta",
               lineWidth: 1,
