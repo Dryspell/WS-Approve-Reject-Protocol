@@ -52,7 +52,7 @@ export function generateMinionsAndTargets(
     y: number;
     w: number;
   }[][],
-): [Unit[], Unit[]] {
+) {
   const walkableTerrain = terrain.map(row => row.filter(cell => cell.movementCost !== 255)).flat();
 
   const [minions, targets] = [[], []] as [Unit[], Unit[]];
@@ -100,5 +100,5 @@ export function generateMinionsAndTargets(
     targets[i].movementData = findPathToClosestTarget(targets[i], minions, terrain);
   }
 
-  return [minions, targets];
+  return minions.concat(targets);
 }

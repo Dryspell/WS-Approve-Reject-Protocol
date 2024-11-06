@@ -55,7 +55,6 @@ export function processCombatEvents(
   units: _canFight[],
   setGameChat: SetStoreFunction<GameChatMessage[]>,
   gameChat: GameChatMessage[],
-  setGameObjects: SetStoreFunction<{ readonly units: Unit[] }>,
 ) {
   combatEvents.reduce((acc, event) => {
     switch (event.type) {
@@ -69,11 +68,9 @@ export function processCombatEvents(
           message: `${activeUnit.name} rests and recovers ${event.staminaRecover} stamina!`,
           timestamp: Date.now(),
         });
-        setGameObjects(
-          "units",
-          unit => unit.id === activeUnit.id,
-          "stamina",
-          stamina => Math.min(stamina + event.staminaRecover, activeUnit.maxStamina),
+        activeUnit.stamina = Math.min(
+          activeUnit.stamina + event.staminaRecover,
+          activeUnit.maxStamina,
         );
         return acc;
       }
@@ -94,10 +91,12 @@ export function processCombatEvents(
         const attacker = units.find(p => p.id === attackerId);
         const defender = units.find(p => p.id === defenderId);
         if (!attacker) {
-          throw new Error("No attacker found");
+          console.error(`Could not find attacker with id ${attackerId}`);
+          return acc;
         }
         if (!defender) {
-          throw new Error("No defender found");
+          console.error(`Could not find defender with id ${defenderId}`);
+          return acc;
         }
 
         if (attackerDamageRoll === 0) {
@@ -155,18 +154,21 @@ export function processCombatEvents(
           return acc;
         }
 
-        setGameObjects(
-          "units",
-          unit => unit.id === defenderId,
-          "hp",
-          hp => hp - attackerDamageRoll,
-        );
-        setGameObjects(
-          "units",
-          unit => unit.id === attackerId,
-          "stamina",
-          stamina => stamina - 5,
-        );
+        defender.hp -= attackerDamageRoll;
+        if (defender.hp <= 0) {
+          setGameChat(gameChat.length, {
+            sender: attacker.id,
+            message: `${defender.name} has been defeated!`,
+            timestamp: Date.now(),
+          });
+
+          units.splice(
+            units.findIndex(p => p.id === defender.id),
+            1,
+          );
+        }
+
+        attacker.stamina -= 5;
       }
     }
   }, undefined);

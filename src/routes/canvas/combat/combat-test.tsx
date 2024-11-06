@@ -166,7 +166,6 @@ const DEFAULT_OBJECTS = {
 
 const gameTick = (
   gameObjects: typeof DEFAULT_OBJECTS,
-  setGameObjects: SetStoreFunction<typeof DEFAULT_OBJECTS>,
   gameChat: GameChatMessage[],
   setGameChat: SetStoreFunction<GameChatMessage[]>,
   gameEvents: GameEvent[],
@@ -183,7 +182,7 @@ const gameTick = (
     return generateCombatEvent(attacker, defender);
   });
 
-  processCombatEvents(newAttackEvents, gameObjects.units, setGameChat, gameChat, setGameObjects);
+  processCombatEvents(newAttackEvents, gameObjects.units, setGameChat, gameChat);
 
   setGameEvents([...gameEvents, ...newAttackEvents]);
 };
@@ -215,7 +214,7 @@ export default function Game() {
           }}
           onClick={() => {
             console.log("Ticking game...");
-            gameTick(gameObjects, setGameObjects, gameChat, setGameChat, gameEvents, setGameEvents);
+            gameTick(gameObjects, gameChat, setGameChat, gameEvents, setGameEvents);
             const chatBox = chatBoxRef();
             if (chatBox) {
               chatBox.scrollTop = chatBox.scrollHeight;

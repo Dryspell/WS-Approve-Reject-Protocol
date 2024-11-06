@@ -30,7 +30,7 @@ import { getMousePosition } from "../utils";
 const initializeGame = (
   gameCanvas: HTMLCanvasElement | undefined,
   terrain: ReturnType<typeof generateTerrain>,
-  gameObjects: { units: Unit[] },
+  units: Unit[],
 ) => {
   if (!gameCanvas) {
     console.error("Canvas element is not defined");
@@ -46,12 +46,12 @@ const initializeGame = (
     height: number,
   ];
 
-  const renderGame = (gameObjects: { units: Unit[] }) => {
+  const renderGame = (units: Unit[]) => {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
     renderGrid(ctx, terrain, canvasWidth, canvasHeight, cellWidth, cellHeight);
 
-    for (const unit of gameObjects.units) {
+    for (const unit of units) {
       drawUnit(ctx, unit, cellWidth, cellHeight);
       if (unit.movementData?.path?.length) {
         for (let i = 0; i < unit.movementData.path.length; i++) {
@@ -74,7 +74,7 @@ const initializeGame = (
     // requestAnimationFrame(gameLoop);
   };
 
-  renderGame(gameObjects);
+  renderGame(units);
   console.log("Game initialized");
 
   return renderGame;
@@ -96,18 +96,29 @@ export default function Game() {
 
   const terrain = generateTerrain(CANVAS_WIDTH, CANVAS_HEIGHT, cellWidth, cellHeight);
 
-  const [minions, targets] = generateMinionsAndTargets(cellWidth, cellHeight, terrain);
+  const units = generateMinionsAndTargets(cellWidth, cellHeight, terrain);
 
   const [terrainHoverData, setTerrainHoverData] = createSignal<
     ReturnType<typeof applyTerrain>[number][number] | undefined
   >();
   const [minionHoverData, setMinionHoverData] = createSignal<Unit | undefined>();
 
-  let renderGame = (gameObjects: { units: Unit[] }) => {};
+  let renderGame = (units: Unit[]) => {};
 
   const tick = () => {
     console.log("Ticked");
     const combatEvents = [] as CombatEvent[];
+    const [minions, targets] = units.reduce(
+      (acc, unit) => {
+        if (unit.type === "minion") {
+          acc[0].push(unit);
+        } else {
+          acc[1].push(unit);
+        }
+        return acc;
+      },
+      [[] as Unit[], [] as Unit[]],
+    );
 
     for (const minion of minions) {
       const nearbyTarget = isAdjacentTo(minion, targets);
@@ -117,7 +128,7 @@ export default function Game() {
         );
         combatEvents.push(generateCombatEvent(minion, nearbyTarget));
       } else {
-        debugger;
+        // debugger;
         handleUnitMovement(minion, targets, minions, terrain);
       }
     }
@@ -133,17 +144,23 @@ export default function Game() {
       }
     }
 
-    processCombatEvents(combatEvents, [...minions, ...targets], setGameChat, gameChat, setGameObjects);
+    processCombatEvents(combatEvents, units, setGameChat, gameChat);
+
     setGameEvents([...gameEvents, ...combatEvents]);
 
-    renderGame(gameObjects);
+    renderGame(units);
+
+    const chatBox = chatBoxRef();
+    if (chatBox) {
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
   };
 
   onMount(() => {
     const gc = gameCanvas();
     if (gc) {
       console.log("Initializing game...");
-      renderGame = initializeGame(gc, terrain, gameObjects);
+      renderGame = initializeGame(gc, terrain, units);
 
       gc.addEventListener("mousemove", event => {
         getMousePosition(gc, event, (x, y) => {
@@ -160,11 +177,9 @@ export default function Game() {
             setTerrainHoverData(undefined);
           }
 
-          const hoveredMinion = m
-            .concat(t)
-            .find(
-              minion => minion.pos[0] === hoveredCellPos[0] && minion.pos[1] === hoveredCellPos[1],
-            );
+          const hoveredMinion = units.find(
+            unit => unit.pos[0] === hoveredCellPos[0] && unit.pos[1] === hoveredCellPos[1],
+          );
           if (hoveredMinion) {
             console.log(
               `Hovering over minion at (${hoveredMinion.pos[0]}, ${hoveredMinion.pos[1]})`,
