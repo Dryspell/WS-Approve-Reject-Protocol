@@ -52,7 +52,7 @@ export const generateCombatEvent = (attacker: _canFight, defender: _canFight) =>
 
 export function processCombatEvents(
   combatEvents: CombatEvent[],
-  units: _canFight[],
+  units: Unit[],
   setGameChat: SetStoreFunction<GameChatMessage[]>,
   gameChat: GameChatMessage[],
 ) {
@@ -68,6 +68,7 @@ export function processCombatEvents(
           message: `${activeUnit.name} rests and recovers ${event.staminaRecover} stamina!`,
           timestamp: Date.now(),
         });
+
         activeUnit.stamina = Math.min(
           activeUnit.stamina + event.staminaRecover,
           activeUnit.maxStamina,
@@ -154,7 +155,9 @@ export function processCombatEvents(
           return acc;
         }
 
+        attacker.stamina -= 5;
         defender.hp -= attackerDamageRoll;
+
         if (defender.hp <= 0) {
           setGameChat(gameChat.length, {
             sender: attacker.id,
@@ -167,8 +170,6 @@ export function processCombatEvents(
             1,
           );
         }
-
-        attacker.stamina -= 5;
       }
     }
   }, undefined);

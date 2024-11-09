@@ -9,7 +9,7 @@ import {
   RiMediaSpeedFill,
 } from "solid-icons/ri";
 import { isAdjacentTo } from "~/lib/canvas/pathfinding/utils";
-import { createStore, SetStoreFunction } from "solid-js/store";
+import { createStore, SetStoreFunction, createMutable } from "solid-js/store";
 import {
   _hasCombatData,
   _hasIdentificationData,
@@ -96,7 +96,7 @@ export default function Game() {
 
   const terrain = generateTerrain(CANVAS_WIDTH, CANVAS_HEIGHT, cellWidth, cellHeight);
 
-  const units = generateMinionsAndTargets(cellWidth, cellHeight, terrain);
+  const units = createMutable(generateMinionsAndTargets(cellWidth, cellHeight, terrain));
 
   const [terrainHoverData, setTerrainHoverData] = createSignal<
     ReturnType<typeof applyTerrain>[number][number] | undefined
@@ -120,6 +120,15 @@ export default function Game() {
       [[] as Unit[], [] as Unit[]],
     );
 
+    const terrainBlockedByUnits = terrain.map(row =>
+      row.map(cell => ({
+        ...cell,
+        movementCost: units.some(unit => unit.pos[0] === cell.x && unit.pos[1] === cell.y)
+          ? 255
+          : cell.movementCost,
+      })),
+    );
+
     for (const minion of minions) {
       const nearbyTarget = isAdjacentTo(minion, targets);
       if (nearbyTarget) {
@@ -129,7 +138,7 @@ export default function Game() {
         combatEvents.push(generateCombatEvent(minion, nearbyTarget));
       } else {
         // debugger;
-        handleUnitMovement(minion, targets, minions, terrain);
+        handleUnitMovement(minion, targets, minions, terrainBlockedByUnits);
       }
     }
     for (const enemy of targets) {
@@ -140,14 +149,12 @@ export default function Game() {
         );
         combatEvents.push(generateCombatEvent(enemy, nearbyMinion));
       } else {
-        handleUnitMovement(enemy, targets, minions, terrain);
+        handleUnitMovement(enemy, targets, minions, terrainBlockedByUnits);
       }
     }
 
     processCombatEvents(combatEvents, units, setGameChat, gameChat);
-
     setGameEvents([...gameEvents, ...combatEvents]);
-
     renderGame(units);
 
     const chatBox = chatBoxRef();

@@ -1,11 +1,39 @@
 import { Accessor, createSignal, For, onMount, Setter } from "solid-js";
-import { createStore, SetStoreFunction } from "solid-js/store";
+import { createMutable, createStore, SetStoreFunction } from "solid-js/store";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Progress, ProgressLabel, ProgressValueLabel } from "~/components/ui/progress";
 import { GameChatMessage, GameEvent, Unit } from "./types";
 import { generateCombatEvent, processCombatEvents } from "./combatEvents";
 import { defaultCombatData } from "../armies/init";
+
+const CANVAS_WIDTH = 800;
+const CANVAS_HEIGHT = 600;
+
+const DEFAULT_OBJECTS = {
+  units: [
+    {
+      type: "player",
+      id: "player1",
+      name: "Player 1",
+      fillStyle: "maroon",
+      pos: [150, 300],
+      dims: [100, 100],
+      velocity: [1, 1],
+      ...defaultCombatData(),
+    },
+    {
+      type: "player",
+      id: "player2",
+      name: "Player 2",
+      fillStyle: "navy",
+      pos: [550, 300],
+      dims: [100, 100],
+      velocity: [1, 1],
+      ...defaultCombatData(),
+    },
+  ] as Unit[],
+} as const;
 
 const createRect = (
   ctx: CanvasRenderingContext2D,
@@ -21,8 +49,7 @@ const createRect = (
 
 const initializeGame = (
   gameCanvas: HTMLCanvasElement | undefined,
-  gameObjects: typeof DEFAULT_OBJECTS,
-  setGameObjects: SetStoreFunction<typeof DEFAULT_OBJECTS>,
+  units: typeof DEFAULT_OBJECTS.units,
 ) => {
   if (!gameCanvas) {
     console.error("Canvas element is not defined");
@@ -53,9 +80,7 @@ const initializeGame = (
     //   };
     // });
 
-    gameObjects.units.forEach(player =>
-      createRect(ctx, ...player.pos, ...player.dims, player.fillStyle),
-    );
+    units.forEach(player => createRect(ctx, ...player.pos, ...player.dims, player.fillStyle));
 
     requestAnimationFrame(dvdBounceGameLoop);
   };
@@ -136,43 +161,15 @@ const FollowingUI = (props: {
   );
 };
 
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 600;
-
-const DEFAULT_OBJECTS = {
-  units: [
-    {
-      type: "player",
-      id: "player1",
-      name: "Player 1",
-      fillStyle: "maroon",
-      pos: [150, 300],
-      dims: [100, 100],
-      velocity: [1, 1],
-      ...defaultCombatData(),
-    },
-    {
-      type: "player",
-      id: "player2",
-      name: "Player 2",
-      fillStyle: "navy",
-      pos: [550, 300],
-      dims: [100, 100],
-      velocity: [1, 1],
-      ...defaultCombatData(),
-    },
-  ] as Unit[],
-} as const;
-
 const gameTick = (
-  gameObjects: typeof DEFAULT_OBJECTS,
+  units: Unit[],
   gameChat: GameChatMessage[],
   setGameChat: SetStoreFunction<GameChatMessage[]>,
   gameEvents: GameEvent[],
   setGameEvents: SetStoreFunction<GameEvent[]>,
 ) => {
-  const attackers = gameObjects.units;
-  const defenders = gameObjects.units;
+  const attackers = units;
+  const defenders = units;
 
   const newAttackEvents = attackers.map(attacker => {
     const defender = defenders.find(p => p.id !== attacker.id);
@@ -182,7 +179,7 @@ const gameTick = (
     return generateCombatEvent(attacker, defender);
   });
 
-  processCombatEvents(newAttackEvents, gameObjects.units, setGameChat, gameChat);
+  processCombatEvents(newAttackEvents, units, setGameChat, gameChat);
 
   setGameEvents([...gameEvents, ...newAttackEvents]);
 };
@@ -190,14 +187,14 @@ const gameTick = (
 export default function Game() {
   const [gameCanvas, setGameCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);
 
-  const [gameObjects, setGameObjects] = createStore(DEFAULT_OBJECTS);
+  const units = createMutable(DEFAULT_OBJECTS.units);
 
   const [chatBoxRef, setChatBoxRef] = createSignal<HTMLDivElement | undefined>(undefined);
   const [gameChat, setGameChat] = createStore([] as GameChatMessage[]);
   const [gameEvents, setGameEvents] = createStore([] as GameEvent[]);
 
   onMount(() => {
-    gameCanvas() && initializeGame(gameCanvas(), gameObjects, setGameObjects);
+    gameCanvas() && initializeGame(gameCanvas(), units);
     // console.log(gameObjects.players);
   });
 
@@ -214,7 +211,7 @@ export default function Game() {
           }}
           onClick={() => {
             console.log("Ticking game...");
-            gameTick(gameObjects, gameChat, setGameChat, gameEvents, setGameEvents);
+            gameTick(units, gameChat, setGameChat, gameEvents, setGameEvents);
             const chatBox = chatBoxRef();
             if (chatBox) {
               chatBox.scrollTop = chatBox.scrollHeight;
@@ -224,7 +221,7 @@ export default function Game() {
           Tick
         </Button>
 
-        {gameObjects.units.map((player: Unit) => (
+        {units.map((player: Unit) => (
           <FollowingUI player={player} gameCanvas={gameCanvas} />
         ))}
         <canvas
