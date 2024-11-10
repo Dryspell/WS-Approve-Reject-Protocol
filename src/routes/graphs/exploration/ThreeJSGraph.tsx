@@ -1,7 +1,14 @@
-import { onMount } from "solid-js";
+// ThreeJSGraph.tsx
+import { onMount, createSignal } from "solid-js";
+import Timeline from "./Timeline";
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import Graph from "graphology";
+import {
+  addAxesHelper,
+  addGridHelpers,
+  initSceneAndControls,
+  populateGraphScene,
+} from "./threeUtils";
 
 interface ThreeJSGraphProps {
   graph: Graph;
@@ -11,74 +18,205 @@ interface ThreeJSGraphProps {
 
 export default function ThreeJSGraph({ graph, width, height }: ThreeJSGraphProps) {
   let containerRef: HTMLDivElement | undefined;
+  const [hoveredNodeInfo, setHoveredNodeInfo] = createSignal<{
+    label: string;
+    coordinates: number[];
+  } | null>(null);
+  const [showGrid, setShowGrid] = createSignal(false);
+  const [isPlaying, setIsPlaying] = createSignal(false);
+  const [timeDirection, setTimeDirection] = createSignal(1); // Control playback speed and direction
+  const [currentTransformationIndex, setCurrentTransformationIndex] = createSignal(0);
+  const [interpolationFactor, setInterpolationFactor] = createSignal(0);
+
+  const transformations = [
+    new THREE.Matrix4().makeRotationY(Math.PI / 4),
+    new THREE.Matrix4().makeScale(1.5, 1.5, 1.5),
+    new THREE.Matrix4().makeRotationZ(Math.PI / 4),
+    new THREE.Matrix4().makeTranslation(1, 0, 0),
+  ];
+
+  const initialPositions: THREE.Vector3[] = [];
+  const targetPositions: THREE.Vector3[] = [];
+  const nodeMeshes: THREE.Mesh[] = [];
+  let animationFrameId: number | null = null;
+  let mouse = new THREE.Vector2();
+  let raycaster = new THREE.Raycaster();
 
   onMount(() => {
     if (!containerRef) return;
 
-    // Set up the scene
-    const scene = new THREE.Scene();
-    scene.rotation.x = -Math.PI / 2; // Rotate the scene so Z-axis is up
+    const { scene, renderer, controls, camera } = initSceneAndControls(width, height, containerRef);
+    addAxesHelper(scene);
+    addGridHelpers(showGrid, scene);
+    populateGraphScene(graph, initialPositions, targetPositions, nodeMeshes, scene);
 
-    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    camera.position.set(3, 3, 3); // Set initial camera position
+    const onMouseMove = (event: MouseEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    };
+    window.addEventListener("mousemove", onMouseMove);
 
-    const renderer = new THREE.WebGLRenderer();
-    renderer.setSize(width, height);
-    renderer.setClearColor(new THREE.Color("#f0f0f0")); // Set the background color to light gray
-    containerRef.appendChild(renderer.domElement);
-
-    // Set up OrbitControls
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.25;
-    controls.enableZoom = true;
-
-    // Add AxesHelper to visualize X, Y, Z axes
-    const axesHelper = new THREE.AxesHelper(2); // Length of each axis
-    scene.add(axesHelper);
-
-    // Create nodes and edges in the scene
-    graph.forEachNode((node, attr) => {
-      const color = new THREE.Color(attr.color || "blue");
-      const material = new THREE.MeshBasicMaterial({ color });
-      const geometry = new THREE.SphereGeometry(0.1, 16, 16);
-      const sphere = new THREE.Mesh(geometry, material);
-
-      const [x, y, z] = attr.coordinates;
-      sphere.position.set(x, y, z || 0); // Use 0 for Z if it is undefined
-      scene.add(sphere);
-    });
-
-    graph.forEachEdge((edge, attr, source, target) => {
-      const sourceNode = graph.getNodeAttributes(source);
-      const targetNode = graph.getNodeAttributes(target);
-
-      const sourcePosition = new THREE.Vector3(...sourceNode.coordinates);
-      const targetPosition = new THREE.Vector3(...targetNode.coordinates);
-
-      const material = new THREE.LineBasicMaterial({ color: attr.color || 0xffffff });
-      const geometry = new THREE.BufferGeometry().setFromPoints([sourcePosition, targetPosition]);
-
-      const line = new THREE.Line(geometry, material);
-      scene.add(line);
-    });
-
-    // Animation loop
     const animate = () => {
-      requestAnimationFrame(animate);
       controls.update();
+
+      if (isPlaying()) {
+        const factor = interpolationFactor() + timeDirection() * 0.02;
+        setInterpolationFactor(factor);
+
+        if (factor >= 1 || factor <= 0) {
+          setInterpolationFactor(timeDirection() > 0 ? 0 : 1);
+
+          const newIndex = currentTransformationIndex() + (timeDirection() > 0 ? 1 : -1);
+          if (newIndex >= transformations.length || newIndex < 0) {
+            setIsPlaying(false);
+            setCurrentTransformationIndex(
+              Math.max(0, Math.min(transformations.length - 1, newIndex)),
+            );
+            return;
+          }
+          setCurrentTransformationIndex(newIndex);
+
+          nodeMeshes.forEach((node, index) => {
+            initialPositions[index].copy(node.position);
+            targetPositions[index]
+              .copy(initialPositions[index])
+              .applyMatrix4(transformations[newIndex]);
+          });
+        }
+
+        nodeMeshes.forEach((node, index) => {
+          node.position.lerpVectors(
+            initialPositions[index],
+            targetPositions[index],
+            Math.abs(interpolationFactor()),
+          );
+        });
+      }
+
+      // Render hover effect
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(nodeMeshes);
+      if (intersects.length > 0) {
+        const { label, coordinates } = intersects[0].object.userData;
+        setHoveredNodeInfo({ label, coordinates });
+      } else {
+        setHoveredNodeInfo(null);
+      }
+
       renderer.render(scene, camera);
+      animationFrameId = requestAnimationFrame(animate);
     };
     animate();
 
-    // Clean up on component unmount
     return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
       renderer.dispose();
       controls.dispose();
     };
   });
 
+  const handlePlayPause = () => {
+    setIsPlaying(!isPlaying());
+    if (!isPlaying()) setInterpolationFactor(timeDirection() > 0 ? 0 : 1);
+  };
+
+  const handleDirectionToggle = () => {
+    setTimeDirection(-timeDirection());
+    if (isPlaying()) setInterpolationFactor(timeDirection() > 0 ? 0 : 1);
+  };
+
+  const handleSpeedChange = (event: Event) => {
+    const speed = parseFloat((event.target as HTMLInputElement).value);
+    setTimeDirection(Math.sign(timeDirection()) * speed);
+  };
+
+  const handleScrub = (index: number, factor: number) => {
+    setCurrentTransformationIndex(index);
+    setInterpolationFactor(factor);
+    setIsPlaying(false);
+
+    // Reset all nodes to their initial positions
+    nodeMeshes.forEach((node, nodeIndex) => {
+      node.position.copy(initialPositions[nodeIndex]);
+    });
+
+    // Apply all transformations up to the current index
+    nodeMeshes.forEach((node, nodeIndex) => {
+      for (let i = 0; i < index; i++) {
+        // Apply each transformation fully for previous steps
+        node.position.applyMatrix4(transformations[i]);
+      }
+
+      if (index < transformations.length) {
+        // For the current step, apply the transformation partially based on factor
+        const initialPosition = new THREE.Vector3().copy(node.position);
+        const targetPosition = new THREE.Vector3()
+          .copy(node.position)
+          .applyMatrix4(transformations[index]);
+
+        // Interpolate between the initial and target position based on factor
+        node.position.lerpVectors(initialPosition, targetPosition, factor);
+      }
+    });
+  };
+
   return (
-    <div ref={el => (containerRef = el)} style={{ width: `${width}px`, height: `${height}px` }} />
+    <div style={{ position: "relative", width: `${width}px`, height: `${height + 80}px` }}>
+      <div ref={el => (containerRef = el)} style={{ width: `${width}px`, height: `${height}px` }} />
+      {hoveredNodeInfo() && (
+        <div
+          style={{
+            position: "absolute",
+            top: "10px",
+            left: "10px",
+            padding: "8px",
+            "background-color": "rgba(255, 255, 255, 0.8)",
+            "border-radius": "4px",
+            "pointer-events": "none",
+          }}
+        >
+          <p>
+            <strong>{hoveredNodeInfo()!.label}</strong>
+          </p>
+          <p>Coordinates: ({hoveredNodeInfo()!.coordinates.join(", ")})</p>
+        </div>
+      )}
+      <Timeline
+        transformations={transformations.length}
+        currentIndex={currentTransformationIndex}
+        interpolationFactor={interpolationFactor}
+        onScrub={handleScrub}
+      />
+      <div style={{ position: "absolute", top: "10px", right: "10px" }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={showGrid()}
+            onChange={e => setShowGrid(e.currentTarget.checked)}
+          />
+          Show Grid
+        </label>
+        <button onClick={handlePlayPause} style={{ "margin-left": "10px" }}>
+          {isPlaying() ? "Pause" : "Play"}
+        </button>
+        <button onClick={handleDirectionToggle} style={{ "margin-left": "10px" }}>
+          {timeDirection() > 0 ? "Reverse" : "Forward"}
+        </button>
+        <label style={{ "margin-left": "10px" }}>
+          Speed:
+          <input
+            type="range"
+            min="0.1"
+            max="2"
+            step="0.1"
+            value={Math.abs(timeDirection())}
+            onInput={handleSpeedChange}
+            style={{ "margin-left": "5px" }}
+          />
+        </label>
+      </div>
+    </div>
   );
 }
