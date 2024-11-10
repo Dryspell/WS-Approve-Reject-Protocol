@@ -1,42 +1,54 @@
 import Graph from "graphology";
-import { createSignal, onMount } from "solid-js";
-import { applyLayout } from "./layout";
+import { Accessor, createMemo, createSignal, onMount } from "solid-js";
 import {
-  assignIndependentCoordinates,
   createAdjacencyMatrix,
-  createCoordinateMatrix,
   createIncidenceMatrix,
 } from "./matrixUtils";
 import MatrixTable from "./MatrixTable";
 import ThreeJSGraph from "./ThreeJSGraph";
-
-const createGraph = (): Graph => {
-  const graph = new Graph();
-  graph.addNode("1", { label: "Node 1", size: 10, color: "blue" });
-  graph.addNode("2", { label: "Node 2", size: 20, color: "red" });
-  graph.addNode("3", { label: "Node 3", size: 15, color: "green" });
-  graph.addEdge("1", "2", { size: 5, color: "purple" });
-  graph.addEdge("2", "3", { size: 5, color: "orange" });
-  graph.addEdge("1", "3", { size: 5, color: "grey" });
-
-  applyLayout(graph);
-  assignIndependentCoordinates(graph); // Assign independent coordinates for each node
-  return graph;
-};
+import { createK3Graph } from "./graphUtils";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 
+function CoordinateMatrix(props: {
+  coordinates: Accessor<{ [key: string]: [number, number, number] }>;
+}) {
+  const cm = createMemo(() =>
+    Object.entries(props.coordinates()).reduce(
+      ({ matrix, labels }, [node, coords]) => ({
+        matrix: [...matrix, coords],
+        labels: [...labels, node],
+      }),
+      { matrix: [] as [number, number, number][], labels: [] as string[] },
+    ),
+  );
+
+  return (
+    <MatrixTable
+      title="Coordinate Matrix"
+      rowLabels={cm().labels}
+      colLabels={(cm().matrix?.[0] ?? []).map((_, i) => `D${i + 1}`)}
+      matrix={cm().matrix}
+      rounding={2}
+    />
+  );
+}
+
 export default function GraphPage() {
   const [canvas, setCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);
-  const graph = createGraph();
+  const graph = createK3Graph();
   const { matrix: adjacencyMatrix, labels: adjacencyLabels } = createAdjacencyMatrix(graph);
   const {
     matrix: incidenceMatrix,
     rowLabels: incidenceRowLabels,
     colLabels: incidenceColLabels,
   } = createIncidenceMatrix(graph);
-  const { matrix: coordinateMatrix, labels: coordinateLabels } = createCoordinateMatrix(graph);
+  const [coordinates, setCoordinates] = createSignal<{ [key: string]: [number, number, number] }>(
+    {},
+  );
+
+  // const { matrix: coordinateMatrix, labels: coordinateLabels } = createCoordinateMatrix(graph);
 
   onMount(() => {
     const canvasContext = canvas()?.getContext("2d");
@@ -96,7 +108,12 @@ export default function GraphPage() {
         </div>
 
         {/* ThreeJS Graph */}
-        <ThreeJSGraph graph={graph} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
+        <ThreeJSGraph
+          graph={graph}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          setCoordinates={setCoordinates}
+        />
       </div>
 
       {/* Matrix Tables */}
@@ -113,12 +130,7 @@ export default function GraphPage() {
           colLabels={incidenceColLabels}
           matrix={incidenceMatrix}
         />
-        <MatrixTable
-          title="Coordinate Matrix"
-          rowLabels={coordinateLabels}
-          colLabels={coordinateMatrix[0].map((_, i) => `D${i + 1}`)}
-          matrix={coordinateMatrix}
-        />
+        <CoordinateMatrix coordinates={coordinates} />
       </div>
     </main>
   );

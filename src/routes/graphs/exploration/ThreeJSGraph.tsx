@@ -1,22 +1,28 @@
 // ThreeJSGraph.tsx
-import { onMount, createSignal } from "solid-js";
+import { onMount, createSignal, Setter } from "solid-js";
 import Timeline from "./Timeline";
 import * as THREE from "three";
 import Graph from "graphology";
 import {
   addAxesHelper,
   addGridHelpers,
+  drawEdges,
   initSceneAndControls,
   populateGraphScene,
+  updateEdges,
 } from "./threeUtils";
+import { updateCoordinates } from "./matrixUtils";
 
 interface ThreeJSGraphProps {
   graph: Graph;
   width: number;
   height: number;
+  setCoordinates: Setter<{
+    [key: string]: [number, number, number];
+  }>;
 }
 
-export default function ThreeJSGraph({ graph, width, height }: ThreeJSGraphProps) {
+export default function ThreeJSGraph(props: ThreeJSGraphProps) {
   let containerRef: HTMLDivElement | undefined;
   const [hoveredNodeInfo, setHoveredNodeInfo] = createSignal<{
     label: string;
@@ -38,6 +44,9 @@ export default function ThreeJSGraph({ graph, width, height }: ThreeJSGraphProps
   const initialPositions: THREE.Vector3[] = [];
   const targetPositions: THREE.Vector3[] = [];
   const nodeMeshes: THREE.Mesh[] = [];
+  const nodeMeshMap: { [nodeId: string]: THREE.Mesh } = {}; // Map for quick access to node meshes
+  const edges: THREE.LineSegments[] = [];
+
   let animationFrameId: number | null = null;
   let mouse = new THREE.Vector2();
   let raycaster = new THREE.Raycaster();
@@ -45,10 +54,22 @@ export default function ThreeJSGraph({ graph, width, height }: ThreeJSGraphProps
   onMount(() => {
     if (!containerRef) return;
 
-    const { scene, renderer, controls, camera } = initSceneAndControls(width, height, containerRef);
+    const { scene, renderer, controls, camera } = initSceneAndControls(
+      props.width,
+      props.height,
+      containerRef,
+    );
     addAxesHelper(scene);
     addGridHelpers(showGrid, scene);
-    populateGraphScene(graph, initialPositions, targetPositions, nodeMeshes, scene);
+    populateGraphScene(
+      props.graph,
+      initialPositions,
+      targetPositions,
+      nodeMeshes,
+      nodeMeshMap,
+      scene,
+    );
+    props.setCoordinates(updateCoordinates(props.graph, nodeMeshMap));
 
     const onMouseMove = (event: MouseEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
@@ -56,6 +77,9 @@ export default function ThreeJSGraph({ graph, width, height }: ThreeJSGraphProps
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     };
     window.addEventListener("mousemove", onMouseMove);
+
+    // Draw edges between nodes using the utility function
+    drawEdges(props.graph, nodeMeshMap, scene, edges);
 
     const animate = () => {
       controls.update();
@@ -92,6 +116,10 @@ export default function ThreeJSGraph({ graph, width, height }: ThreeJSGraphProps
             Math.abs(interpolationFactor()),
           );
         });
+
+        // Update coordinates and edges based on the latest node positions
+        props.setCoordinates(updateCoordinates(props.graph, nodeMeshMap));
+        updateEdges(props.graph, nodeMeshMap, edges);
       }
 
       // Render hover effect
@@ -160,11 +188,20 @@ export default function ThreeJSGraph({ graph, width, height }: ThreeJSGraphProps
         node.position.lerpVectors(initialPosition, targetPosition, factor);
       }
     });
+
+    // Update coordinates and edges based on the latest node positions
+    props.setCoordinates(updateCoordinates(props.graph, nodeMeshMap));
+    updateEdges(props.graph, nodeMeshMap, edges);
   };
 
   return (
-    <div style={{ position: "relative", width: `${width}px`, height: `${height + 80}px` }}>
-      <div ref={el => (containerRef = el)} style={{ width: `${width}px`, height: `${height}px` }} />
+    <div
+      style={{ position: "relative", width: `${props.width}px`, height: `${props.height + 80}px` }}
+    >
+      <div
+        ref={el => (containerRef = el)}
+        style={{ width: `${props.width}px`, height: `${props.height}px` }}
+      />
       {hoveredNodeInfo() && (
         <div
           style={{

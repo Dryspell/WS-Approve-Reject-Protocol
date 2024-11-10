@@ -24,6 +24,50 @@ export function initSceneAndControls(width: number, height: number, containerRef
   return { scene, renderer, controls, camera };
 }
 
+// Function to draw edges between nodes
+export function drawEdges(
+  graph: Graph,
+  nodeMeshMap: { [nodeId: string]: THREE.Mesh },
+  scene: THREE.Scene,
+  edges: THREE.LineSegments[],
+) {
+  graph.forEachEdge((edge, attributes, source, target) => {
+    const material = new THREE.LineBasicMaterial({ color: attributes.color || "gray" });
+    const geometry = new THREE.BufferGeometry();
+
+    const sourceNode = nodeMeshMap[source];
+    const targetNode = nodeMeshMap[target];
+    geometry.setFromPoints([sourceNode.position, targetNode.position]);
+
+    const line = new THREE.LineSegments(geometry, material);
+    edges.push(line);
+    scene.add(line);
+  });
+}
+
+// Function to update edge positions based on the latest node positions
+export function updateEdges(
+  graph: Graph,
+  nodeMeshMap: { [nodeId: string]: THREE.Mesh },
+  edges: THREE.LineSegments[],
+) {
+  graph.forEachEdge((edge, attributes, source, target) => {
+    const sourceNode = nodeMeshMap[source];
+    const targetNode = nodeMeshMap[target];
+    const line = edges[graph.edges().indexOf(edge)];
+
+    const positions = line.geometry.attributes.position.array as Float32Array;
+    positions[0] = sourceNode.position.x;
+    positions[1] = sourceNode.position.y;
+    positions[2] = sourceNode.position.z;
+    positions[3] = targetNode.position.x;
+    positions[4] = targetNode.position.y;
+    positions[5] = targetNode.position.z;
+
+    line.geometry.attributes.position.needsUpdate = true;
+  });
+}
+
 export function populateGraphScene(
   graph: Graph,
   initialPositions: THREE.Vector3[],
@@ -33,6 +77,7 @@ export function populateGraphScene(
     THREE.Material | THREE.Material[],
     THREE.Object3DEventMap
   >[],
+  nodeMeshMap: { [nodeId: string]: THREE.Mesh },
   scene: THREE.Scene,
 ) {
   graph.forEachNode((node, attr) => {
@@ -49,6 +94,10 @@ export function populateGraphScene(
     initialPositions.push(position.clone());
     targetPositions.push(position.clone());
     nodeMeshes.push(sphere);
+
+    // Populate nodeMeshMap with node IDs and their respective meshes
+    nodeMeshMap[node] = nodeMeshes[graph.nodes().indexOf(node)];
+
     scene.add(sphere);
   });
 

@@ -1,4 +1,5 @@
 import Graph from "graphology";
+import type * as THREE from "three";
 
 // Adjacency matrix function
 export const createAdjacencyMatrix = (graph: Graph) => {
@@ -73,3 +74,18 @@ export const createCoordinateMatrix = (graph: Graph) => {
 
   return { matrix, labels };
 };
+
+// Function to update coordinates matrix with the latest node positions
+export function updateCoordinates(
+  graph: Graph,
+  nodeMeshMap: { [nodeId: string]: THREE.Mesh },
+): { [key: string]: [number, number, number] } {
+  const newCoordinates: { [key: string]: [number, number, number] } = {};
+  graph.forEachNode((nodeId, attr) => {
+    const nodeMesh = nodeMeshMap[nodeId];
+    newCoordinates[attr.label] = [nodeMesh.position.x, nodeMesh.position.y, nodeMesh.position.z];
+  });
+
+  // console.log("New coordinates", newCoordinates);
+  return newCoordinates;
+}
