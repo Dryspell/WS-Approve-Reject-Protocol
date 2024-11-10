@@ -1,4 +1,3 @@
-import Graph from "graphology";
 import { Accessor, createMemo, createSignal, onMount } from "solid-js";
 import {
   createAdjacencyMatrix,
@@ -6,7 +5,7 @@ import {
 } from "./matrixUtils";
 import MatrixTable from "./MatrixTable";
 import ThreeJSGraph from "./ThreeJSGraph";
-import { createK3Graph } from "./graphUtils";
+import { createK3Graph, createVGraph } from "./graphUtils";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -37,7 +36,7 @@ function CoordinateMatrix(props: {
 
 export default function GraphPage() {
   const [canvas, setCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);
-  const graph = createK3Graph();
+  const graph = createVGraph();
   const { matrix: adjacencyMatrix, labels: adjacencyLabels } = createAdjacencyMatrix(graph);
   const {
     matrix: incidenceMatrix,

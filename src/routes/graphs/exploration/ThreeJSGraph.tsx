@@ -1,15 +1,17 @@
 // ThreeJSGraph.tsx
-import { onMount, createSignal, Setter } from "solid-js";
+import { onMount, createSignal, Setter, createEffect } from "solid-js";
 import Timeline from "./Timeline";
 import * as THREE from "three";
 import Graph from "graphology";
 import {
   addAxesHelper,
   addGridHelpers,
+  createSpheresAndIntersections,
   drawEdges,
   initSceneAndControls,
   populateGraphScene,
   updateEdges,
+  updateSpheresAndIntersections,
 } from "./threeUtils";
 import { updateCoordinates } from "./matrixUtils";
 
@@ -24,6 +26,11 @@ interface ThreeJSGraphProps {
 
 export default function ThreeJSGraph(props: ThreeJSGraphProps) {
   let containerRef: HTMLDivElement | undefined;
+
+  // Define signals for scene, camera, and renderer
+  const [camera, setCamera] = createSignal<THREE.PerspectiveCamera | null>(null);
+  const [renderer, setRenderer] = createSignal<THREE.WebGLRenderer | null>(null);
+
   const [hoveredNodeInfo, setHoveredNodeInfo] = createSignal<{
     label: string;
     coordinates: number[];
@@ -33,6 +40,12 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
   const [timeDirection, setTimeDirection] = createSignal(1); // Control playback speed and direction
   const [currentTransformationIndex, setCurrentTransformationIndex] = createSignal(0);
   const [interpolationFactor, setInterpolationFactor] = createSignal(0);
+
+  const [showSpheres, setShowSpheres] = createSignal(true);
+  const [showIntersections, setShowIntersections] = createSignal(true);
+  const spheres: THREE.Mesh[] = []; // Array to hold sphere meshes
+  const circles: THREE.Mesh[] = []; // Array to hold sphere meshes
+  const intersectionPoints: THREE.Mesh[] = []; // Array to hold intersection markers
 
   const transformations = [
     new THREE.Matrix4().makeRotationY(Math.PI / 4),
@@ -51,14 +64,49 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
   let mouse = new THREE.Vector2();
   let raycaster = new THREE.Raycaster();
 
+  const scene = new THREE.Scene();
+  const [animate, setAnimate] = createSignal(() => {});
+
+  createEffect(() => {
+    if (!containerRef || !spheres.length) return;
+
+    spheres.forEach(sphere => (sphere.visible = showSpheres()));
+    updateSpheresAndIntersections(
+      scene,
+      props.graph,
+      nodeMeshMap,
+      spheres,
+      circles,
+      intersectionPoints,
+    );
+  });
+  createEffect(() => {
+    if (!containerRef || !(circles.length || intersectionPoints.length)) return;
+
+    circles.forEach(circle => (circle.visible = showIntersections()));
+    intersectionPoints.forEach(point => (point.visible = showIntersections()));
+    updateSpheresAndIntersections(
+      scene,
+      props.graph,
+      nodeMeshMap,
+      spheres,
+      circles,
+      intersectionPoints,
+    );
+  });
+  scene.rotation.x = -Math.PI / 2; // Rotate the scene so Z-axis is up
+
   onMount(() => {
     if (!containerRef) return;
 
-    const { scene, renderer, controls, camera } = initSceneAndControls(
+    const { renderer, controls, camera } = initSceneAndControls(
       props.width,
       props.height,
       containerRef,
     );
+    setRenderer(renderer);
+    setCamera(camera);
+
     addAxesHelper(scene);
     addGridHelpers(showGrid, scene);
     populateGraphScene(
@@ -80,25 +128,47 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
 
     // Draw edges between nodes using the utility function
     drawEdges(props.graph, nodeMeshMap, scene, edges);
+    // Initial setup of spheres and intersection points
+    createSpheresAndIntersections(
+      props.graph,
+      nodeMeshMap,
+      scene,
+      spheres,
+      circles,
+      intersectionPoints,
+    );
 
     const animate = () => {
       controls.update();
-
+      
       if (isPlaying()) {
-        const factor = interpolationFactor() + timeDirection() * 0.02;
+        // Update interpolation factor
+        let factor = interpolationFactor() + timeDirection() * 0.02;
+        if (factor > 1) factor = 1;
+        if (factor < 0) factor = 0;
         setInterpolationFactor(factor);
 
-        if (factor >= 1 || factor <= 0) {
-          setInterpolationFactor(timeDirection() > 0 ? 0 : 1);
+        // Check if we’ve reached the boundary (1 or 0)
+        if (factor === 1 || factor === 0) {
+          // Determine the next transformation index based on time direction
+          let newIndex = currentTransformationIndex() + (timeDirection() > 0 ? 1 : -1);
 
-          const newIndex = currentTransformationIndex() + (timeDirection() > 0 ? 1 : -1);
+          // Stop playback if we’re at the end or beginning
           if (newIndex >= transformations.length || newIndex < 0) {
             setIsPlaying(false);
-            setCurrentTransformationIndex(
-              Math.max(0, Math.min(transformations.length - 1, newIndex)),
-            );
+            // // Set current index to the last valid transformation index
+            // setCurrentTransformationIndex(
+            //   Math.max(0, Math.min(transformations.length - 1, currentTransformationIndex())),
+            // );
             return;
           }
+
+          // Reset interpolation factor only if we haven’t reached the end or beginning
+          if (newIndex < transformations.length && newIndex >= 0) {
+            setInterpolationFactor(timeDirection() > 0 ? 0 : 1);
+          }
+
+          // Move to the next transformation
           setCurrentTransformationIndex(newIndex);
 
           nodeMeshes.forEach((node, index) => {
@@ -120,6 +190,14 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
         // Update coordinates and edges based on the latest node positions
         props.setCoordinates(updateCoordinates(props.graph, nodeMeshMap));
         updateEdges(props.graph, nodeMeshMap, edges);
+        updateSpheresAndIntersections(
+          scene,
+          props.graph,
+          nodeMeshMap,
+          spheres,
+          circles,
+          intersectionPoints,
+        );
       }
 
       // Render hover effect
@@ -135,6 +213,7 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
       renderer.render(scene, camera);
       animationFrameId = requestAnimationFrame(animate);
     };
+    setAnimate(() => animate);
     animate();
 
     return () => {
@@ -147,7 +226,12 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
 
   const handlePlayPause = () => {
     setIsPlaying(!isPlaying());
-    if (!isPlaying()) setInterpolationFactor(timeDirection() > 0 ? 0 : 1);
+    if (!isPlaying()) {
+      setInterpolationFactor(timeDirection() > 0 ? 0 : 1);
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    } else {
+      animate()();
+    }
   };
 
   const handleDirectionToggle = () => {
@@ -160,7 +244,13 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
     setTimeDirection(Math.sign(timeDirection()) * speed);
   };
 
-  const handleScrub = (index: number, factor: number) => {
+  const handleScrub = (
+    index: number,
+    factor: number,
+    scene: THREE.Scene,
+    renderer: THREE.WebGLRenderer,
+    camera: THREE.PerspectiveCamera,
+  ) => {
     setCurrentTransformationIndex(index);
     setInterpolationFactor(factor);
     setIsPlaying(false);
@@ -192,6 +282,16 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
     // Update coordinates and edges based on the latest node positions
     props.setCoordinates(updateCoordinates(props.graph, nodeMeshMap));
     updateEdges(props.graph, nodeMeshMap, edges);
+    updateSpheresAndIntersections(
+      scene,
+      props.graph,
+      nodeMeshMap,
+      spheres,
+      circles,
+      intersectionPoints,
+    );
+
+    renderer.render(scene, camera);
   };
 
   return (
@@ -224,6 +324,9 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
         transformations={transformations.length}
         currentIndex={currentTransformationIndex}
         interpolationFactor={interpolationFactor}
+        scene={scene}
+        renderer={renderer()}
+        camera={camera()}
         onScrub={handleScrub}
       />
       <div style={{ position: "absolute", top: "10px", right: "10px" }}>
@@ -234,6 +337,22 @@ export default function ThreeJSGraph(props: ThreeJSGraphProps) {
             onChange={e => setShowGrid(e.currentTarget.checked)}
           />
           Show Grid
+        </label>
+        <label style={{ "margin-left": "10px" }}>
+          <input
+            type="checkbox"
+            checked={showSpheres()}
+            onChange={e => setShowSpheres(e.currentTarget.checked)}
+          />
+          Show Spheres
+        </label>
+        <label style={{ "margin-left": "10px" }}>
+          <input
+            type="checkbox"
+            checked={showIntersections()}
+            onChange={e => setShowIntersections(e.currentTarget.checked)}
+          />
+          Show Intersections
         </label>
         <button onClick={handlePlayPause} style={{ "margin-left": "10px" }}>
           {isPlaying() ? "Pause" : "Play"}

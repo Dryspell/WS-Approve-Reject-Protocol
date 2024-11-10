@@ -1,20 +1,25 @@
 // Timeline.tsx
 import { Accessor, createSignal } from "solid-js";
+import type * as THREE from "three";
 
 interface TimelineProps {
   transformations: number; // Number of transformations
   currentIndex: Accessor<number>; // Current transformation index
   interpolationFactor: Accessor<number>; // Current interpolation progress (0 to 1)
-  onScrub: (index: number, factor: number) => void; // Handler for scrubbing to a point
+  scene: THREE.Scene;
+  renderer: THREE.WebGLRenderer | null;
+  camera: THREE.PerspectiveCamera | null;
+  onScrub: (
+    index: number,
+    factor: number,
+    scene: THREE.Scene,
+    renderer: THREE.WebGLRenderer,
+    camera: THREE.PerspectiveCamera,
+  ) => void; // Handler for scrubbing to a point
 }
 
-export default function Timeline({
-  transformations,
-  currentIndex,
-  interpolationFactor,
-  onScrub,
-}: TimelineProps) {
-  const segmentWidth = 100 / transformations; // Percentage width for each segment
+export default function Timeline(props: TimelineProps) {
+  const segmentWidth = 100 / props.transformations; // Percentage width for each segment
   const [hoveredIndex, setHoveredIndex] = createSignal<number | null>(null);
   const [isDragging, setIsDragging] = createSignal(false);
   let timelineRef: HTMLDivElement | null = null;
@@ -40,16 +45,16 @@ export default function Timeline({
     const timelineRect = timelineRef.getBoundingClientRect();
     const timelineRelativeX = e.clientX - timelineRect.left;
 
-    console.log(e.clientX, segmentRect.left, timelineRelativeX, timelineRect.width);
-
     // Calculate total progress across the entire timeline
     const totalProgress = Math.max(0, Math.min(1, timelineRelativeX / timelineRect.width)); // Clamped between 0 and 1
 
     // Determine the transformation index and interpolation factor
-    const index = Math.floor(totalProgress * transformations);
+    const index = Math.floor(totalProgress * props.transformations);
     const factor = segmentRelativeX / segmentWidth;
 
-    onScrub(index, factor);
+    props.renderer &&
+      props.camera &&
+      props.onScrub(index, factor, props.scene, props.renderer, props.camera);
   };
 
   return (
@@ -67,7 +72,7 @@ export default function Timeline({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {Array.from({ length: transformations }).map((_, index) => (
+      {Array.from({ length: props.transformations }).map((_, index) => (
         <div
           onMouseEnter={() => setHoveredIndex(index)}
           onMouseLeave={() => setHoveredIndex(null)}
@@ -81,11 +86,11 @@ export default function Timeline({
           }}
         >
           {/* Highlight current transformation segment */}
-          {index === currentIndex() && (
+          {index === props.currentIndex() && (
             <div
               style={{
                 position: "absolute",
-                left: `${interpolationFactor() * 100}%`,
+                left: `${props.interpolationFactor() * 100}%`,
                 top: 0,
                 height: "100%",
                 width: "2px",
@@ -116,7 +121,7 @@ export default function Timeline({
       ))}
       <div>
         {/* Show scrubber position */}
-        {`${(currentIndex() + interpolationFactor()) * segmentWidth}%: ${currentIndex()}/${transformations} Segment + ${(interpolationFactor() * 100).toFixed(2).toLocaleString()} Seg %`}
+        {`${((props.currentIndex() + props.interpolationFactor()) * segmentWidth).toFixed(2)}%: ${(props.currentIndex() + 1).toFixed()}/${props.transformations} Segment + ${(props.interpolationFactor() * 100).toFixed(2).toLocaleString()} Seg %`}
       </div>
     </div>
   );
