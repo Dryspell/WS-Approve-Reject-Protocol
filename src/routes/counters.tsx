@@ -1,11 +1,6 @@
 import useSocketCounter from "~/hooks/useCounters";
-import { socket } from "~/lib/Client/socket";
 
 export default function CountersPage() {
-  // socket.on("connect", () => {
-  // 	console.log("connected to server!!");
-  // });
-
   const { Counters } = useSocketCounter("1");
 
   return (
