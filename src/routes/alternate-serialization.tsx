@@ -1,6 +1,6 @@
 type Primitive = string | number | boolean | null | undefined;
 
-export const isPrimitive = (value: Serializable): value is Primitive =>
+const isPrimitive = (value: Serializable): value is Primitive =>
   value == null || typeof value !== "object";
 
 type Serializable =
@@ -14,7 +14,7 @@ type Serializable =
 
 type SerializableObject = Record<string, Serializable>;
 
-export const representatives = {
+const representatives = {
   user: {
     type: "user",
     name: "",
@@ -41,7 +41,7 @@ type TypedObject<Ttype extends string> = Ttype extends keyof RepresentativeDict
     } & Omit<RepresentativeDict[Ttype], "type">
   : never;
 
-export function serializeToNestedTuples<Ttype extends keyof RepresentativeDict>(
+function serializeToNestedTuples<Ttype extends keyof RepresentativeDict>(
   representative: Omit<TypedObject<Ttype>, "type">,
   target: Omit<TypedObject<Ttype>, "type">,
 ): Serializable[] {
@@ -72,7 +72,7 @@ export function serializeToNestedTuples<Ttype extends keyof RepresentativeDict>(
   return serializeHelper(representative as Serializable, target as Serializable) as Serializable[];
 }
 
-export function serializeWithType<Ttype extends keyof RepresentativeDict>(
+function serializeWithType<Ttype extends keyof RepresentativeDict>(
   target: TypedObject<Ttype>,
 ): [type: Ttype, ...Serializable[]] {
   const { type, ...data } = target;
@@ -85,7 +85,22 @@ export function serializeWithType<Ttype extends keyof RepresentativeDict>(
   const { type: _rType, ...rData } = representative as TypedObject<Ttype>;
   return [type, ...serializeToNestedTuples(rData, data)] as [Ttype, ...Serializable[]];
 }
-export function wrapSerializedObject<Ttype extends keyof RepresentativeDict>(
+
+const toJSON = (rep: SerializableObject, data: Serializable[]) => {
+  const result: Record<string, unknown> = {};
+  Object.keys(rep).forEach((key, index) => {
+    const repValue = rep[key];
+    const dataValue = data[index];
+
+    result[key] =
+      repValue !== null && typeof repValue === "object"
+        ? toJSON(repValue as SerializableObject, dataValue as Serializable[])
+        : dataValue;
+  });
+  return result;
+};
+
+function wrapSerializedObject<Ttype extends keyof RepresentativeDict>(
   serialized: [Ttype, ...Serializable[]],
 ): TypedObject<Ttype> {
   const [type, ...data] = serialized;
@@ -105,20 +120,7 @@ export function wrapSerializedObject<Ttype extends keyof RepresentativeDict>(
       {
         get(_, prop: string | symbol) {
           if (prop === "toJSON") {
-            // Return a custom toJSON function for JSON.stringify compatibility
-            return () => {
-              const result: Record<string, unknown> = {};
-              Object.keys(rep).forEach((key, index) => {
-                const repValue = rep[key];
-                const dataValue = data[index];
-
-                result[key] =
-                  repValue !== null && typeof repValue === "object"
-                    ? createProxy(repValue as SerializableObject, dataValue as Serializable[])
-                    : dataValue;
-              });
-              return result;
-            };
+            return () => toJSON(rep, data);
           }
 
           if (typeof prop !== "string") {
@@ -192,16 +194,18 @@ export default function SerializationPage() {
   const deserializedUser = wrapSerializedObject(serializedUser);
   console.log(deserializedUser);
   console.log(deserializedUser.address);
-  console.log(JSON.stringify(deserializedUser.address));
   console.log(deserializedUser.address.street);
-  console.log(deserializedUser.name); // Output: Alice
+  console.log(JSON.stringify(deserializedUser.address));
+  console.log(JSON.stringify(deserializedUser, null, 2));
+  // console.log(deserializedUser.address.street);
+  // console.log(deserializedUser.name); // Output: Alice
 
-  deserializedUser.name = "Bob";
-  console.log(deserializedUser.name); // Output: Bob
-  console.log(deserializedUser);
+  // deserializedUser.name = "Bob";
+  // console.log(deserializedUser.name); // Output: Bob
+  // console.log(deserializedUser);
 
-  const serializedProduct = serializeWithType(product);
-  console.log(serializedProduct);
+  // const serializedProduct = serializeWithType(product);
+  // console.log(serializedProduct);
   // Output: ["product", "Smartphone", 699, ["electronics", "gadgets"]]
 
   // Incorrect serialization: This will produce a compile-time error

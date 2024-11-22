@@ -90,6 +90,8 @@ export default function Serialization(props: {}) {
     },
   }) as unknown as typeof testSerialObject2;
 
+  console.log(serializeProxy);
+
   const assertMatch = () => {
     if (JSON.stringify(testSerialObject) !== JSON.stringify(deserialized)) {
       throw new Error("Serialization mismatch");
