@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "vinxi dev",
     "build": "vinxi build",
-    "start": "vinxi start"
+    "start": "vinxi start",
+    "test": "pnpx tsx ./src/tests/serialization/tests.ts"
   },
   "dependencies": {
     "@corvu/resizable": "^0.2.3",
