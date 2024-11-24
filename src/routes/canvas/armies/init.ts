@@ -28,8 +28,6 @@ export const defaultCombatData = () => ({
   critMultiplier: 2,
 });
 
-export const [minionCount, enemyCount] = [5, 5];
-
 export function generateTerrain(
   canvasWidth: number,
   canvasHeight: number,
@@ -52,8 +50,12 @@ export function generateMinionsAndTargets(
     y: number;
     w: number;
   }[][],
+  minionCount = 5,
+  enemyCount = 5,
 ) {
-  const walkableTerrain = terrain.map(row => row.filter(cell => cell.movementCost !== 255)).flat();
+  const walkableTerrain = terrain.map((row) =>
+    row.filter((cell) => cell.movementCost !== 255)
+  ).flat();
 
   const [minions, targets] = [[], []] as [Unit[], Unit[]];
 
@@ -94,10 +96,18 @@ export function generateMinionsAndTargets(
   }
 
   for (let i = 0; i < minions.length; i++) {
-    minions[i].movementData = findPathToClosestTarget(minions[i], targets, terrain);
+    minions[i].movementData = findPathToClosestTarget(
+      minions[i],
+      targets,
+      terrain,
+    );
   }
   for (let i = 0; i < targets.length; i++) {
-    targets[i].movementData = findPathToClosestTarget(targets[i], minions, terrain);
+    targets[i].movementData = findPathToClosestTarget(
+      targets[i],
+      minions,
+      terrain,
+    );
   }
 
   return minions.concat(targets);

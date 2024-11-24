@@ -4,12 +4,11 @@ export const rect = (
   y: number,
   width: number,
   height: number,
-  options: { fillStyle: CanvasRenderingContext2D["fillStyle"] },
+  options: { fillStyle?: CanvasRenderingContext2D["fillStyle"] },
 ) => {
-  // @ts-expect-error
   const { fillStyle } = { fillStyle: "red", ...options };
 
-  ctx.fillStyle = options.fillStyle;
+  ctx.fillStyle = fillStyle;
   ctx.fillRect(x, y, width, height);
 };
 
@@ -24,7 +23,11 @@ export const circle = (
     fillStyle?: CanvasRenderingContext2D["fillStyle"];
   },
 ) => {
-  const { strokeStyle, lineWidth, fillStyle } = { strokeStyle: "black", lineWidth: 1, ...options };
+  const { strokeStyle, lineWidth, fillStyle } = {
+    strokeStyle: "black",
+    lineWidth: 1,
+    ...options,
+  };
 
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, 2 * Math.PI);
@@ -44,9 +47,16 @@ export const line = (
   y1: number,
   x2: number,
   y2: number,
-  options?: { strokeStyle?: CanvasRenderingContext2D["strokeStyle"]; lineWidth?: number },
+  options?: {
+    strokeStyle?: CanvasRenderingContext2D["strokeStyle"];
+    lineWidth?: number;
+  },
 ) => {
-  const { strokeStyle, lineWidth } = { strokeStyle: "black", lineWidth: 1, ...options };
+  const { strokeStyle, lineWidth } = {
+    strokeStyle: "black",
+    lineWidth: 1,
+    ...options,
+  };
 
   ctx.beginPath();
   ctx.moveTo(x1, y1);
@@ -62,9 +72,16 @@ export const text = (
   x: number,
   y: number,
   text: string,
-  options?: { fillStyle?: CanvasRenderingContext2D["fillStyle"]; font?: string },
+  options?: {
+    fillStyle?: CanvasRenderingContext2D["fillStyle"];
+    font?: string;
+  },
 ) => {
-  const { fillStyle, font } = { fillStyle: "black", font: "16px Arial", ...options };
+  const { fillStyle, font } = {
+    fillStyle: "black",
+    font: "16px Arial",
+    ...options,
+  };
 
   ctx.fillStyle = fillStyle;
   ctx.font = font;

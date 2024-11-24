@@ -1,43 +1,17 @@
 import { createSignal, For, onMount } from "solid-js";
 import { createMutable, createStore, SetStoreFunction } from "solid-js/store";
 import { Button } from "~/components/ui/button";
-import { GameChatMessage, GameEvent, Unit } from "./types";
-import { generateCombatEvent, processCombatEvents } from "./combatEvents";
-import { defaultCombatData } from "../armies/init";
-import { FollowingUI } from "./FollowingUI";
-import { rect } from "~/lib/canvas/shapes";
-
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 600;
-
-const DEFAULT_OBJECTS = {
-  units: [
-    {
-      type: "player",
-      id: "player1",
-      name: "Player 1",
-      fillStyle: "maroon",
-      pos: [150, 300],
-      dims: [100, 100],
-      velocity: [1, 1],
-      ...defaultCombatData(),
-    },
-    {
-      type: "player",
-      id: "player2",
-      name: "Player 2",
-      fillStyle: "navy",
-      pos: [550, 300],
-      dims: [100, 100],
-      velocity: [1, 1],
-      ...defaultCombatData(),
-    },
-  ] as Unit[],
-} as const;
+import { GameChatMessage, GameEvent, Unit } from "../combat/types";
+import { generateCombatEvent, processCombatEvents } from "../combat/combatEvents";
+import { circle, rect } from "~/lib/canvas/shapes";
+import { getMousePosition } from "../utils";
+import { withinRect } from "./distances";
+import { moveUnitTowardsTarget } from "./loop";
+import { CANVAS_HEIGHT, CANVAS_WIDTH, generateUnits } from "./constants";
 
 const initializeGame = (
   gameCanvas: HTMLCanvasElement | undefined,
-  units: typeof DEFAULT_OBJECTS.units,
+  units: Unit[],
 ) => {
   if (!gameCanvas) {
     console.error("Canvas element is not defined");
@@ -50,32 +24,75 @@ const initializeGame = (
   }
   const canvasSize = [gameCanvas.width, gameCanvas.height] as [width: number, height: number];
 
-  const dvdBounceGameLoop = () => {
+  let isDragging = false;
+  let dragStart: [number, number] = [0, 0];
+  let dragEnd: [number, number] = [0, 0];
+
+  const selectedUnits = new Set<Unit>();
+
+  gameCanvas.addEventListener("mousedown", e => {
+    if (!isDragging && e.button === 0) {
+      getMousePosition(gameCanvas, e, (x, y) => {
+        dragStart = [x, y];
+      });
+      isDragging = true;
+    }
+  });
+
+  gameCanvas.addEventListener("mousemove", e => {
+    if (isDragging && e.button === 0) {
+      getMousePosition(gameCanvas, e, (x, y) => {
+        dragEnd = [x, y];
+      });
+
+      for (const unit of units) {
+        if (withinRect(unit.pos, dragStart, dragEnd)) {
+          selectedUnits.add(unit);
+        } else {
+          selectedUnits.delete(unit);
+        }
+      }
+    }
+  });
+
+  gameCanvas.addEventListener("mouseup", e => {
+    if (isDragging && e.button === 0) {
+      isDragging = false;
+    }
+  });
+
+  gameCanvas.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    if (selectedUnits.size) {
+      getMousePosition(gameCanvas, e, (x, y) => {
+        selectedUnits.forEach(unit => {
+          unit.movementData = { target: { pos: [x, y] }, path: undefined, distanceToTarget: 0 };
+        });
+      });
+    }
+  });
+
+  const gameLoop = () => {
     ctx.clearRect(0, 0, ...canvasSize);
 
-    // setGameObjects("players", [0, gameObjects.players.length - 1], player => {
-    //   return {
-    //     ...player,
-    //     pos: player.pos.map((coord, i) => {
-    //       if (
-    //         coord + player.velocity[i] > canvasSize[i] - player.dims[i] ||
-    //         coord + player.velocity[i] < 0
-    //       ) {
-    //         player.velocity[i] = -player.velocity[i];
-    //       }
-    //       return coord + player.velocity[i];
-    //     }) as Player["pos"],
-    //   };
-    // });
+    if (isDragging) {
+      rect(ctx, dragStart[0], dragStart[1], dragEnd[0] - dragStart[0], dragEnd[1] - dragStart[1], {
+        fillStyle: "rgba(0, 0, 0, 0.2)",
+      });
+    }
 
-    units.forEach(player =>
-      rect(ctx, ...player.pos, ...player.dims, { fillStyle: player.fillStyle }),
-    );
+    units.forEach(unit => {
+      circle(ctx, ...unit.pos, unit.dims[0], {
+        fillStyle: unit.fillStyle,
+        ...(selectedUnits.has(unit) ? { strokeStyle: "green", lineWidth: 2 } : {}),
+      });
+      moveUnitTowardsTarget(ctx, unit, units);
+    });
 
-    requestAnimationFrame(dvdBounceGameLoop);
+    requestAnimationFrame(gameLoop);
   };
 
-  dvdBounceGameLoop();
+  gameLoop();
 };
 
 const gameTick = (
@@ -104,7 +121,7 @@ const gameTick = (
 export default function Game() {
   const [gameCanvas, setGameCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);
 
-  const units = createMutable(DEFAULT_OBJECTS.units);
+  const units = createMutable(generateUnits(5));
 
   const [chatBoxRef, setChatBoxRef] = createSignal<HTMLDivElement | undefined>(undefined);
   const [gameChat, setGameChat] = createStore([] as GameChatMessage[]);
@@ -118,7 +135,7 @@ export default function Game() {
   return (
     <main class="relative mx-auto p-4 text-gray-700">
       <div class="relative" style={{ width: `${CANVAS_WIDTH}px`, height: `${CANVAS_HEIGHT}px` }}>
-        <Button
+        {/* <Button
           style={{
             position: "absolute",
             top: "1%", // Align to the top
@@ -136,11 +153,11 @@ export default function Game() {
           }}
         >
           Tick
-        </Button>
+        </Button> */}
 
-        {units.map((player: Unit) => (
+        {/* {units.map((player: Unit) => (
           <FollowingUI player={player} gameCanvas={gameCanvas} />
-        ))}
+        ))} */}
         <canvas
           ref={setGameCanvas}
           width={CANVAS_WIDTH}
