@@ -10,6 +10,9 @@ import { drawTargetsAndMove } from "./loop";
 import { CANVAS_HEIGHT, CANVAS_WIDTH, generateUnits } from "./constants";
 import { createRectFormation } from "./formations";
 import munkres from "munkres-js";
+import { SIRedmine } from "~/icons/SIRedmine";
+import { TbTrees } from "~/icons/TbTrees";
+import { svgGen } from "~/icons/svgGeneration";
 
 const initializeGame = (gameCanvas: HTMLCanvasElement | undefined, units: Unit[]) => {
   if (!gameCanvas) {
@@ -22,6 +25,8 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined, units: Unit[]
     return;
   }
   const canvasSize = [gameCanvas.width, gameCanvas.height] as [width: number, height: number];
+
+  const images = { mine: svgGen(SIRedmine), tree: svgGen(TbTrees) };
 
   let isDragging = false;
   let dragStart: [number, number] = [0, 0];
@@ -90,6 +95,7 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined, units: Unit[]
 
   const gameLoop = () => {
     ctx.clearRect(0, 0, ...canvasSize);
+    ctx.drawImage(images.mine, gameCanvas.width / 2, gameCanvas.height / 2, 40, 40);
 
     if (isDragging) {
       rect(ctx, dragStart[0], dragStart[1], dragEnd[0] - dragStart[0], dragEnd[1] - dragStart[1], {
@@ -111,28 +117,28 @@ const initializeGame = (gameCanvas: HTMLCanvasElement | undefined, units: Unit[]
   gameLoop();
 };
 
-const gameTick = (
-  units: Unit[],
-  gameChat: GameChatMessage[],
-  setGameChat: SetStoreFunction<GameChatMessage[]>,
-  gameEvents: GameEvent[],
-  setGameEvents: SetStoreFunction<GameEvent[]>,
-) => {
-  const attackers = units;
-  const defenders = units;
+// const gameTick = (
+//   units: Unit[],
+//   gameChat: GameChatMessage[],
+//   setGameChat: SetStoreFunction<GameChatMessage[]>,
+//   gameEvents: GameEvent[],
+//   setGameEvents: SetStoreFunction<GameEvent[]>,
+// ) => {
+//   const attackers = units;
+//   const defenders = units;
 
-  const newAttackEvents = attackers.map(attacker => {
-    const defender = defenders.find(p => p.id !== attacker.id);
-    if (!defender) {
-      throw new Error("No defender found");
-    }
-    return generateCombatEvent(attacker, defender);
-  });
+//   const newAttackEvents = attackers.map(attacker => {
+//     const defender = defenders.find(p => p.id !== attacker.id);
+//     if (!defender) {
+//       throw new Error("No defender found");
+//     }
+//     return generateCombatEvent(attacker, defender);
+//   });
 
-  processCombatEvents(newAttackEvents, units, setGameChat, gameChat);
+//   processCombatEvents(newAttackEvents, units, setGameChat, gameChat);
 
-  setGameEvents([...gameEvents, ...newAttackEvents]);
-};
+//   setGameEvents([...gameEvents, ...newAttackEvents]);
+// };
 
 export default function Game() {
   const [gameCanvas, setGameCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);
