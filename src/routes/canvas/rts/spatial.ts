@@ -1,3 +1,5 @@
+import { _hasPos } from "../combat/types";
+
 export const withinBounds = (num: number, [b1, b2]: [number, number]) =>
   (num >= b1 && num <= b2) || (num >= b2 && num <= b1);
 
@@ -50,3 +52,17 @@ export const normalizeV2 = (
 
 export const scaleV2 = (v: [number, number], scalar: number) =>
   v.map((coord) => coord * scalar) as [number, number];
+
+export const centroid = <TPoint extends _hasPos>(points: TPoint[]) => {
+  const x = points.reduce((acc, point) => acc + point.pos[0], 0) /
+    points.length;
+  const y = points.reduce((acc, point) => acc + point.pos[1], 0) /
+    points.length;
+
+  return [x, y] as [number, number];
+};
+
+export const distance2 = <TA extends _hasPos, TB extends _hasPos>(
+  a: TA,
+  b: TB,
+) => (a.pos[0] - b.pos[0]) ** 2 + (a.pos[1] - b.pos[1]) ** 2;

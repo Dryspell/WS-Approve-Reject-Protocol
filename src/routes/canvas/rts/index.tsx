@@ -5,14 +5,13 @@ import { GameChatMessage, GameEvent, Unit } from "../combat/types";
 import { generateCombatEvent, processCombatEvents } from "../combat/combatEvents";
 import { circle, rect } from "~/lib/canvas/shapes";
 import { getMousePosition } from "../utils";
-import { withinRect } from "./distances";
-import { moveUnitTowardsTarget } from "./loop";
+import { centroid, distance2, withinRect } from "./spatial";
+import { drawTargetsAndMove } from "./loop";
 import { CANVAS_HEIGHT, CANVAS_WIDTH, generateUnits } from "./constants";
+import { createRectFormation } from "./formations";
+import munkres from "munkres-js";
 
-const initializeGame = (
-  gameCanvas: HTMLCanvasElement | undefined,
-  units: Unit[],
-) => {
+const initializeGame = (gameCanvas: HTMLCanvasElement | undefined, units: Unit[]) => {
   if (!gameCanvas) {
     console.error("Canvas element is not defined");
     return;
@@ -65,9 +64,26 @@ const initializeGame = (
     e.preventDefault();
     if (selectedUnits.size) {
       getMousePosition(gameCanvas, e, (x, y) => {
-        selectedUnits.forEach(unit => {
-          unit.movementData = { target: { pos: [x, y] }, path: undefined, distanceToTarget: 0 };
-        });
+        const formation = createRectFormation(
+          selectedUnits.size,
+          2,
+          Math.ceil(selectedUnits.size / 2),
+          [x, y],
+          centroid(Array.from(selectedUnits)),
+          { cellWidth: 10, cellHeight: 10 },
+        );
+
+        // Use Kuhn-Munkres algorithm to find the optimal assignment of units to formation positions by minimizing distance costs
+        const unitsArray = Array.from(selectedUnits);
+        munkres(unitsArray.map(unit => formation.map(pos => distance2(unit, { pos })))).forEach(
+          ([worker, job]) => {
+            unitsArray[worker].movementData = {
+              target: { pos: formation[job] },
+              path: undefined,
+              distanceToTarget: 0,
+            };
+          },
+        );
       });
     }
   });
@@ -86,7 +102,7 @@ const initializeGame = (
         fillStyle: unit.fillStyle,
         ...(selectedUnits.has(unit) ? { strokeStyle: "green", lineWidth: 2 } : {}),
       });
-      moveUnitTowardsTarget(ctx, unit, units);
+      drawTargetsAndMove(ctx, unit, units);
     });
 
     requestAnimationFrame(gameLoop);
@@ -121,7 +137,7 @@ const gameTick = (
 export default function Game() {
   const [gameCanvas, setGameCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);
 
-  const units = createMutable(generateUnits(5));
+  const units = createMutable(generateUnits(25));
 
   const [chatBoxRef, setChatBoxRef] = createSignal<HTMLDivElement | undefined>(undefined);
   const [gameChat, setGameChat] = createStore([] as GameChatMessage[]);

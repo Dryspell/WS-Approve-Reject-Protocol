@@ -1,19 +1,30 @@
 import { Unit } from "../combat/types";
-import { line } from "~/lib/canvas/shapes";
-import { normalizeV2, scaleV2, withinCircle } from "./distances";
+import { circle, line } from "~/lib/canvas/shapes";
+import { normalizeV2, scaleV2, withinCircle } from "./spatial";
 
 const COLLIDER_RADIUS = 2;
 
-export function moveUnitTowardsTarget(
+export function drawTargetsAndMove(
   ctx: CanvasRenderingContext2D,
   unit: Unit,
   units: Unit[],
 ) {
   if (unit.movementData?.target) {
-    if (withinCircle(unit.pos, unit.movementData.target.pos, 1)) {
+    if (withinCircle(unit.pos, unit.movementData.target.pos, 5)) {
       unit.movementData = undefined;
       return;
     }
+
+    circle(
+      ctx,
+      unit.movementData.target.pos[0],
+      unit.movementData.target.pos[1],
+      5,
+      {
+        fillStyle: undefined,
+        strokeStyle: "gray",
+      },
+    );
 
     line(
       ctx,

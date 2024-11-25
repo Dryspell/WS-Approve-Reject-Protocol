@@ -30,6 +30,7 @@
     "date-fns": "4.1.0",
     "embla-carousel-solid": "^8.5.1",
     "graphology": "^0.25.4",
+    "munkres-js": "^1.2.2",
     "postcss": "^8.4.49",
     "simplex-noise": "^4.0.3",
     "socket.io": "^4.8.1",
