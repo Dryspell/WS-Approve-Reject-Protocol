@@ -1,4 +1,5 @@
 import { _hasPos } from "../combat/types";
+import { Resource } from "./types";
 type Point = [x: number, y: number];
 
 export const withinBounds = (num: number, [b1, b2]: Point) =>
@@ -166,4 +167,176 @@ export function doesLineIntersectCircle(
 
   // Check if t is within the range [0, 1], indicating intersection within the line segment
   return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1);
+}
+
+// Function to calculate tangent points from an external point to a circle
+function calculateTangents(
+  circle: Circle,
+  externalPoint: Point,
+): [Point, Point] {
+  const [cx, cy] = circle.center;
+  const [px, py] = externalPoint;
+
+  // Vector from the circle's center to the external point
+  const dx = px - cx;
+  const dy = py - cy;
+
+  // Distance from the external point to the circle's center
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  // If the point is inside or on the circle, project it onto the perimeter
+  if (dist <= circle.radius) {
+    // Closest point on the circle's perimeter
+    const closestPoint: Point = [
+      cx + (dx / dist) * circle.radius,
+      cy + (dy / dist) * circle.radius,
+    ];
+    // If the point is on or inside, tangents collapse to the same point
+    return [closestPoint, closestPoint];
+  }
+
+  // Angle from circle center to external point
+  const angleToExternalPoint = Math.atan2(dy, dx);
+
+  // Angle offset for the tangent points
+  const angleOffset = Math.asin(circle.radius / dist);
+
+  // Calculate the two tangent points
+  const tangent1: Point = [
+    cx + circle.radius * Math.cos(angleToExternalPoint - angleOffset),
+    cy + circle.radius * Math.sin(angleToExternalPoint - angleOffset),
+  ];
+  const tangent2: Point = [
+    cx + circle.radius * Math.cos(angleToExternalPoint + angleOffset),
+    cy + circle.radius * Math.sin(angleToExternalPoint + angleOffset),
+  ];
+
+  return [tangent1, tangent2];
+}
+
+// Function to calculate the detour path
+function calculateDetourPath(
+  lineStart: Point,
+  lineEnd: Point,
+  circle: Circle,
+): Point[] {
+  const { center, radius } = circle;
+
+  // Vector from lineStart to lineEnd
+  const dx = lineEnd[0] - lineStart[0];
+  const dy = lineEnd[1] - lineStart[1];
+
+  // Vector from lineStart to circle center
+  const fx = lineStart[0] - center[0];
+  const fy = lineStart[1] - center[1];
+
+  // Quadratic coefficients
+  const a = dx * dx + dy * dy;
+  const b = 2 * (fx * dx + fy * dy);
+  const c = fx * fx + fy * fy - radius * radius;
+
+  // Discriminant
+  const discriminant = b * b - 4 * a * c;
+
+  if (discriminant < 0) {
+    // No intersection, return the original path
+    return [lineStart, lineEnd];
+  }
+
+  // Compute intersection points (t values)
+  const t1 = (-b - Math.sqrt(discriminant)) / (2 * a);
+  const t2 = (-b + Math.sqrt(discriminant)) / (2 * a);
+
+  // Intersection points
+  const intersection1: Point = [
+    lineStart[0] + t1 * dx,
+    lineStart[1] + t1 * dy,
+  ];
+  const intersection2: Point = [
+    lineStart[0] + t2 * dx,
+    lineStart[1] + t2 * dy,
+  ];
+
+  // Step 1: Compute the midpoint of the intersection points
+  const midpoint: Point = [
+    (intersection1[0] + intersection2[0]) / 2,
+    (intersection1[1] + intersection2[1]) / 2,
+  ];
+
+  // Step 2: Compute the perpendicular vector
+  const tangentVector: Point = [
+    intersection2[0] - intersection1[0],
+    intersection2[1] - intersection1[1],
+  ];
+  const perpendicularVector: Point = [-tangentVector[1], tangentVector[0]];
+
+  // Normalize the perpendicular vector and scale it by 1.5 times the radius
+  const length = Math.sqrt(
+    perpendicularVector[0] ** 2 + perpendicularVector[1] ** 2,
+  );
+  const scaledPerpendicular: Point = [
+    (perpendicularVector[0] / length) * radius * 1.5,
+    (perpendicularVector[1] / length) * radius * 1.5,
+  ];
+
+  // Step 3: Calculate the detour point
+  const detourPoint: Point = [
+    midpoint[0] + scaledPerpendicular[0],
+    midpoint[1] + scaledPerpendicular[1],
+  ];
+
+  // Step 4: Construct the detour path
+  return [lineStart, detourPoint, lineEnd];
+}
+
+export const computePath = (
+  start: Point,
+  path: Point[],
+  resources: Resource[],
+) => {
+  const pathSegments = computePathSegments(start, path);
+
+  pathSegments.forEach((pathSegment, i) => {
+    const [lineStart, lineEnd] = pathSegment;
+
+    // Check for intersections with resources
+    for (const resource of resources) {
+      const resourceCenter = [
+        resource.pos[0] + resource.dims[0] / 2,
+        resource.pos[1] + resource.dims[1] / 2,
+      ] as Point;
+      if (
+        doesLineIntersectCircle(lineStart, lineEnd, {
+          center: resourceCenter,
+          radius: resource.dims[0] / 2,
+        })
+      ) {
+        const detourPath = calculateDetourPath(lineStart, lineEnd, {
+          center: resourceCenter,
+          radius: resource.dims[0] / 2,
+        });
+
+        path.splice(i, 1);
+        detourPath.forEach((point, j) => {
+          path.splice(i + j, 0, point);
+        });
+      }
+    }
+  });
+
+  return path[0][0] === start[0] && path[0][1] === start[1]
+    ? path.slice(1)
+    : path;
+};
+export function computePathSegments(start: Point, path: Point[]) {
+  return [start, ...path].reduce((acc, point, i, arr) => {
+    if (i === 0) {
+      return acc;
+    }
+
+    const prevPoint = arr[i - 1];
+    acc.push([prevPoint, point]);
+
+    return acc;
+  }, [] as [Point, Point][]);
 }

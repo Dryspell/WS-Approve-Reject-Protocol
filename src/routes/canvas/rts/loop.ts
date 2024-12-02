@@ -1,6 +1,11 @@
 import { Unit } from "../combat/types";
 import { circle, line } from "~/lib/canvas/shapes";
-import { normalizeV2, scaleV2, withinCircle } from "./spatial";
+import {
+  computePathSegments,
+  normalizeV2,
+  scaleV2,
+  withinCircle,
+} from "./spatial";
 
 const COLLIDER_RADIUS = 2;
 
@@ -9,8 +14,10 @@ export function drawTargetsAndMove(
   unit: Unit,
   units: Unit[],
 ) {
+  const closeEnoughRadius = unit.dims[0]
+
   if (unit.movementData?.target) {
-    if (withinCircle(unit.pos, unit.movementData.target.pos, 5)) {
+    if (withinCircle(unit.pos, unit.movementData.target.pos, closeEnoughRadius)) {
       unit.movementData = undefined;
       return;
     }
@@ -26,20 +33,40 @@ export function drawTargetsAndMove(
       },
     );
 
-    line(
-      ctx,
-      unit.pos[0],
-      unit.pos[1],
-      unit.movementData.target.pos[0],
-      unit.movementData.target.pos[1],
-      {
-        strokeStyle: "black",
-        lineWidth: 1,
+    const nextStep = unit.movementData.path?.[0];
+    if (!nextStep) {
+      unit.movementData = undefined;
+      return;
+    }
+
+    if (withinCircle(unit.pos, nextStep.pos, closeEnoughRadius)) {
+      unit.movementData.path?.shift();
+    }
+
+    if (!unit.movementData.path) {
+      unit.movementData = undefined;
+      return;
+    }
+
+    computePathSegments(
+      unit.pos,
+      unit.movementData.path?.map(({ pos }) => pos),
+    ).forEach(
+      ([start, end]) => {
+        line(
+          ctx,
+          ...start,
+          ...end,
+          {
+            strokeStyle: "black",
+            lineWidth: 1,
+          },
+        );
       },
     );
 
     unit.velocity = scaleV2(
-      normalizeV2(unit.movementData.target.pos, unit.pos),
+      normalizeV2(unit.movementData.path[0].pos, unit.pos),
       1,
     );
 
