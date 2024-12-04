@@ -6,7 +6,7 @@ import { getMousePosition } from "../utils";
 import { centroid, computePath, distance2, withinCircle, withinRect } from "./spatial";
 import { drawTargetsAndMove } from "./loop";
 import { CANVAS_HEIGHT, CANVAS_WIDTH, generateUnits } from "./constants";
-import { createRectFormation } from "./formations";
+import { createConcentratedCircularFormation, createRectFormation } from "./formations";
 import munkres from "munkres-js";
 import { svgGen } from "~/icons/svgGeneration";
 import { SIRedmine } from "~/icons/SIRedmine";
@@ -16,6 +16,7 @@ import { Resizable, ResizableHandle, ResizablePanel } from "~/components/ui/resi
 import { anvil } from "~/icons/anvil";
 import { ImHome } from "~/icons/ImHome";
 import { AiOutlineSkin } from "~/icons/AiOutlineSkin";
+import { createId } from "@paralleldrive/cuid2";
 
 const arrangeCircularly = (center: [number, number], radius: number, count: number) => {
   return Array.from({ length: count }, (_, i) => {
@@ -25,6 +26,66 @@ const arrangeCircularly = (center: [number, number], radius: number, count: numb
       Math.floor(center[1] + radius * Math.sin(angle)),
     ] as [x: number, y: number];
   });
+};
+
+const generateStructures = () => {
+  const STRUCTURE_DIMS = [40, 40] as [width: number, height: number];
+
+  const circularArrangement = arrangeCircularly([CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2], 200, 5).map(
+    pos => pos.map((p, i) => p - STRUCTURE_DIMS[i]) as [number, number],
+  );
+
+  const structures: Structure[] = [
+    {
+      id: createId(),
+      name: "Gold Mine",
+      type: "gold",
+      image: "mine",
+      structureType: "resource",
+      amount: 100,
+      pos: circularArrangement[0],
+      dims: STRUCTURE_DIMS,
+    },
+    {
+      id: createId(),
+      name: "Wood Tree",
+      type: "wood",
+      image: "tree",
+      structureType: "resource",
+      amount: 100,
+      pos: circularArrangement[1],
+      dims: STRUCTURE_DIMS,
+    },
+    {
+      id: createId(),
+      name: "Blacksmith",
+      type: "blacksmith",
+      image: "blacksmith",
+      structureType: "workshop",
+      pos: circularArrangement[2],
+      dims: STRUCTURE_DIMS,
+    },
+    {
+      id: createId(),
+      name: "Leather Workshop",
+      type: "leatherworkshop",
+      image: "leatherworkshop",
+      structureType: "workshop",
+      pos: circularArrangement[3],
+      dims: STRUCTURE_DIMS,
+    },
+    {
+      id: createId(),
+      name: "Townhall",
+      type: "townhall",
+      image: "townhall",
+      structureType: "townhall",
+      pos: [CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2],
+      dims: STRUCTURE_DIMS,
+    },
+  ];
+
+  return structures;
 };
 
 const initializeGame = (gameCanvas: HTMLCanvasElement, units: Unit[]) => {
@@ -43,28 +104,7 @@ const initializeGame = (gameCanvas: HTMLCanvasElement, units: Unit[]) => {
     tree: svgGen(TbTrees),
   };
 
-  const circularArrangement = arrangeCircularly([canvasSize[0] / 2, canvasSize[1] / 2], 200, 5);
-
-  const resources: Resource[] = [
-    { type: "gold", image: "mine", amount: 100, pos: circularArrangement[0], dims: [40, 40] },
-    { type: "wood", image: "tree", amount: 100, pos: circularArrangement[1], dims: [40, 40] },
-  ];
-
-  const buildings: Structure[] = [
-    { type: "blacksmith", image: "blacksmith", pos: circularArrangement[2], dims: [40, 40] },
-    {
-      type: "leatherworkshop",
-      image: "leatherworkshop",
-      pos: circularArrangement[3],
-      dims: [40, 40],
-    },
-    {
-      type: "townhall",
-      image: "townhall",
-      pos: [gameCanvas.width / 2, gameCanvas.height / 2],
-      dims: [40, 40],
-    },
-  ];
+  const structures = generateStructures();
 
   let isDragging = false;
   let dragStart: [number, number] = [0, 0];
@@ -105,42 +145,109 @@ const initializeGame = (gameCanvas: HTMLCanvasElement, units: Unit[]) => {
 
   gameCanvas.addEventListener("contextmenu", e => {
     e.preventDefault();
-    if (selectedUnits.size) {
-      getMousePosition(gameCanvas, e, (x, y) => {
-        const formation = createRectFormation(
-          selectedUnits.size,
-          2,
-          Math.ceil(selectedUnits.size / 2),
-          [x, y],
-          centroid(Array.from(selectedUnits)),
-          { cellWidth: 15, cellHeight: 15 },
-        );
+    if (!selectedUnits.size) {
+      return;
+    }
 
-        // Use Kuhn-Munkres algorithm to find the optimal assignment of units to formation positions by minimizing distance costs
-        const unitsArray = Array.from(selectedUnits);
-        munkres(unitsArray.map(unit => formation.map(pos => distance2(unit, { pos })))).forEach(
-          ([worker, job]) => {
-            unitsArray[worker].movementData = {
-              target: { pos: formation[job] },
-              path: computePath(unitsArray[worker].pos, [formation[job]], resources).map(pos => ({
-                pos,
-              })),
-              distanceToTarget: 0,
+    const [mouseX, mouseY] = getMousePosition(gameCanvas, e);
+
+    const hoveredStructure = structures.find(structure =>
+      withinRect(
+        [mouseX, mouseY],
+        structure.pos,
+        structure.pos.map((p, i) => p + structure.dims[i]) as [number, number],
+      ),
+    );
+
+    if (hoveredStructure) {
+      switch (hoveredStructure.structureType) {
+        case "resource": {
+          selectedUnits.forEach(unit => {
+            // unit.movementData = {
+            //   target: { pos: hoveredStructure.pos },
+            // }
+            unit.taskData = {
+              type: "gather",
+              target: hoveredStructure,
             };
-          },
-        );
-      });
+          });
+          break;
+        }
+
+        case "workshop": {
+          selectedUnits.forEach(unit => {
+            unit.taskData = {
+              type: "craft",
+              target: hoveredStructure,
+            };
+          });
+          break;
+        }
+
+        case "townhall": {
+          selectedUnits.forEach(unit => {
+            unit.taskData = {
+              type: "upgrade",
+              target: hoveredStructure,
+            };
+          });
+          break;
+        }
+
+        default: {
+          throw new Error("Invalid structure type");
+        }
+      }
+
+      const unitsArray = Array.from(selectedUnits);
+
+      const formation = createConcentratedCircularFormation(
+        hoveredStructure.pos.map((p, i) => p + hoveredStructure.dims[i] / 2) as [number, number],
+        hoveredStructure.dims[0] / 2,
+        15,
+      );
+      munkres(unitsArray.map(unit => formation.map(pos => distance2(unit, { pos })))).forEach(
+        ([worker, job]) => {
+          unitsArray[worker].movementData = {
+            target: { pos: formation[job] },
+            path: computePath(unitsArray[worker].pos, [formation[job]], structures).map(pos => ({
+              pos,
+            })),
+            distanceToTarget: 0,
+          };
+        },
+      );
+    } else {
+      const formation = createRectFormation(
+        selectedUnits.size,
+        2,
+        Math.ceil(selectedUnits.size / 2),
+        [mouseX, mouseY],
+        centroid(Array.from(selectedUnits)),
+        { cellWidth: 15, cellHeight: 15 },
+      );
+
+      // Use Kuhn-Munkres algorithm to find the optimal assignment of units to formation positions by minimizing distance costs
+      const unitsArray = Array.from(selectedUnits);
+      munkres(unitsArray.map(unit => formation.map(pos => distance2(unit, { pos })))).forEach(
+        ([worker, job]) => {
+          unitsArray[worker].movementData = {
+            target: { pos: formation[job] },
+            path: computePath(unitsArray[worker].pos, [formation[job]], structures).map(pos => ({
+              pos,
+            })),
+            distanceToTarget: 0,
+          };
+        },
+      );
     }
   });
 
   const gameLoop = () => {
     ctx.clearRect(0, 0, ...canvasSize);
-    resources.forEach(resource => {
-      ctx.drawImage(IMAGES[resource.image], ...resource.pos, ...resource.dims);
-    });
 
-    buildings.forEach(building => {
-      ctx.drawImage(IMAGES[building.image], ...building.pos, ...building.dims);
+    structures.forEach(structure => {
+      ctx.drawImage(IMAGES[structure.image], ...structure.pos, ...structure.dims);
     });
 
     if (isDragging) {

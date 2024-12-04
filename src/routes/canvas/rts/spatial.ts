@@ -1,5 +1,5 @@
 import { _hasPos } from "../combat/types";
-import { Resource } from "./types";
+import { Resource, Structure } from "./types";
 type Point = [x: number, y: number];
 
 export const withinBounds = (num: number, [b1, b2]: Point) =>
@@ -214,7 +214,6 @@ function calculateTangents(
   return [tangent1, tangent2];
 }
 
-// Function to calculate the detour path
 function calculateDetourPath(
   lineStart: Point,
   lineEnd: Point,
@@ -247,7 +246,6 @@ function calculateDetourPath(
   const t1 = (-b - Math.sqrt(discriminant)) / (2 * a);
   const t2 = (-b + Math.sqrt(discriminant)) / (2 * a);
 
-  // Intersection points
   const intersection1: Point = [
     lineStart[0] + t1 * dx,
     lineStart[1] + t1 * dy,
@@ -257,20 +255,17 @@ function calculateDetourPath(
     lineStart[1] + t2 * dy,
   ];
 
-  // Step 1: Compute the midpoint of the intersection points
   const midpoint: Point = [
     (intersection1[0] + intersection2[0]) / 2,
     (intersection1[1] + intersection2[1]) / 2,
   ];
 
-  // Step 2: Compute the perpendicular vector
   const tangentVector: Point = [
     intersection2[0] - intersection1[0],
     intersection2[1] - intersection1[1],
   ];
   const perpendicularVector: Point = [-tangentVector[1], tangentVector[0]];
 
-  // Normalize the perpendicular vector and scale it by 1.5 times the radius
   const length = Math.sqrt(
     perpendicularVector[0] ** 2 + perpendicularVector[1] ** 2,
   );
@@ -279,20 +274,18 @@ function calculateDetourPath(
     (perpendicularVector[1] / length) * radius * 1.5,
   ];
 
-  // Step 3: Calculate the detour point
   const detourPoint: Point = [
     midpoint[0] + scaledPerpendicular[0],
     midpoint[1] + scaledPerpendicular[1],
   ];
 
-  // Step 4: Construct the detour path
   return [lineStart, detourPoint, lineEnd];
 }
 
 export const computePath = (
   start: Point,
   path: Point[],
-  resources: Resource[],
+  resources: Structure[],
 ) => {
   const pathSegments = computePathSegments(start, path);
 

@@ -1,9 +1,18 @@
 import { findPathToClosestTarget } from "~/lib/canvas/pathfinding/utils";
+import { Resource, Structure, Workshop } from "../rts/types";
 
 export type _hasIdentificationData = {
   id: string;
   name: string;
-  type: "player" | "minion" | "enemy";
+  type:
+    | "player"
+    | "minion"
+    | "enemy"
+    | "wood"
+    | "gold"
+    | "blacksmith"
+    | "leatherworkshop"
+    | "townhall";
 };
 
 export type _hasCombatData = {
@@ -33,17 +42,38 @@ export type _hasRenderData = {
   strokeStyle?: CanvasRenderingContext2D["strokeStyle"];
 };
 
-export type _hasMovementData = { movementData?: ReturnType<typeof findPathToClosestTarget> };
+export type _hasMovementData = {
+  movementData?: ReturnType<typeof findPathToClosestTarget>;
+};
 
 export type _hasPos = {
   pos: [x: number, y: number];
 };
 
-export type Unit = _hasCombatData &
-  _hasIdentificationData &
-  _hasPos &
-  _hasRenderData &
-  _hasMovementData;
+export type _hasTaskData = {
+  taskData?:
+    | {
+      type: "gather";
+      target: Resource;
+    }
+    | {
+      type: "build" | "craft";
+      target: Workshop;
+    }
+    | { type: "upgrade"; target: Structure }
+    | {
+      type: "attack";
+      target: Structure | Unit;
+    };
+};
+
+export type Unit =
+  & _hasCombatData
+  & _hasIdentificationData
+  & _hasPos
+  & _hasRenderData
+  & _hasMovementData
+  & _hasTaskData;
 
 type Enemy = {
   type: "enemy";
@@ -87,7 +117,7 @@ export type CombatEvent = AttackEvent | StaminaRecoverEvent;
 
 export type GameEvent =
   | {
-      type: "player-joined" | "player-left";
-      player: Unit;
-    }
+    type: "player-joined" | "player-left";
+    player: Unit;
+  }
   | CombatEvent;

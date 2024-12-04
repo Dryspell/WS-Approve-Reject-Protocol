@@ -1,4 +1,8 @@
-import { _hasPos, _hasRenderData } from "../combat/types";
+import {
+  _hasIdentificationData,
+  _hasPos,
+  _hasRenderData,
+} from "../combat/types";
 
 export type Resource =
   & ({
@@ -8,9 +12,10 @@ export type Resource =
     type: "gold";
     image: "mine";
   })
-  & { amount: number }
+  & { amount: number; structureType: "resource" }
   & _hasPos
-  & _hasRenderData;
+  & _hasRenderData
+  & _hasIdentificationData;
 
 export type Workshop =
   & ({
@@ -20,8 +25,10 @@ export type Workshop =
     type: "leatherworkshop";
     image: "leatherworkshop";
   })
+  & { structureType: "workshop" }
   & _hasPos
-  & _hasRenderData;
+  & _hasRenderData
+  & _hasIdentificationData;
 
 export type Structure =
   | Resource
@@ -35,8 +42,10 @@ export type Structure =
       {
         type: "townhall";
         image: "townhall";
+        structureType: "townhall";
       }
     )
     & _hasPos
     & _hasRenderData
+    & _hasIdentificationData
   );

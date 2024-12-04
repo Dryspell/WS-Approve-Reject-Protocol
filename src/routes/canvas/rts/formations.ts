@@ -1,3 +1,6 @@
+import { _hasPos } from "../combat/types";
+import { centroid } from "./spatial";
+
 type Point = [number, number];
 
 interface FormationOptions {
@@ -76,4 +79,44 @@ export function createRectFormation(
   });
 
   return rotatedAndTranslated;
+}
+
+export function createConcentratedCircularFormation(
+  center: Point,
+  radius: number,
+  spacing: number,
+): Point[] {
+  const [cx, cy] = center;
+  const radiusWithBuffer = radius + 5;
+
+  const circumference = 2 * Math.PI * radiusWithBuffer;
+  const maxPositions = Math.floor(circumference / spacing);
+
+  const allPositions: Point[] = [];
+  for (let i = 0; i < maxPositions; i++) {
+    const angle = (i / maxPositions) * 2 * Math.PI;
+    const pos = [
+      cx + radiusWithBuffer * Math.cos(angle),
+      cy + radiusWithBuffer * Math.sin(angle),
+    ] as [number, number];
+    allPositions.push(pos);
+  }
+
+  return allPositions;
+
+  // // Step 3: Calculate the centroid angle
+  // const centroidAngle = Math.atan2(centroidY - cy, centroidX - cx) + Math.PI;
+
+  // // Step 4: Rank positions by angular proximity to centroidAngle
+  // allPositions.sort((a, b) => {
+  //   const angularDistanceA = Math.abs(a.angle - centroidAngle);
+  //   const angularDistanceB = Math.abs(b.angle - centroidAngle);
+  //   return angularDistanceA - angularDistanceB;
+  // });
+
+  // // Step 5: Select the closest `n` positions
+  // const selectedPositions = allPositions.slice(0, units.length);
+
+  // // Return the selected positions as [x, y] pairs
+  // return selectedPositions.map((pos) => [pos.x, pos.y] as [number, number]);
 }
