@@ -1,18 +1,24 @@
 import { CS_ComType, SC_ComType, serverSocket, SignalType, sServer } from "~/types/socket";
-import { User } from "./chat";
+import { User } from "~/types/user";
 import { createId } from "@paralleldrive/cuid2";
+import {
+  DEFAULT_ROUND_INTERIM_LENGTH,
+  DEFAULT_ROUND_LENGTH,
+  DEFAULT_TICKET_COUNT,
+} from "./gameConfig";
+import {
+  GameRoom,
+  GameRound,
+  RoundsReadyState,
+  Ticket,
+  TicketColor,
+  VoteActionType,
+  VoteHandlerArgs,
+  SocketEvent,
+  SC_GameEventType,
+} from "~/types/vote";
 
-const DEFAULT_TICKET_COUNT = 3;
-const DEFAULT_ROUND_INTERIM_LENGTH = 1000 * 10;
-const DEFAULT_ROUND_LENGTH = (1000 * 60 * 1) / 4;
-
-export enum TicketColor {
-  Red,
-  Blue,
-  None,
-}
-
-export type Ticket = [ticketId: string, ticketOwner: User[0], ticketColor: TicketColor];
+export type { GameRoom, GameRound, RoundsReadyState, Ticket, TicketColor, VoteActionType, VoteHandlerArgs };
 
 export enum OfferType {
   Buy,
@@ -20,92 +26,17 @@ export enum OfferType {
   BuyPromise,
   SellPromise,
 }
-export type Offer = [offerId: string, offerOwner: User[0], offerType: OfferType, price: number];
-
-export type GameRound = [
-  roundNumber: number,
-  startTime: number,
-  endTime: number,
-  roundResult: [previousTickets: Ticket[], newTickets: Ticket[]],
-];
-
-export type GameRoom = [
-  roomId: string,
-  roomName: string,
-  members: User[],
-  tickets: Ticket[],
-  offers: Offer[],
-  startTime: number | null,
-  rounds: GameRound[],
-];
-
-export type RoundsReadyState = [roomId: string, round: number, readyUsers: User[0][]];
-
-export enum VoteActionType {
-  CreateOrJoinRoom,
-  ToggleReadyGameStart,
-  ToggleReadyRoundEnd,
-  SetVoteColor,
-  CreateOffer,
-  AcceptOffer,
-  Dev_DeleteRooms,
-}
-
-export enum SC_GameEventType {
-  RoomCreated,
-  UserJoinedRoom,
-  UserToggleReadyGameStart,
-  GameStart,
-  GameEnd,
-  RoundStart,
-  RoundEnd,
-}
-
-export type VoteHandlerArgs =
-  | [type: VoteActionType.Dev_DeleteRooms, request: [comId: string], callback: () => void]
-  | [
-      type: VoteActionType.CreateOrJoinRoom,
-      request: [comId: string, data: [roomId: string, roomName: string, user: User]],
-      callback: (
-        returnData:
-          | [
-              returnType: SC_ComType.Approve,
-              comId: string,
-              returnData: [GameRoom, RoundsReadyState],
-            ]
-          | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
-      ) => void,
-    ]
-  | [
-      type: VoteActionType.ToggleReadyGameStart,
-      request: [comId: string, data: [roomId: string, user: User]],
-      callback: (
-        returnData:
-          | [returnType: SC_ComType.Approve, comId: string, [ready: boolean]]
-          | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
-      ) => void,
-    ]
-  | [
-      type: VoteActionType.ToggleReadyRoundEnd,
-      request: [comId: string, data: [roomId: string, user: User]],
-      callback: (
-        returnData:
-          | [returnType: SC_ComType.Approve, comId: string, [ready: boolean]]
-          | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
-      ) => void,
-    ]
-  | [
-      type: VoteActionType.SetVoteColor,
-      request: [comId: string, data: [roomId: string, ticket: Ticket]],
-      callback: (
-        returnData:
-          | [returnType: SC_ComType.Approve, comId: string, returnData: [ticket: Ticket]]
-          | [returnType: SC_ComType.Reject, comId: string, returnData: [reason: string]],
-      ) => void,
-    ];
 
 const userHasPermissionToCreateRoom = (userId: string) => true;
 const userHasPermissionToJoinRoom = (userId: string, roomId: string) => true;
+
+function cleanupRoom(roomId: string, clocks: Map<string, NodeJS.Timeout>) {
+  const clock = clocks.get(roomId);
+  if (clock) {
+    clearInterval(clock);
+    clocks.delete(roomId);
+  }
+}
 
 function startRound(
   io: sServer,
@@ -115,17 +46,19 @@ function startRound(
   clocks: Map<string, NodeJS.Timeout>,
   round: GameRound,
 ) {
-  const [, startTime, endTime] = round;
+  const { startTime, endTime } = round;
+  cleanupRoom(roomId, clocks);
+
   clocks.set(
     roomId,
     setInterval(() => {
       if (Date.now() > startTime) {
-        clearInterval(clocks.get(roomId));
-        io.to(roomId).emit(SignalType.Vote, [
-          SC_GameEventType.RoundStart,
-          createId(),
-          [roomId, round],
-        ]);
+        cleanupRoom(roomId, clocks);
+        io.to(roomId).emit(SignalType.Vote, {
+          type: SC_GameEventType.RoundStart,
+          comId: createId(),
+          data: { roomId, round },
+        } as SocketEvent);
 
         clocks.set(
           roomId,
@@ -141,13 +74,10 @@ function startRound(
 }
 
 export const calculateRoundResult = (tickets: Ticket[]) => {
-  // Calculate
   const colorSplit = tickets.reduce(
     (acc, ticket) => {
-      const [ticketId, ticketOwner, ticketColor] = ticket;
-
-      if (ticketColor !== TicketColor.None) {
-        acc[ticketColor].push(ticket);
+      if (ticket.color !== TicketColor.None) {
+        acc[ticket.color].push(ticket);
       }
       return acc;
     },
@@ -156,14 +86,15 @@ export const calculateRoundResult = (tickets: Ticket[]) => {
       Ticket[]
     >,
   );
-  const { majorityColor, minorityColor } = (() => {
-    const sort = Object.entries(colorSplit).sort((a, b) => b[1].length - a[1].length);
-    return { majorityColor: sort[0][0], minorityColor: sort[1][0] };
-  })();
 
-  const newTickets = tickets.filter(
-    ([ticketId, ticketOwner, ticketColor]) => ticketColor === minorityColor,
-  );
+  const sortedColors = Object.entries(colorSplit)
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([color]) => parseInt(color) as TicketColor.Blue | TicketColor.Red);
+
+  const majorityColor = sortedColors[0];
+  const minorityColor = sortedColors[1];
+
+  const newTickets = tickets.filter(ticket => ticket.color === minorityColor);
 
   return {
     colorSplit,
@@ -181,36 +112,42 @@ function endRound(
   clocks: Map<string, NodeJS.Timeout>,
   round: GameRound,
 ) {
-  clearInterval(clocks.get(roomId));
-  round[2] = Date.now();
-  const [roundNumber, startTime, endTime] = round;
-  const newRoundStart = Date.now() + 1000 * 10;
+  cleanupRoom(roomId, clocks);
+  round.endTime = Date.now();
+  const { number, startTime, endTime } = round;
+  const newRoundStart = Date.now() + DEFAULT_ROUND_INTERIM_LENGTH;
 
   const existingRoom = rooms.get(roomId);
   if (!existingRoom) {
-    console.error(`Room ${roomId} no longer exists`);
+    const error = `Room ${roomId} no longer exists`;
+    console.error(error);
+    io.to(roomId).emit(SignalType.Vote, {
+      type: SC_GameEventType.Error,
+      comId: createId(),
+      data: { roomId, error },
+    } as SocketEvent);
     return;
   }
-  const [, roomName, members, tickets, offers, , rounds] = existingRoom;
+  const { name, members, tickets, offers, rounds } = existingRoom;
 
   const { newTickets } = calculateRoundResult(tickets);
 
-  const newRound: GameRound = [
-    roundNumber + 1,
-    newRoundStart,
-    newRoundStart + 1000 * 60 * 5,
-    [tickets, newTickets],
-  ];
+  const newRound: GameRound = {
+    number: number + 1,
+    startTime: newRoundStart,
+    endTime: newRoundStart + 1000 * 60 * 5,
+    result: { previousTickets: tickets, newTickets },
+  };
 
   rounds.push(newRound);
 
   startRound(io, socket, roomId, rooms, clocks, newRound);
 
-  io.to(roomId).emit(SignalType.Vote, [
-    SC_GameEventType.RoundEnd,
-    createId(),
-    [roomId, round, newRound],
-  ]);
+  io.to(roomId).emit(SignalType.Vote, {
+    type: SC_GameEventType.RoundEnd,
+    comId: createId(),
+    data: { roomId, previousRound: round, newRound },
+  } as SocketEvent);
 }
 
 export default function vote() {
@@ -218,288 +155,358 @@ export default function vote() {
   const roomsReadyState = new Map<string, RoundsReadyState>();
   const clocks = new Map<string, NodeJS.Timeout>();
 
-  const handler =
-    (socket: serverSocket, io: sServer) =>
-    (...[type, request, callback]: VoteHandlerArgs) => {
-      try {
-        switch (type) {
-          case VoteActionType.Dev_DeleteRooms: {
-            rooms.clear();
-            roomsReadyState.clear();
+  const handler = (socket: serverSocket, io: sServer) => (args: VoteHandlerArgs) => {
+    const { type, request, callback } = args;
+    try {
+      switch (type) {
+        case VoteActionType.Dev_DeleteRooms: {
+          rooms.forEach((_, roomId) => cleanupRoom(roomId, clocks));
+          rooms.clear();
+          roomsReadyState.clear();
+          clocks.clear();
+          callback();
+          return;
+        }
 
-            console.log({ rooms });
-            console.log({ roomsPreStart: roomsReadyState });
-            callback();
+        case VoteActionType.CreateOrJoinRoom: {
+          const { comId, data } = request;
+          const { roomId, roomName, user } = data;
+
+          if (!user) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "User is not logged in" },
+            });
+            return;
+          }
+          socket.data.user.id = user.id;
+          socket.data.user.username = user.username;
+
+          let existingRoom = rooms.get(roomId);
+          if (!existingRoom && userHasPermissionToCreateRoom(user.id)) {
+            const newRoom: GameRoom = {
+              id: roomId,
+              name: roomName,
+              members: [user],
+              tickets: [],
+              offers: [],
+              startTime: null,
+              rounds: [],
+            };
+            rooms.set(roomId, newRoom);
+            socket.join(roomId);
+            socket.broadcast.emit(SignalType.Vote, {
+              type: SC_GameEventType.RoomCreated,
+              comId,
+              data: newRoom,
+            } as SocketEvent);
+
+            const roomPreStart: RoundsReadyState = {
+              roomId,
+              round: 0,
+              readyUsers: [],
+            };
+            roomsReadyState.set(roomId, roomPreStart);
+
+            callback({
+              type: SC_ComType.Approve,
+              comId,
+              data: { room: newRoom, readyState: roomPreStart },
+            });
+          } else if (!existingRoom && !userHasPermissionToCreateRoom(user.id)) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "User does not have permission to create room" },
+            });
+          } else if (existingRoom && userHasPermissionToJoinRoom(user.id, roomId)) {
+            let { members } = existingRoom;
+            members = Array.from(new Set([...members, user].map(user => user.id))).map(userId => ({
+              id: userId,
+              username:
+                [...members, user].find(member => member.id === userId)?.username ?? "Unknown User",
+            }));
+
+            const newRoom: GameRoom = {
+              ...existingRoom,
+              members,
+            };
+            rooms.set(roomId, newRoom);
+            socket.join(roomId);
+            socket.broadcast.emit(SignalType.Vote, {
+              type: SC_GameEventType.UserJoinedRoom,
+              comId,
+              data: { roomId, user },
+            } as SocketEvent);
+
+            const roomPreStart = roomsReadyState.get(roomId) ?? {
+              roomId,
+              round: 0,
+              readyUsers: [],
+            };
+
+            callback({
+              type: SC_ComType.Approve,
+              comId,
+              data: { room: newRoom, readyState: roomPreStart },
+            });
+          }
+          break;
+        }
+
+        case VoteActionType.ToggleReadyGameStart: {
+          const { comId, data } = request;
+          const { roomId, user } = data;
+          if (!user) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "User is not logged in" },
+            });
             return;
           }
 
-          case VoteActionType.CreateOrJoinRoom: {
-            const [comId, [roomId, roomName, user]] = request;
+          const existingRoom = rooms.get(roomId);
+          if (!existingRoom) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "Room does not exist" },
+            });
+            return;
+          }
 
-            if (!user) {
-              callback([SC_ComType.Reject, comId, ["User is not logged in"]]);
-              return;
-            }
-            socket.data.user.id = user[0];
-            socket.data.user.username = user[1];
+          const { members, tickets, offers, name } = existingRoom;
+          if (!members.find(member => member.id === user.id)) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "User is not in room" },
+            });
+            return;
+          }
 
-            let existingRoom = rooms.get(roomId);
-            if (!existingRoom && userHasPermissionToCreateRoom(user[0])) {
-              const newRoom: GameRoom = [roomId, roomName, [user], [], [], null, []];
-              rooms.set(roomId, newRoom);
-              socket.join(roomId);
-              socket.broadcast.emit(SignalType.Vote, [
-                SC_GameEventType.RoomCreated,
-                comId,
-                newRoom,
-              ]);
+          const roomPreStart = roomsReadyState.get(roomId);
+          if (!roomPreStart) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "Room is not in pre-start state" },
+            });
+            return;
+          }
 
-              const roomPreStart: RoundsReadyState = [roomId, 0, []];
-              roomsReadyState.set(roomId, roomPreStart);
+          if (socket.data.user.id !== user.id) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "User attempted to toggle ready for a different user" },
+            });
+            return;
+          }
 
-              callback([SC_ComType.Approve, comId, [newRoom, roomPreStart]]);
-            } else if (!existingRoom && !userHasPermissionToCreateRoom(user[0])) {
-              callback([
-                SC_ComType.Reject,
-                comId,
-                ["User does not have permission to create room"],
-              ]);
-            } else if (existingRoom && userHasPermissionToJoinRoom(user[0], roomId)) {
-              let [roomId, roomName, members, tickets, offers, startTime, rounds] = existingRoom;
-              // const newRoom: GameRoom = [
-              //   roomId,
-              //   roomName,
-              //   Array.from(new Set([...members, user].map(user => user[0]))).map(userId => [
-              //     userId,
-              //     [...members, user].find(member => member[0] === userId)?.[1] ?? "Unknown User",
-              //   ]),
-              //   tickets,
-              //   offers,
-              //   startTime,
-              //   rounds,
-              // ];
-              members = Array.from(new Set([...members, user].map(user => user[0]))).map(userId => [
-                userId,
-                [...members, user].find(member => member[0] === userId)?.[1] ?? "Unknown User",
-              ]);
-              const newRoom: GameRoom = [
-                roomId,
-                roomName,
-                members,
-                tickets,
-                offers,
+          const { readyUsers } = roomPreStart;
+          if (readyUsers.find(userId => userId === user.id)) {
+            roomsReadyState.set(roomId, {
+              ...roomPreStart,
+              readyUsers: readyUsers.filter(userId => userId !== user.id),
+            });
+            callback({
+              type: SC_ComType.Approve,
+              comId,
+              data: { ready: false },
+            });
+            socket.broadcast.emit(SignalType.Vote, {
+              type: SC_GameEventType.UserToggleReadyGameStart,
+              comId,
+              data: { roomId, user, readyState: false },
+            } as SocketEvent);
+            return;
+          } else {
+            const newPreStart: RoundsReadyState = {
+              ...roomPreStart,
+              readyUsers: [...readyUsers, user.id],
+            };
+            roomsReadyState.set(roomId, newPreStart);
+            callback({
+              type: SC_ComType.Approve,
+              comId,
+              data: { ready: true },
+            });
+            socket.broadcast.emit(SignalType.Vote, {
+              type: SC_GameEventType.UserToggleReadyGameStart,
+              comId,
+              data: { roomId, user, readyState: true },
+            } as SocketEvent);
+
+            // Start game if all users are ready
+            if (newPreStart.readyUsers.length === members.length) {
+              const startTime = Date.now() + DEFAULT_ROUND_INTERIM_LENGTH;
+              const newRound: GameRound = {
+                number: 1,
                 startTime,
-                rounds,
-              ];
+                endTime: startTime + DEFAULT_ROUND_LENGTH,
+                result: { previousTickets: tickets, newTickets: [] },
+              };
+
+              startRound(io, socket, roomId, rooms, clocks, newRound);
+              const newRoom: GameRoom = {
+                ...existingRoom,
+                tickets: members
+                  .map(member =>
+                    Array.from(
+                      { length: DEFAULT_TICKET_COUNT },
+                      () =>
+                        ({ id: createId(), owner: member.id, color: TicketColor.None }) as Ticket,
+                    ),
+                  )
+                  .flat(),
+                startTime,
+                rounds: [newRound],
+              };
               rooms.set(roomId, newRoom);
-              socket.join(roomId);
-              socket.broadcast.emit(SignalType.Vote, [
-                SC_GameEventType.UserJoinedRoom,
+              io.to(roomId).emit(SignalType.Vote, {
+                type: SC_GameEventType.GameStart,
                 comId,
-                [roomId, user],
-              ]);
-
-              const roomPreStart = roomsReadyState.get(roomId) ?? [roomId, 0, []];
-
-              callback([SC_ComType.Approve, comId, [newRoom, roomPreStart]]);
+                data: newRoom,
+              } as SocketEvent);
             }
-
-            break;
-          }
-
-          case VoteActionType.ToggleReadyGameStart: {
-            const [comId, [roomId, user]] = request;
-            if (!user) {
-              callback([SC_ComType.Reject, comId, ["User is not logged in"]]);
-              return;
-            }
-
-            const existingRoom = rooms.get(roomId);
-            if (!existingRoom) {
-              callback([SC_ComType.Reject, comId, ["Room does not exist"]]);
-              return;
-            }
-
-            const [, roomName, members, tickets, offers, startTime] = existingRoom;
-            if (!members.find(([userId]) => userId === user[0])) {
-              callback([SC_ComType.Reject, comId, ["User is not in room"]]);
-              return;
-            }
-
-            const roomPreStart = roomsReadyState.get(roomId);
-            if (!roomPreStart) {
-              callback([SC_ComType.Reject, comId, ["Room is not in pre-start state"]]);
-              return;
-            }
-
-            if (socket.data.user.id !== user[0]) {
-              callback([
-                SC_ComType.Reject,
-                comId,
-                ["User attempted to toggle ready for a different user"],
-              ]);
-              return;
-            }
-
-            const [roomIdPreStart, roundNumber, readyUsers] = roomPreStart;
-            if (readyUsers.find(userId => userId === user[0])) {
-              roomsReadyState.set(roomId, [
-                roomIdPreStart,
-                roundNumber,
-                readyUsers.filter(userId => userId !== user[0]),
-              ]);
-              callback([SC_ComType.Approve, comId, [false]]);
-              socket.broadcast.emit(SignalType.Vote, [
-                SC_GameEventType.UserToggleReadyGameStart,
-                comId,
-                [roomId, user, false],
-              ]);
-              return;
-            } else {
-              const newPreStart: RoundsReadyState = [roomIdPreStart, 0, [...readyUsers, user[0]]];
-              roomsReadyState.set(roomId, newPreStart);
-              callback([SC_ComType.Approve, comId, [true]]);
-              socket.broadcast.emit(SignalType.Vote, [
-                SC_GameEventType.UserToggleReadyGameStart,
-                comId,
-                [roomId, user, true],
-              ]);
-
-              // Start game if all users are ready
-              if (newPreStart[2].length === members.length) {
-                console.log(`All users are ready in room ${roomId}`);
-                const startTime = Date.now() + DEFAULT_ROUND_INTERIM_LENGTH;
-                const newRound: GameRound = [
-                  1,
-                  startTime,
-                  startTime + DEFAULT_ROUND_LENGTH,
-                  [tickets, []],
-                ];
-
-                startRound(io, socket, roomId, rooms, clocks, newRound);
-                const newRoom: GameRoom = [
-                  roomId,
-                  roomName,
-                  members,
-                  members
-                    .map(([userId]) =>
-                      Array.from(
-                        { length: DEFAULT_TICKET_COUNT },
-                        () => [createId(), userId, TicketColor.None] as Ticket,
-                      ),
-                    )
-                    .flat(),
-                  offers,
-                  startTime,
-                  [newRound],
-                ];
-                rooms.set(roomId, newRoom);
-                io.to(roomId).emit(SignalType.Vote, [SC_GameEventType.GameStart, comId, newRoom]);
-              }
-              return;
-            }
-          }
-
-          case VoteActionType.ToggleReadyRoundEnd: {
-            const [comId, [roomId, user]] = request;
-            if (!user) {
-              callback([SC_ComType.Reject, comId, ["User is not logged in"]]);
-              return;
-            }
-
-            const existingRoom = rooms.get(roomId);
-            if (!existingRoom) {
-              callback([SC_ComType.Reject, comId, ["Room does not exist"]]);
-              return;
-            }
-
-            const [, roomName, members, tickets, offers, startTime, rounds] = existingRoom;
-            if (!members.find(([userId]) => userId === user[0])) {
-              callback([SC_ComType.Reject, comId, ["User is not in room"]]);
-              return;
-            }
-
-            const roundReadyState = roomsReadyState.get(roomId);
-            if (!roundReadyState) {
-              callback([SC_ComType.Reject, comId, ["Room is not in pre-start state"]]);
-              return;
-            }
-
-            const [, roundNumber, readyUsers] = roundReadyState;
-            if (readyUsers.find(userId => userId === user[0])) {
-              roomsReadyState.set(roomId, [
-                roomId,
-                roundNumber,
-                readyUsers.filter(userId => userId !== user[0]),
-              ]);
-              callback([SC_ComType.Approve, comId, [false]]);
-              return;
-            } else {
-              const newRoundReadyState: RoundsReadyState = [
-                roomId,
-                roundNumber,
-                [...readyUsers, user[0]],
-              ];
-              roomsReadyState.set(roomId, newRoundReadyState);
-              callback([SC_ComType.Approve, comId, [true]]);
-
-              // End round if all users ready
-              if (newRoundReadyState[2].length === members.length) {
-                console.log(`All users are ready in room ${roomId}`);
-                const currentRound = rounds[rounds.length - 1];
-                endRound(io, socket, roomId, rooms, clocks, currentRound);
-              }
-              return;
-            }
-          }
-
-          case VoteActionType.SetVoteColor: {
-            const [comId, [roomId, ticket]] = request;
-            const [ticketId, ticketOwner, ticketColor] = ticket;
-            if (!ticket) {
-              callback([SC_ComType.Reject, comId, ["Ticket is not provided"]]);
-              return;
-            }
-
-            const existingRoom = rooms.get(roomId);
-            if (!existingRoom) {
-              callback([SC_ComType.Reject, comId, ["Room does not exist"]]);
-              return;
-            }
-
-            let [, roomName, members, tickets, offers, startTime, rounds] = existingRoom;
-            const existingTicket = tickets.find(([tickId]) => tickId === ticketId);
-            if (!existingTicket) {
-              callback([SC_ComType.Reject, comId, ["Ticket does not exist"]]);
-              return;
-            }
-
-            // const newRoom: GameRoom = [
-            //   roomId,
-            //   roomName,
-            //   members,
-            //   tickets.map(tick => (tick[0] === ticketId ? ticket : tick)),
-            //   offers,
-            //   startTime,
-            //   rounds,
-            // ];
-            // rooms.set(roomId, newRoom);
-            tickets = tickets.map(tick => (tick[0] === ticketId ? ticket : tick));
-            callback([SC_ComType.Approve, comId, [ticket]]);
             return;
-          }
-
-          default: {
-            console.error(`Received unexpected signal: ${VoteActionType[type]}, ${request}`);
           }
         }
-      } catch (e) {
-        console.error(
-          `Failed to properly handle: ${VoteActionType[type]}, ${request}:`,
-          e instanceof Error ? e.message : e,
-        );
+
+        case VoteActionType.ToggleReadyRoundEnd: {
+          const { comId, data } = request;
+          const { roomId, user } = data;
+          if (!user) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "User is not logged in" },
+            });
+            return;
+          }
+
+          const existingRoom = rooms.get(roomId);
+          if (!existingRoom) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "Room does not exist" },
+            });
+            return;
+          }
+
+          const { members, rounds } = existingRoom;
+          if (!members.find(member => member.id === user.id)) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "User is not in room" },
+            });
+            return;
+          }
+
+          const roundReadyState = roomsReadyState.get(roomId);
+          if (!roundReadyState) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "Room is not in pre-start state" },
+            });
+            return;
+          }
+
+          const { readyUsers } = roundReadyState;
+          if (readyUsers.find(userId => userId === user.id)) {
+            roomsReadyState.set(roomId, {
+              ...roundReadyState,
+              readyUsers: readyUsers.filter(userId => userId !== user.id),
+            });
+            callback({
+              type: SC_ComType.Approve,
+              comId,
+              data: { ready: false },
+            });
+            return;
+          } else {
+            const newRoundReadyState: RoundsReadyState = {
+              ...roundReadyState,
+              readyUsers: [...readyUsers, user.id],
+            };
+            roomsReadyState.set(roomId, newRoundReadyState);
+            callback({
+              type: SC_ComType.Approve,
+              comId,
+              data: { ready: true },
+            });
+
+            // End round if all users ready
+            if (newRoundReadyState.readyUsers.length === members.length) {
+              const currentRound = rounds[rounds.length - 1];
+              endRound(io, socket, roomId, rooms, clocks, currentRound);
+            }
+            return;
+          }
+        }
+
+        case VoteActionType.SetVoteColor: {
+          const { comId, data } = request;
+          const { roomId, ticket } = data;
+          if (!ticket) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "Ticket is not provided" },
+            });
+            return;
+          }
+
+          const existingRoom = rooms.get(roomId);
+          if (!existingRoom) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "Room does not exist" },
+            });
+            return;
+          }
+
+          let { tickets } = existingRoom;
+          const existingTicket = tickets.find(tick => tick.id === ticket.id);
+          if (!existingTicket) {
+            callback({
+              type: SC_ComType.Reject,
+              comId,
+              data: { reason: "Ticket does not exist" },
+            });
+            return;
+          }
+
+          tickets = tickets.map(tick => (tick.id === ticket.id ? ticket : tick));
+          callback({
+            type: SC_ComType.Approve,
+            comId,
+            data: { ticket },
+          });
+          return;
+        }
+
+        default: {
+          console.error(`Received unexpected signal: ${VoteActionType[type]}, ${request}`);
+        }
       }
-    };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      console.error(`Failed to properly handle: ${VoteActionType[type]}, ${request}:`, error);
+      callback({
+        type: SC_ComType.Reject,
+        comId: request.comId,
+        data: { reason: `Internal server error: ${error}` },
+      });
+    }
+  };
 
   return { handler };
 }

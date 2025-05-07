@@ -1,12 +1,17 @@
-import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
+import {
+  clientSocket,
+  SC_ComType,
+  SignalType,
+  ChatActionResponse,
+  ChatActionRequest,
+} from "~/types/socket";
 import { createSignal, useContext } from "solid-js";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Component, ComponentProps, For, onMount } from "solid-js";
-import { ChatHandlerArgs, Message, ChatRoom } from "~/lib/Server/chat";
+import { Message, ChatRoom } from "~/lib/Server/chat";
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createId } from "@paralleldrive/cuid2";
-import { InferCallbackData } from "~/types/socket-utils";
 import { Button } from "~/components/ui/button";
 import { randAnimal } from "@ngneat/falso";
 import { showToast } from "~/components/ui/toast";
@@ -17,53 +22,43 @@ import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import ChatMessage from "./ChatMessage";
 import UserAvatarCard from "./UserAvatarCard";
 
-export enum ChatActionType {
-  CreateOrJoinRoom,
-  LeaveRoom,
-  SendMessage,
-}
-
 export const chatHandler =
   (rooms: Record<string, ChatRoom>, setRooms: SetStoreFunction<Record<string, ChatRoom>>) =>
-  ([type, comId, data]:
-    | [type: SC_ComType.Delta, comId: string, data: Message]
-    | [type: SC_ComType.Set, comId: string, data: ChatRoom]) => {
+  (data: { type: SC_ComType; comId: string; data: Message | ChatRoom }) => {
     try {
-      // console.log(
-      // 	`Received signal: ${SC_ComType[type]}, ${comId}, ${data}`
-      // );
-      switch (type) {
+      switch (data.type) {
         case SC_ComType.Set: {
-          const [roomId, ...roomData] = data;
+          const room = data.data as ChatRoom;
           setRooms({
-            [roomId]: [roomId, ...roomData],
+            [room.roomId]: room,
           });
           break;
         }
 
         case SC_ComType.Delta: {
-          const [senderId, roomId, timestamp, message] = data;
-          const [, roomName, members, messages, permissions] = rooms[roomId];
-          const updatedRoom: ChatRoom = [
-            roomId,
-            roomName,
-            members,
-            [...messages, data],
-            permissions,
-          ];
+          const message = data.data as Message;
+          const room = rooms[message.roomId];
+          if (!room) break;
+
+          const updatedRoom: ChatRoom = {
+            ...room,
+            messages: [...room.messages, message],
+          };
           setRooms({
-            [roomId]: updatedRoom,
+            [message.roomId]: updatedRoom,
           });
           break;
         }
 
         default: {
-          console.error(`Received unexpected signal: ${SC_ComType[type]}, ${comId}, ${data}`);
+          console.error(
+            `Received unexpected signal: ${SC_ComType[data.type]}, ${data.comId}, ${data.data}`,
+          );
         }
       }
     } catch (e) {
       console.error(
-        `Failed to properly handle: ${SC_ComType[type]}, ${comId}, ${data}:`,
+        `Failed to properly handle: ${SC_ComType[data.type]}, ${data.comId}, ${data.data}:`,
         e instanceof Error ? e.message : e,
       );
     }
@@ -84,49 +79,56 @@ const joinRoom = (
   user: { name: string; id: string },
   setRooms: SetStoreFunction<Record<string, ChatRoom>>,
 ) => {
+  const request: ChatActionRequest<"CreateOrJoinRoom"> = {
+    type: "CreateOrJoinRoom",
+    comId: createId(),
+    data: {
+      roomId,
+      roomName,
+      user: { id: user.id, username: user.name },
+    },
+  };
+
   socket
     .timeout(DEFAULT_REQUEST_TIMEOUT)
-    .emit(
+    .emit<"CreateOrJoinRoom">(
       SignalType.Chat,
-      ChatActionType.CreateOrJoinRoom,
-      [createId(), [roomId, roomName, [user.id, user.name]]],
+      request,
       (
-        err: Error,
-        [returnType, comId, returnData]: InferCallbackData<
-          ChatHandlerArgs,
-          ChatActionType.CreateOrJoinRoom
-        >,
+        error: Error | null,
+        returnData:
+          | ChatActionResponse<"CreateOrJoinRoom">
+          | { type: SC_ComType.Reject; comId: string; data: { reason: string } },
       ) => {
-        if (err) {
+        if (error) {
           showToast({
             title: "Error",
-            description: err.message,
-            variant: "error",
-            duration: DEFAULT_TOAST_DURATION,
-          });
-          return;
-        }
-        if (returnType === SC_ComType.Reject) {
-          const [reason] = returnData;
-          showToast({
-            title: "Error",
-            description: reason,
+            description: error.message,
             variant: "error",
             duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
 
-        const [roomId, roomName, ...roomData] = returnData;
+        if (returnData.type === SC_ComType.Reject) {
+          showToast({
+            title: "Error",
+            description: returnData.data.reason,
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          return;
+        }
+
+        const room = returnData.data;
         showToast({
           title: "Room Joined!",
-          description: `You have
-              successfully created or joined room: ${roomName}`,
+          description: `You have successfully created or joined room: ${room.roomName}`,
           variant: "success",
           duration: DEFAULT_TOAST_DURATION,
         });
         setRooms({
-          [roomId]: returnData,
+          [room.roomId]: room,
         });
       },
     );
@@ -138,49 +140,52 @@ const sendMessage = (
   rooms: Record<string, ChatRoom>,
   setRooms: SetStoreFunction<Record<string, ChatRoom>>,
 ) => {
+  const request: ChatActionRequest<"SendMessage"> = {
+    type: "SendMessage",
+    comId: createId(),
+    data: { message },
+  };
+
   socket
     .timeout(DEFAULT_REQUEST_TIMEOUT)
-    .emit(
+    .emit<"SendMessage">(
       SignalType.Chat,
-      ChatActionType.SendMessage,
-      [createId(), [message]],
+      request,
       (
-        err: Error,
-        [returnType, comId, returnData]: InferCallbackData<
-          ChatHandlerArgs,
-          ChatActionType.SendMessage
-        >,
+        error: Error | null,
+        returnData:
+          | ChatActionResponse<"SendMessage">
+          | { type: SC_ComType.Reject; comId: string; data: { reason: string } },
       ) => {
-        // console.log(
-        // 	`Received response from server: ${returnType}, ${comId}, ${returnData}`
-        // );
-        if (returnType === SC_ComType.Reject) {
-          const [reason] = returnData;
+        if (error) {
           showToast({
             title: "Error",
-            description: reason,
+            description: error.message,
             variant: "error",
             duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
-        if (err) {
+
+        if (returnData.type === SC_ComType.Reject) {
           showToast({
             title: "Error",
-            description: err.message,
+            description: returnData.data.reason,
             variant: "error",
             duration: DEFAULT_TOAST_DURATION,
           });
           return;
         }
-        if (returnType === SC_ComType.Approve) {
-          // console.log(
-          // 	`Recieved approval from server: ${message.join(", ")}`
-          // );
-          const [senderId, roomId, ...rest] = message;
-          const [, roomName, memberIds, messages, permissions] = rooms[roomId];
-          setRooms(roomId, [roomId, roomName, memberIds, [...messages, message], permissions]);
-        }
+
+        const room = rooms[message.roomId];
+        if (!room) return;
+
+        setRooms({
+          [message.roomId]: {
+            ...room,
+            messages: [...room.messages, message],
+          },
+        });
       },
     );
 };
@@ -222,7 +227,7 @@ const Chat: Component<ComponentProps<"div">> = rawProps => {
         <div class="flex w-full flex-row items-center justify-center">
           <TabsList class="w-80% grid w-full auto-cols-min grid-flow-col">
             <For each={Object.entries(rooms)}>
-              {([roomId, room]) => <TabsTrigger value={roomId}>{room[1]}</TabsTrigger>}
+              {([roomId, room]) => <TabsTrigger value={roomId}>{room.roomName}</TabsTrigger>}
             </For>
           </TabsList>
           <Button
@@ -234,28 +239,66 @@ const Chat: Component<ComponentProps<"div">> = rawProps => {
         </div>
 
         <For each={Object.entries(rooms)}>
-          {([roomId, [, roomName, members, messages, permissions]]) => (
+          {([roomId, room]) => (
             <TabsContent value={roomId}>
               <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
                 <ResizablePanel initialSize={0.15} class="p-2">
-                  <For each={members}>{member => <UserAvatarCard user={member} />}</For>
+                  <For each={room.members}>{member => <UserAvatarCard user={member} />}</For>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel initialSize={0.85} class="p-2">
                   <div>
-                    <For each={messages}>
-                      {([senderId, roomId, timestamp, message]) => {
-                        return (
-                          <ChatMessage
-                            senderId={senderId}
-                            user={user}
-                            members={members}
-                            timestamp={timestamp}
-                            message={message}
-                          />
-                        );
-                      }}
+                    <For each={room.messages}>
+                      {message => (
+                        <ChatMessage
+                          senderId={message.senderId}
+                          roomId={message.roomId}
+                          timestamp={message.timestamp}
+                          message={message.message}
+                          members={room.members}
+                        />
+                      )}
                     </For>
+                  </div>
+                  <div class="flex flex-row items-center justify-center">
+                    <TextField class="w-full">
+                      <TextFieldInput
+                        type={"text"}
+                        placeholder="Type a message..."
+                        value={chatInput()}
+                        onInput={e => setChatInput(e.currentTarget.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter" && chatInput().trim()) {
+                            const message: Message = {
+                              senderId: user().id,
+                              roomId,
+                              timestamp: Date.now(),
+                              message: chatInput().trim(),
+                            };
+                            sendMessage(socket, message, rooms, setRooms);
+                            setChatInput("");
+                          }
+                        }}
+                      />
+                    </TextField>
+                    <Button
+                      variant="outline"
+                      class="m-1.5 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium"
+                      onClick={() => {
+                        if (chatInput().trim()) {
+                          const message: Message = {
+                            senderId: user().id,
+                            roomId,
+                            timestamp: Date.now(),
+                            message: chatInput().trim(),
+                          };
+                          sendMessage(socket, message, rooms, setRooms);
+                          setChatInput("");
+                        }
+                      }}
+                    >
+                      Send
+                    </Button>
                   </div>
                 </ResizablePanel>
               </Resizable>
@@ -263,34 +306,6 @@ const Chat: Component<ComponentProps<"div">> = rawProps => {
           )}
         </For>
       </Tabs>
-      <div class="flex w-full flex-row items-center justify-center">
-        <TextField class="w-full">
-          <TextFieldInput
-            value={chatInput()}
-            onInput={e => setChatInput(e.currentTarget.value)}
-            type={"text"}
-            placeholder="Type a message..."
-          />
-        </TextField>
-        <Button
-          class="mx-3 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium"
-          onClick={() => {
-            if (!chatInput() || !currentRoom() || !user().id) {
-              showToast({
-                title: "You say anything!",
-                description: "Please enter a message before sending!",
-                variant: "error",
-                duration: DEFAULT_TOAST_DURATION,
-              });
-            }
-            const message: Message = [user().id, currentRoom(), Date.now(), chatInput()];
-            sendMessage(socket, message, rooms, setRooms);
-            setChatInput("");
-          }}
-        >
-          Send!
-        </Button>
-      </div>
     </div>
   );
 };

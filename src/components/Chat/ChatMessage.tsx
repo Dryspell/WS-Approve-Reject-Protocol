@@ -1,16 +1,17 @@
 import { formatDistance } from "date-fns";
-import { Accessor } from "solid-js";
+import { Component } from "solid-js";
 import { ChatRoom } from "~/lib/Server/chat";
+import { User } from "~/types/user";
 
 export default function ChatMessage(props: {
   senderId: string;
-  user: Accessor<{ id: string; name: string }>;
-  members: ChatRoom[2];
+  roomId: string;
   timestamp: number;
   message: string;
+  members: User[];
 }) {
   return (
-    <div class={`chat ${props.senderId === props.user().id ? "chat-start" : "chat-end"}`}>
+    <div class={`chat ${props.senderId === props.senderId ? "chat-start" : "chat-end"}`}>
       <div class="avatar chat-image">
         <div class="w-10 rounded-full">
           <img
@@ -20,7 +21,7 @@ export default function ChatMessage(props: {
         </div>
       </div>
       <div class="chat-header">
-        {props.members.find(([id, name]) => id === props.senderId)?.[1]}
+        {props.members.find(member => member.id === props.senderId)?.username}
         <time class="px-2 text-xs opacity-50">
           {formatDistance(new Date(props.timestamp), new Date(), {
             addSuffix: true,

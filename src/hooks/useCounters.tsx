@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { Component, ComponentProps, For, onMount, useContext } from "solid-js";
 import { Flex } from "~/components/ui/flex";
-import { clientSocket, CS_ComType, SC_ComType, SignalType } from "~/types/socket";
+import { clientSocket, CS_ComType, SC_ComType, SignalType, CounterActionResponse } from "~/types/socket";
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
@@ -18,30 +18,26 @@ export const counterHandler =
       [counterId: string]: number;
     }>,
   ) =>
-  ([type, comId, data]:
-    | [
-        type: SC_ComType.Approve,
-        comId: string,
-        data?: [amount: number] | [counters: { [sigId: string]: number }],
-      ]
-    | [type: SC_ComType.Reject, comId: string, data: [reason: string]]
-    | [type: SC_ComType.Delta, comId: string, data: [sigId: string, amount: number]]
-    | [type: SC_ComType.Set, comId: string, data: [sigId: string, amount: number]]) => {
-    switch (type) {
+  (data: {
+    type: SC_ComType;
+    comId: string;
+    data?: { sigId: string; amount: number } | { counters: { [sigId: string]: number } };
+  }) => {
+    switch (data.type) {
       case SC_ComType.Set: {
-        const [sigId, amount] = data;
+        const { sigId, amount } = data.data as { sigId: string; amount: number };
         setCounters({ [sigId]: amount });
         break;
       }
 
       case SC_ComType.Delta: {
-        const [sigId, amount] = data;
+        const { sigId, amount } = data.data as { sigId: string; amount: number };
         setCounters({ [sigId]: counters[sigId] + amount });
         break;
       }
 
       default: {
-        console.error(`Received unexpected signal type: ${SC_ComType[type]}`);
+        console.error(`Received unexpected signal type: ${SC_ComType[data.type]}`);
       }
     }
   };
@@ -55,94 +51,96 @@ export default function useSocketCounter(sigId: string) {
   socket.on(SignalType.Counter, counterHandler(counters, setCounters));
 
   const delta = (delt: number) => {
-    const comId = createId();
-    // const initialTs = performance.now();
-
     socket
       .timeout(DEFAULT_REQUEST_TIMEOUT)
-      .emit(
+      .emit<CS_ComType.Delta>(
         SignalType.Counter,
-        CS_ComType.Delta,
-        [comId, [sigId, delt]],
-        (err: Error, response: InferCallbackData<CounterHandlerArgs, CS_ComType.Delta>) => {
-          if (err) {
-            showToast({
-              title: "Error",
-              description: err.message,
-              variant: "error",
-              duration: DEFAULT_TOAST_DURATION,
-            });
-            return;
+        {
+          type: CS_ComType.Delta,
+          request: {
+            comId: createId(),
+            data: {
+              sigId,
+              amount: delt
+            }
           }
-          if (response[0] === SC_ComType.Reject) {
-            showToast({
-              title: "Error",
-              description: response[2][0],
-              variant: "error",
-              duration: DEFAULT_TOAST_DURATION,
-            });
-            return;
-          }
-          // console.log(
-          // 	`Delta took ${performance.now() - initialTs}ms`
-          // );
-          setCounters({ [sigId]: counters[sigId] + delt });
         },
+        (error: Error | null, returnData: CounterActionResponse<CS_ComType.Delta> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }) => {
+          if (error) {
+            showToast({
+              title: "Error",
+              description: error.message,
+              variant: "error",
+              duration: DEFAULT_TOAST_DURATION,
+            });
+            return;
+          }
+
+          if (returnData.type === SC_ComType.Reject) {
+            showToast({
+              title: "Error",
+              description: returnData.data.reason,
+              variant: "error",
+              duration: DEFAULT_TOAST_DURATION,
+            });
+            return;
+          }
+          setCounters({ [sigId]: counters[sigId] + delt });
+        }
       );
   };
 
   const Counters: Component<ComponentProps<"div">> = rawProps => {
     onMount(() => {
-      const comId = createId();
       socket
         .timeout(DEFAULT_REQUEST_TIMEOUT)
-        .emit(
+        .emit<CS_ComType.Get>(
           SignalType.Counter,
-          CS_ComType.Get,
-          [comId],
-          (
-            err: Error,
-            [returnType, comId, returnData]: InferCallbackData<CounterHandlerArgs, CS_ComType.Get>,
-          ) => {
-            if (err) {
-              console.error(err);
-              return;
+          {
+            type: CS_ComType.Get,
+            request: {
+              comId: createId()
             }
-            if (returnType === SC_ComType.Reject) {
-              console.error(returnData[0]);
-              return;
-            }
-            const counters = returnData[0];
-
-            setCounters(counters);
           },
+          (error: Error | null, returnData: CounterActionResponse<CS_ComType.Get> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }) => {
+            if (error) {
+              console.error(error.message);
+              return;
+            }
+
+            if (returnData.type === SC_ComType.Reject) {
+              console.error(returnData.data.reason);
+              return;
+            }
+            setCounters(returnData.data.counters);
+          }
         );
 
-      const comId2 = createId();
       socket
         .timeout(DEFAULT_REQUEST_TIMEOUT)
-        .emit(
+        .emit<CS_ComType.GetOrCreate>(
           SignalType.Counter,
-          CS_ComType.GetOrCreate,
-          [comId2, [sigId]],
-          (
-            err: Error,
-            [returnType, comId, returnData]: InferCallbackData<
-              CounterHandlerArgs,
-              CS_ComType.GetOrCreate
-            >,
-          ) => {
-            if (err) {
-              console.error(err);
-              return;
+          {
+            type: CS_ComType.GetOrCreate,
+            request: {
+              comId: createId(),
+              data: {
+                sigId
+              }
             }
-            if (returnType === SC_ComType.Reject) {
-              console.error(returnData[0]);
-              return;
-            }
-            const counter = returnData[0];
-            setCounters({ [sigId]: counter });
           },
+          (error: Error | null, returnData: CounterActionResponse<CS_ComType.GetOrCreate> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }) => {
+            if (error) {
+              console.error(error.message);
+              return;
+            }
+
+            if (returnData.type === SC_ComType.Reject) {
+              console.error(returnData.data.reason);
+              return;
+            }
+            setCounters({ [sigId]: returnData.data.amount });
+          }
         );
     });
 

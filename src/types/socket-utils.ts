@@ -28,6 +28,10 @@ export type InferRequestData<T extends keyof ClientToServerEvents> = Tail<
 // 	>["2"]
 // >[0];
 
-export type InferCallbackData<THandlerArgs, TCS_ComType> = Parameters<
-  Extract<THandlerArgs, [TCS_ComType, ...any]>["2"]
+export type InferCallbackData<
+  THandlerArgs extends { type: any; callback: (...args: any[]) => any },
+  TActionType
+> = Parameters<
+  Extract<THandlerArgs, { type: TActionType }>["callback"]
 >[0];
+

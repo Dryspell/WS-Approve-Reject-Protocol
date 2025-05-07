@@ -31,6 +31,7 @@ const arrangeCircularly = (center: [number, number], radius: number, count: numb
 const generateStructures = () => {
   const STRUCTURE_DIMS = [40, 40] as [width: number, height: number];
 
+  // offset the structures so they are centered
   const circularArrangement = arrangeCircularly([CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2], 200, 5).map(
     pos => pos.map((p, i) => p - STRUCTURE_DIMS[i]) as [number, number],
   );
