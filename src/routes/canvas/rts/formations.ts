@@ -103,20 +103,4 @@ export function createConcentratedCircularFormation(
   }
 
   return allPositions;
-
-  // // Step 3: Calculate the centroid angle
-  // const centroidAngle = Math.atan2(centroidY - cy, centroidX - cx) + Math.PI;
-
-  // // Step 4: Rank positions by angular proximity to centroidAngle
-  // allPositions.sort((a, b) => {
-  //   const angularDistanceA = Math.abs(a.angle - centroidAngle);
-  //   const angularDistanceB = Math.abs(b.angle - centroidAngle);
-  //   return angularDistanceA - angularDistanceB;
-  // });
-
-  // // Step 5: Select the closest `n` positions
-  // const selectedPositions = allPositions.slice(0, units.length);
-
-  // // Return the selected positions as [x, y] pairs
-  // return selectedPositions.map((pos) => [pos.x, pos.y] as [number, number]);
 }

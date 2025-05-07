@@ -6,12 +6,11 @@ import {
   CS_ComType,
   SC_ComType,
   SignalType,
+  EmitFunction,
 } from "~/types/socket";
 import { createStore } from "solid-js/store";
 import { JSONObject } from "~/types/utils";
-import { InferCallbackData } from "~/types/socket-utils";
 import { DEFAULT_REQUEST_TIMEOUT } from "~/lib/timeout-constants";
-import { PokemonFetchHandlerArgs } from "~/lib/Server/pokemonFetch";
 import { SocketContext } from "~/app";
 
 const enum QueryStatus {
@@ -25,6 +24,22 @@ export type PokemonApiResponse = {
   id: number;
   name: string;
 } & JSONObject;
+
+type PokemonRequest = {
+  type: CS_ComType.Get;
+  request: {
+    comId: string;
+    data: {
+      id: number;
+    };
+  };
+};
+
+type PokemonResponse = {
+  type: SC_ComType.Approve | SC_ComType.Reject;
+  comId: string;
+  data: PokemonApiResponse | { reason: string };
+};
 
 export default function useDataFetching<
   TSuccessData,
@@ -52,50 +67,50 @@ export default function useDataFetching<
   function fetchPokemon(pokemonId: number) {
     const comId = createId();
     setQueryData({ [pokemonId]: { queryStatus: QueryStatus.Loading } });
-    socket
-      .timeout(DEFAULT_REQUEST_TIMEOUT)
-      .emit(
-        signalType as SignalType.Pokemon,
-        CS_ComType.Get,
-        [comId, [pokemonId]],
-        (
-          err: Error,
-          [returnType, comId, returnData]: InferCallbackData<
-            PokemonFetchHandlerArgs,
-            CS_ComType.Get
-          >,
-        ) => {
-          if (err) {
-            setQueryData({
-              [pokemonId]: {
-                queryStatus: QueryStatus.Error,
-                error: err.message,
-              },
-            });
-            return;
-          }
 
-          if (returnType === SC_ComType.Reject) {
-            setQueryData({
-              [pokemonId]: {
-                queryStatus: QueryStatus.Error,
-                error: returnData[0],
-              },
-            });
-            return;
-          }
+    const request: PokemonRequest = {
+      type: CS_ComType.Get,
+      request: {
+        comId,
+        data: { id: pokemonId },
+      }
+    };
 
-          if (returnType === SC_ComType.Approve) {
-            setQueryData({
-              [pokemonId]: {
-                queryStatus: QueryStatus.Success,
-                data: returnData,
-              },
-            });
-            return;
-          }
-        },
-      );
+    socket.timeout(DEFAULT_REQUEST_TIMEOUT).emit(
+      SignalType.Pokemon,
+      request,
+      (error: Error | null, returnData: PokemonResponse) => {
+        if (error) {
+          setQueryData({
+            [pokemonId]: {
+              queryStatus: QueryStatus.Error,
+              error: error.message,
+            },
+          });
+          return;
+        }
+
+        if (returnData.type === SC_ComType.Reject) {
+          setQueryData({
+            [pokemonId]: {
+              queryStatus: QueryStatus.Error,
+              error: (returnData.data as { reason: string }).reason,
+            },
+          });
+          return;
+        }
+
+        if (returnData.type === SC_ComType.Approve) {
+          setQueryData({
+            [pokemonId]: {
+              queryStatus: QueryStatus.Success,
+              data: returnData.data as PokemonApiResponse,
+            },
+          });
+          return;
+        }
+      }
+    );
   }
 
   const Interface: Component<ComponentProps<"div">> = rawProps => {
