@@ -5,7 +5,8 @@
     "dev": "vinxi dev",
     "build": "vinxi build",
     "start": "vinxi start",
-    "test": "pnpx tsx ./src/tests/serialization/tests.ts"
+    "test": "pnpx tsx ./src/tests/serialization/tests.ts",
+    "db:migrate": "tsx drizzle/migrate.ts"
   },
   "dependencies": {
     "@corvu/resizable": "^0.2.5",
@@ -23,11 +24,13 @@
     "autoprefixer": "^10.4.21",
     "axios": "^1.9.0",
     "axios-cache-interceptor": "^1.8.0",
+    "better-sqlite3": "^11.9.1",
     "canvas": "^2.11.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "d3": "^7.9.0",
     "date-fns": "4.1.0",
+    "drizzle-orm": "^0.43.1",
     "embla-carousel-solid": "^8.6.0",
     "graphology": "^0.25.4",
     "munkres-js": "^1.2.2",
@@ -49,6 +52,7 @@
   },
   "devDependencies": {
     "@flydotio/dockerfile": "^0.5.9",
+    "@types/better-sqlite3": "^7.6.13",
     "daisyui": "^4.12.24",
     "prettier": "^3.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11"

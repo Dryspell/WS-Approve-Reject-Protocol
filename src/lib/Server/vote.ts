@@ -17,6 +17,7 @@ import {
   SocketEvent,
   SC_GameEventType,
 } from "~/types/vote";
+import { dbService } from "./db";
 
 export type { GameRoom, GameRound, RoundsReadyState, Ticket, TicketColor, VoteActionType, VoteHandlerArgs };
 
@@ -155,6 +156,18 @@ export default function vote() {
   const roomsReadyState = new Map<string, RoundsReadyState>();
   const clocks = new Map<string, NodeJS.Timeout>();
 
+  // Load active rooms from database on startup
+  dbService.getActiveRooms().then(activeRooms => {
+    activeRooms.forEach(room => {
+      rooms.set(room.id, room);
+      roomsReadyState.set(room.id, {
+        roomId: room.id,
+        round: room.rounds.length,
+        readyUsers: [],
+      });
+    });
+  });
+
   const handler = (socket: serverSocket, io: sServer) => (args: VoteHandlerArgs) => {
     const { type, request, callback } = args;
     try {
@@ -209,16 +222,15 @@ export default function vote() {
             };
             roomsReadyState.set(roomId, roomPreStart);
 
+            // Persist room to database
+            dbService.createRoom(newRoom).catch(error => {
+              console.error('Failed to persist room to database:', error);
+            });
+
             callback({
               type: SC_ComType.Approve,
               comId,
               data: { room: newRoom, readyState: roomPreStart },
-            });
-          } else if (!existingRoom && !userHasPermissionToCreateRoom(user.id)) {
-            callback({
-              type: SC_ComType.Reject,
-              comId,
-              data: { reason: "User does not have permission to create room" },
             });
           } else if (existingRoom && userHasPermissionToJoinRoom(user.id, roomId)) {
             let { members } = existingRoom;
@@ -239,6 +251,11 @@ export default function vote() {
               comId,
               data: { roomId, user },
             } as SocketEvent);
+
+            // Update room in database
+            dbService.updateRoom(newRoom).catch(error => {
+              console.error('Failed to update room in database:', error);
+            });
 
             const roomPreStart = roomsReadyState.get(roomId) ?? {
               roomId,
@@ -366,6 +383,16 @@ export default function vote() {
                 rounds: [newRound],
               };
               rooms.set(roomId, newRoom);
+
+              // Persist game start to database
+              Promise.all([
+                dbService.updateRoom(newRoom),
+                dbService.saveRound(roomId, newRound),
+                dbService.saveTickets(roomId, newRoom.tickets),
+              ]).catch(error => {
+                console.error('Failed to persist game start to database:', error);
+              });
+
               io.to(roomId).emit(SignalType.Vote, {
                 type: SC_GameEventType.GameStart,
                 comId,
@@ -442,6 +469,11 @@ export default function vote() {
               data: { ready: true },
             });
 
+            // Persist ready state to database
+            dbService.saveReadyState(roomId, roundReadyState.round, user.id).catch(error => {
+              console.error('Failed to persist ready state to database:', error);
+            });
+
             // End round if all users ready
             if (newRoundReadyState.readyUsers.length === members.length) {
               const currentRound = rounds[rounds.length - 1];
@@ -497,16 +529,15 @@ export default function vote() {
           console.error(`Received unexpected signal: ${VoteActionType[type]}, ${request}`);
         }
       }
-    } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
-      console.error(`Failed to properly handle: ${VoteActionType[type]}, ${request}:`, error);
+    } catch (error) {
+      console.error('Error in vote handler:', error);
       callback({
         type: SC_ComType.Reject,
         comId: request.comId,
-        data: { reason: `Internal server error: ${error}` },
+        data: { reason: "Internal server error" },
       });
     }
   };
 
-  return { handler };
+  return handler;
 }

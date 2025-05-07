@@ -1,0 +1,48 @@
+{
+  "version": "5",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1710000000000,
+      "tag": "0000_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1710000000001,
+      "tag": "0001_game_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1710000000002,
+      "tag": "0002_game_room_members",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1710000000003,
+      "tag": "0003_game_rounds",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1710000000004,
+      "tag": "0004_tickets",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1710000000005,
+      "tag": "0005_round_ready_states",
+      "breakpoints": true
+    }
+  ]
+} 
