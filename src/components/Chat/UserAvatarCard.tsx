@@ -1,10 +1,10 @@
-import { User } from "~/lib/Server/chat";
 import { Card } from "../ui/card";
 import { children, JSXElement } from "solid-js";
 import BsPersonCircle from "./BsPersonCircle";
+import { User } from "~/types/user";
 
 export default function UserAvatarCard(props: { user: User; children?: JSXElement }) {
-  const [id, name, avatarURL] = props.user;
+  const { id, username, avatarURL } = props.user;
   const c = children(() => props.children);
 
   return (
@@ -19,7 +19,7 @@ export default function UserAvatarCard(props: { user: User; children?: JSXElemen
             <BsPersonCircle />
           )}
         </div>
-        <div class="chat-header">{name}</div>
+        <div class="chat-header">{username}</div>
       </div>
       {c()}
     </Card>

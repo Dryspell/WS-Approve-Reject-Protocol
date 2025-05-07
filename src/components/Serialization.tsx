@@ -23,10 +23,10 @@ export default function Serialization(props: {}) {
           cat: "dog",
         },
         {
-          cat: "dog",
+          cat: "pizza",
         },
         {
-          bark: "meow",
+          cat: "meow",
         },
       ],
     },
@@ -66,26 +66,38 @@ export default function Serialization(props: {}) {
   const serialized = serialize(deepClone(testSerialObject));
   const deserialized = deserialize(deepClone(serialized), createRepresentation(testSerialObject));
 
-  const serializeProxy = new Proxy(
-    serialize({
-      testSerialObject2,
-    }),
-    {
-      get: (target, prop) => {
-        console.log(target, prop);
-        if (!(prop in testSerialObject2)) {
-          console.log("undefined");
-          return undefined;
-        }
-        const newProp = prop as keyof typeof testSerialObject2;
-        const index = Object.keys(testSerialObject2).indexOf(newProp);
-        if (!Array.isArray(target) || !Array.isArray(target[0])) return undefined;
-        const res = target?.[0]?.[Object.keys(testSerialObject2).indexOf(newProp)];
-        console.log(res, index);
-        return res;
-      },
+  const serializedT2 = serialize({
+    testSerialObject2,
+  });
+
+  if (!(typeof serializedT2 === "object" && serializedT2)) {
+    throw new Error("Invalid serialization");
+  }
+
+  const serializeProxy = new Proxy(serializedT2, {
+    get: (target, prop) => {
+      console.log(target, prop);
+      if (!(prop in testSerialObject2)) {
+        console.log("undefined");
+        return undefined;
+      }
+      const newProp = prop as keyof typeof testSerialObject2;
+      const index = Object.keys(testSerialObject2).indexOf(newProp);
+      if (!Array.isArray(target) || !Array.isArray(target[0])) return undefined;
+      const res = target?.[0]?.[Object.keys(testSerialObject2).indexOf(newProp)];
+      console.log(res, index);
+      return res;
     },
-  ) as unknown as typeof testSerialObject2;
+  }) as unknown as typeof testSerialObject2;
+
+  console.log(serializeProxy);
+
+  const assertMatch = () => {
+    if (JSON.stringify(testSerialObject) !== JSON.stringify(deserialized)) {
+      throw new Error("Serialization mismatch");
+    }
+  };
+  assertMatch();
 
   return (
     <div class="grid grid-cols-3 gap-4">

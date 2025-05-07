@@ -1,13 +1,12 @@
-import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
+import { clientSocket, SC_ComType, SignalType, VoteActionResponse, VoteActionRequest } from "~/types/socket";
 import { Accessor } from "solid-js";
 import { SetStoreFunction } from "solid-js/store";
 import { createId } from "@paralleldrive/cuid2";
-import { GameRoom, RoundsReadyState, VoteActionType, VoteHandlerArgs } from "~/lib/Server/vote";
+import { GameRoom, RoundsReadyState, VoteActionType } from "~/types/vote";
 import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
-import { InferCallbackData } from "~/types/socket-utils";
 import { showToast } from "../ui/toast";
 import { Button } from "../ui/button";
-import { userIsReady } from "./VoteBox";
+import { userIsReady } from "~/lib/game-utils";
 import { For } from "solid-js";
 import { Badge } from "../ui/badge";
 import UserAvatarCard from "../Chat/UserAvatarCard";
@@ -16,62 +15,62 @@ const readyGameStart = (
   socket: clientSocket,
   roomId: string,
   user: { name: string; id: string },
-  roomsPreStart: Record<string, RoundsReadyState>,
-  setRoomsPreStart: SetStoreFunction<Record<string, RoundsReadyState>>,
+  roomsReadyState: Record<string, RoundsReadyState>,
+  setRoomsReadyState: SetStoreFunction<Record<string, RoundsReadyState>>,
 ) => {
   socket
     .timeout(DEFAULT_REQUEST_TIMEOUT)
-    .emit(
+    .emit<VoteActionType.ToggleReadyGameStart>(
       SignalType.Vote,
-      VoteActionType.ToggleReadyGameStart,
-      [createId(), [roomId, [user.id, user.name]]],
-      (
-        err: Error,
-        [returnType, comId, returnData]: InferCallbackData<
-          VoteHandlerArgs,
-          VoteActionType.ToggleReadyGameStart
-        >,
-      ) => {
-        if (err) {
-          showToast({
-            title: "Error",
-            description: err.message,
-            variant: "error",
-            duration: DEFAULT_TOAST_DURATION,
-          });
-          return;
-        }
-
-        if (returnType === SC_ComType.Reject) {
-          showToast({
-            title: "Error",
-            description: returnData[0],
-            variant: "error",
-            duration: DEFAULT_TOAST_DURATION,
-          });
-          return;
-        }
-
-        if (returnType === SC_ComType.Approve) {
-          const [ready] = returnData;
-          console.log("Ready?", ready);
-
-          showToast({
-            title: ready ? "Readied Up" : "Unreadied",
-            description: ready ? "You are ready to start the game!" : "You are not ready.",
-            variant: "success",
-            duration: DEFAULT_TOAST_DURATION,
-          });
-          const [, , readyUsers] = roomsPreStart[roomId];
-          ready
-            ? setRoomsPreStart({
-                [roomId]: [roomId, 0, Array.from(new Set([...readyUsers, user.id]))],
-              })
-            : setRoomsPreStart({
-                [roomId]: [roomId, 0, readyUsers.filter(id => id !== user.id)],
-              });
-        }
+      {
+        type: VoteActionType.ToggleReadyGameStart,
+        request: {
+          comId: createId(),
+          data: { roomId, user: { id: user.id, username: user.name } },
+        },
       },
+      (error: Error | null, returnData: VoteActionResponse<VoteActionType.ToggleReadyGameStart> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }) => {
+        if (error) {
+          showToast({
+            title: "Error",
+            description: error.message,
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          return;
+        }
+
+        if (returnData.type === SC_ComType.Reject) {
+          showToast({
+            title: "Error",
+            description: returnData.data.reason,
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          return;
+        }
+
+        const ready = returnData.data.ready;
+        showToast({
+          title: ready ? "Readied Up" : "Unreadied",
+          description: ready ? "You are ready to start the game!" : "You are not ready.",
+          variant: "success",
+          duration: DEFAULT_TOAST_DURATION,
+        });
+
+        const currentState = roomsReadyState[roomId];
+        if (!currentState) return;
+
+        setRoomsReadyState({
+          [roomId]: {
+            roomId,
+            round: 0,
+            readyUsers: ready
+              ? Array.from(new Set([...currentState.readyUsers, user.id]))
+              : currentState.readyUsers.filter((id: string) => id !== user.id),
+          },
+        });
+      }
     );
 };
 
@@ -85,7 +84,9 @@ export default function GamePreStartInteractions(props: {
 }) {
   const room = props.rooms[props.roomId];
   if (!room) return null;
-  const [, roomName, members, tickets, offers, startTime] = room;
+  
+  const { members } = room;
+
   return (
     <>
       <div class="flex flex-row items-center justify-between">
@@ -93,7 +94,7 @@ export default function GamePreStartInteractions(props: {
           {member => (
             <UserAvatarCard user={member}>
               <div class="flex justify-end">
-                {userIsReady(props.roomId, member[0], props.roomsPreStart) ? (
+                {userIsReady(props.roomId, member.id, props.roomsPreStart) ? (
                   <Badge class="bg-green-700">Ready</Badge>
                 ) : (
                   <Badge class="bg-orange-600">Not Ready</Badge>

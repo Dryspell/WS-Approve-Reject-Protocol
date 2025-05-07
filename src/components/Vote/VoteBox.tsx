@@ -1,7 +1,6 @@
-import { clientSocket, SC_ComType, SignalType } from "~/types/socket";
+import { clientSocket, SC_ComType, SignalType, VoteActionResponse } from "~/types/socket";
 import { createEffect, createSignal, For, onMount, useContext } from "solid-js";
 import { Component, ComponentProps } from "solid-js";
-import { User } from "~/lib/Server/chat";
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { createId } from "@paralleldrive/cuid2";
 import { randAnimal } from "@ngneat/falso";
@@ -10,25 +9,20 @@ import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import {
   GameRoom,
   RoundsReadyState,
-  GameRound,
   SC_GameEventType,
   VoteActionType,
-  VoteHandlerArgs,
-  calculateRoundResult,
-  TicketColor,
-} from "~/lib/Server/vote";
+  SocketEvent,
+} from "~/types/vote";
 import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
-import { InferCallbackData } from "~/types/socket-utils";
 import { showToast } from "../ui/toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
 import { Resizable, ResizableHandle, ResizablePanel } from "../ui/resizable";
-import { Card } from "../ui/card";
 import { TextField, TextFieldInput } from "../ui/text-field";
 import UserAvatarCard from "../Chat/UserAvatarCard";
-import { Badge } from "../ui/badge";
 import GamePreStartInteractions from "./GamePreStartInteractions";
 import Game from "./Game";
+import { userIsReady } from "~/lib/game-utils";
 
 const DEFAULT_GAME_ROOM = { id: "game1", name: "Game Room 1" };
 
@@ -39,124 +33,83 @@ export const voteHandler =
     roomsReadyState: Record<string, RoundsReadyState>,
     setRoomsReadyState: SetStoreFunction<Record<string, RoundsReadyState>>,
   ) =>
-  ([type, comId, data]:
-    | [type: SC_GameEventType.UserJoinedRoom, comId: string, data: [roomId: string, user: User]]
-    | [type: SC_GameEventType.RoomCreated, comId: string, data: GameRoom]
-    | [
-        type: SC_GameEventType.UserToggleReadyGameStart,
-        comId: string,
-        data: [roomId: string, user: User, readyState: boolean],
-      ]
-    | [type: SC_GameEventType.GameStart, comId: string, data: GameRoom]
-    | [type: SC_GameEventType.GameEnd, comId: string, data: [roomId: string, endTime: number]]
-    | [type: SC_GameEventType.RoundStart, comId: string, data: [roomId: string, round: GameRound]]
-    | [
-        type: SC_GameEventType.RoundEnd,
-        comId: string,
-        data: [roomId: string, previousRound: GameRound, nextRound: GameRound],
-      ]) => {
+  (event: SocketEvent) => {
+    const { type, comId, data } = event;
     try {
-      console.log(`Received signal: ${SC_GameEventType[type]}, ${comId}, ${data}`);
-
       switch (type) {
         case SC_GameEventType.RoomCreated: {
-          const [roomId, ...roomData] = data;
           setRooms({
-            [roomId]: [roomId, ...roomData],
+            [data.id]: data,
           });
           break;
         }
 
         case SC_GameEventType.UserJoinedRoom: {
-          const [roomId, newlyJoinedUser] = data;
+          const { roomId, user: newlyJoinedUser } = data;
           const room = rooms[roomId];
-          const [, roomName, members, tickets, offers, startTime, rounds] = room;
-          if (!members.some(([userId]) => userId === newlyJoinedUser[0]))
+          if (!room.members.some(member => member.id === newlyJoinedUser.id))
             setRooms({
-              [roomId]: [
-                roomId,
-                roomName,
-                [...members, newlyJoinedUser],
-                tickets,
-                offers,
-                startTime,
-                rounds,
-              ],
+              [roomId]: {
+                ...room,
+                members: [...room.members, newlyJoinedUser],
+              },
             });
           break;
         }
 
         case SC_GameEventType.UserToggleReadyGameStart: {
-          const [roomId, user, readyState] = data;
-          const room = rooms[roomId];
-          const [, , readyUsers] = roomsReadyState[roomId];
+          const { roomId, user, readyState } = data;
+          const readyUsers = roomsReadyState[roomId]?.readyUsers ?? [];
           readyState
             ? setRoomsReadyState({
-                [roomId]: [roomId, 0, Array.from(new Set([...readyUsers, user[0]]))],
+                [roomId]: {
+                  roomId,
+                  round: 0,
+                  readyUsers: Array.from(new Set([...readyUsers, user.id])),
+                },
               })
             : setRoomsReadyState({
-                [roomId]: [roomId, 0, readyUsers.filter(id => id !== user[0])],
+                [roomId]: {
+                  roomId,
+                  round: 0,
+                  readyUsers: readyUsers.filter(id => id !== user.id),
+                },
               });
           break;
         }
 
         case SC_GameEventType.GameStart: {
-          console.log(`Game started: ${comId}`, data);
-          const [roomId, ...roomData] = data;
           setRooms({
-            [roomId]: [roomId, ...roomData],
+            [data.id]: data,
           });
           setRoomsReadyState({
-            [roomId]: [roomId, 1, []],
+            [data.id]: { roomId: data.id, round: 1, readyUsers: [] },
           });
           break;
-        }
-
-        case SC_GameEventType.GameEnd: {
-          console.warn("Not implemented", SC_GameEventType[type], comId, data);
-          throw new Error("Not implemented");
-        }
-
-        case SC_GameEventType.RoundStart: {
-          console.warn("Not implemented", SC_GameEventType[type], comId, data);
-          // throw new Error("Not implemented");
         }
 
         case SC_GameEventType.RoundEnd: {
-          const [roomId, previousRound, newRound] = data;
-          if (!newRound) {
-            console.error("Expected to receive new round data", data);
-            throw new Error("Expected to receive new round data");
-          }
-          const [previousTickets, newTickets] = previousRound[3];
-          const { colorSplit, majorityColor, minorityColor } =
-            calculateRoundResult(previousTickets);
-
-          console.log(
-            `Round ${previousRound[0]} ended: ${TicketColor[majorityColor]} eliminated`,
-            colorSplit,
-            `${previousTickets.length - newTickets.length} tickets eliminated`,
-          );
-
+          const { roomId, previousRound, newRound } = data;
           const room = rooms[roomId];
-          const [, roomName, members, tickets, offers, startTime, rounds] = room;
-
-          const newRounds = [...rounds, newRound];
-          let pRound = newRounds[newRounds.length - 2];
-          if (pRound) {
-            pRound = previousRound;
-          }
+          const newRounds = [...room.rounds, newRound];
           setRooms({
-            [roomId]: [roomId, roomName, members, tickets, offers, startTime, newRounds],
+            [roomId]: { ...room, rounds: newRounds },
           });
           setRoomsReadyState({
-            [roomId]: [roomId, newRounds.length, []],
+            [roomId]: { roomId, round: newRounds.length, readyUsers: [] },
           });
           break;
         }
 
-        default: {
-          console.error(`Received unexpected signal: ${SC_GameEventType[type]}, ${comId}, ${data}`);
+        case SC_GameEventType.Error: {
+          const { error } = data;
+          showToast({
+            title: "Error",
+            description: error,
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          break;
         }
       }
     } catch (e) {
@@ -167,91 +120,101 @@ export const voteHandler =
     }
   };
 
+type VoteRequest = {
+  type: VoteActionType.CreateOrJoinRoom;
+  request: {
+    comId: string;
+    data: {
+      roomId: string;
+      roomName: string;
+      user: {
+        id: string;
+        username: string;
+      };
+    };
+  };
+};
+
+type VoteResponse = VoteActionResponse<VoteActionType.CreateOrJoinRoom> | { type: SC_ComType.Reject; comId: string; data: { reason: string } };
+type DeleteRoomsResponse = VoteActionResponse<VoteActionType.Dev_DeleteRooms> | { type: SC_ComType.Reject; comId: string; data: { reason: string } };
+
 const joinRoom = (
   socket: clientSocket,
   roomId: string,
   roomName: string,
   user: { name: string; id: string },
   setRooms: SetStoreFunction<Record<string, GameRoom>>,
-  setRoomsPreStart: SetStoreFunction<Record<string, RoundsReadyState>>,
+  setRoomsReadyState: SetStoreFunction<Record<string, RoundsReadyState>>,
 ) => {
   socket
     .timeout(DEFAULT_REQUEST_TIMEOUT)
-    .emit(
+    .emit<VoteActionType.CreateOrJoinRoom>(
       SignalType.Vote,
-      VoteActionType.CreateOrJoinRoom,
-      [createId(), [roomId, roomName, [user.id, user.name]]],
-      (
-        err: Error,
-        [returnType, comId, returnData]: InferCallbackData<
-          VoteHandlerArgs,
-          VoteActionType.CreateOrJoinRoom
-        >,
-      ) => {
-        if (err) {
-          showToast({
-            title: "Error",
-            description: err.message,
-            variant: "error",
-            duration: DEFAULT_TOAST_DURATION,
-          });
-          return;
-        }
-
-        if (returnType === SC_ComType.Reject) {
-          showToast({
-            title: "Error",
-            description: returnData[0],
-            variant: "error",
-            duration: DEFAULT_TOAST_DURATION,
-          });
-          return;
-        }
-
-        if (returnType === SC_ComType.Approve) {
-          showToast({
-            title: "Success",
-            description: `You have
-              successfully created or joined room: ${roomName}`,
-            variant: "success",
-            duration: DEFAULT_TOAST_DURATION,
-          });
-          const [gameRoom, gameRoomPreStart] = returnData;
-          console.log(returnData);
-          setRooms({ [roomId]: gameRoom });
-          setRoomsPreStart({ [roomId]: gameRoomPreStart });
-        }
+      {
+        type: VoteActionType.CreateOrJoinRoom,
+        request: {
+          comId: createId(),
+          data: { roomId, roomName, user: { id: user.id, username: user.name } },
+        },
       },
-    );
-};
+      (error: Error | null, returnData: VoteActionResponse<VoteActionType.CreateOrJoinRoom> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }) => {
+        if (error) {
+          showToast({
+            title: "Error",
+            description: error.message,
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          return;
+        }
 
-export const userIsReady = (
-  roomId: string,
-  userId: string,
-  roomsReadyState: Record<string, RoundsReadyState>,
-) => {
-  return roomsReadyState[roomId]?.[2]?.find(readyUser => {
-    const truth = readyUser === userId;
-    console.log(readyUser, userId, truth);
-    return truth;
-  });
+        if (returnData.type === SC_ComType.Reject) {
+          showToast({
+            title: "Error",
+            description: returnData.data.reason,
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          return;
+        }
+
+        showToast({
+          title: "Success",
+          description: `Successfully created or joined room: ${roomName}`,
+          variant: "success",
+          duration: DEFAULT_TOAST_DURATION,
+        });
+        const { room, readyState } = returnData.data;
+        setRooms({ [roomId]: room });
+        setRoomsReadyState({ [roomId]: readyState });
+      }
+    );
 };
 
 const VoteBox: Component<ComponentProps<"div">> = rawProps => {
   const socket = useContext(SocketContext);
-
   const [rooms, setRooms] = createStore<Record<string, GameRoom>>({});
   const [roomsReadyState, setRoomsReadyState] = createStore<Record<string, RoundsReadyState>>({});
-
   const [currentRoom, setCurrentRoom] = createSignal(DEFAULT_GAME_ROOM.id);
+  const [newRoomName, setNewRoomName] = createSignal("");
+  const [showCreateRoom, setShowCreateRoom] = createSignal(false);
   const [user, setUser] = createLocalStorageSignal("chat-user", {
     name: randAnimal(),
     id: createId(),
   });
 
-  console.log(user());
+  const isDevelopment = import.meta.env.DEV;
 
   socket.on(SignalType.Vote, voteHandler(rooms, setRooms, roomsReadyState, setRoomsReadyState));
+
+  const handleCreateRoom = () => {
+    const roomName = newRoomName() || `Game Room ${Object.keys(rooms).length + 1}`;
+    const roomId = createId();
+    joinRoom(socket, roomId, roomName, user(), setRooms, setRoomsReadyState);
+    setNewRoomName("");
+    setShowCreateRoom(false);
+    setCurrentRoom(roomId);
+  };
 
   onMount(() => {
     joinRoom(
@@ -268,12 +231,12 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
     <div>
       <TextField>
         <TextFieldInput
-          type={"text"}
+          type="text"
           placeholder="Chat as user..."
           value={user().name}
           onInput={e =>
             setUser({
-              name: e.currentTarget.value,
+              name: e.currentTarget.value || randAnimal(),
               id: user().id,
             })
           }
@@ -283,38 +246,94 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
         <div class="flex w-full flex-row items-center justify-center">
           <TabsList class="w-80% grid w-full auto-cols-min grid-flow-col">
             <For each={Object.entries(rooms)}>
-              {([roomId, room]) => <TabsTrigger value={roomId}>{room[1]}</TabsTrigger>}
+              {([roomId, room]) => <TabsTrigger value={roomId}>{room.name}</TabsTrigger>}
             </For>
           </TabsList>
-          <Button
-            variant="outline"
-            class="m-1.5 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium"
-          >
-            Create Room
-          </Button>
-          <Button
-            onClick={() => {
-              socket.emit(SignalType.Vote, VoteActionType.Dev_DeleteRooms, [createId()], () => {});
-              setRooms({});
-              setRoomsReadyState({});
-              window.location.reload();
-            }}
-          >
-            Dev: Delete All Rooms
-          </Button>
+          {showCreateRoom() ? (
+            <div class="flex items-center">
+              <TextField>
+                <TextFieldInput
+                  type="text"
+                  placeholder="Room name..."
+                  value={newRoomName()}
+                  onInput={e => setNewRoomName(e.currentTarget.value)}
+                  onKeyDown={e => e.key === "Enter" && handleCreateRoom()}
+                />
+              </TextField>
+              <Button onClick={handleCreateRoom} class="ml-2">
+                Create
+              </Button>
+              <Button onClick={() => setShowCreateRoom(false)} variant="outline" class="ml-2">
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateRoom(true)}
+              class="m-1.5 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium"
+            >
+              Create Room
+            </Button>
+          )}
+          {isDevelopment && (
+            <Button
+              onClick={() => {
+                socket
+                  .timeout(DEFAULT_REQUEST_TIMEOUT)
+                  .emit<VoteActionType.Dev_DeleteRooms>(
+                    SignalType.Vote,
+                    {
+                      type: VoteActionType.Dev_DeleteRooms,
+                      request: {
+                        comId: createId(),
+                        data: {}
+                      }
+                    },
+                    (error: Error | null, returnData: VoteActionResponse<VoteActionType.Dev_DeleteRooms> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }) => {
+                      if (error) {
+                        showToast({
+                          title: "Error",
+                          description: error.message,
+                          variant: "error",
+                          duration: DEFAULT_TOAST_DURATION,
+                        });
+                        return;
+                      }
+
+                      if (returnData.type === SC_ComType.Reject) {
+                        showToast({
+                          title: "Error",
+                          description: returnData.data.reason,
+                          variant: "error",
+                          duration: DEFAULT_TOAST_DURATION,
+                        });
+                        return;
+                      }
+
+                      setRooms({});
+                      setRoomsReadyState({});
+                      window.location.reload();
+                    }
+                  );
+              }}
+            >
+              Dev: Delete All Rooms
+            </Button>
+          )}
         </div>
 
         <For each={Object.entries(rooms)}>
-          {([roomId, [, roomName, members, tickets, offers, startTime]]) => (
+          {([roomId, room]) => (
             <TabsContent value={roomId}>
               <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
                 <ResizablePanel initialSize={0.15} class="p-2">
-                  <For each={members}>{member => <UserAvatarCard user={member} />}</For>
+                  <For each={room.members}>{member => <UserAvatarCard user={member} />}</For>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel initialSize={0.85} class="p-2">
                   <div class="flex flex-col items-center justify-center">
-                    {rooms[roomId][5] == null ? (
+                    {room.startTime == null ? (
                       <GamePreStartInteractions
                         socket={socket}
                         roomId={roomId}
@@ -325,7 +344,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
                       />
                     ) : (
                       <Game
-                        room={rooms[roomId]}
+                        room={room}
                         setRooms={setRooms}
                         user={user}
                         roomsReadyState={roomsReadyState}

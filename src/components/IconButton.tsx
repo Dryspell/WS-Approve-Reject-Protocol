@@ -1,6 +1,6 @@
 import { Component, mergeProps, splitProps } from "solid-js";
 import { Button, ButtonProps } from "./ui/button";
-import { cn } from "~/lib/utils";
+import { cn } from "~/lib/ui_utils";
 
 const IconButton: Component<ButtonProps> = rawProps => {
   const props = mergeProps<ButtonProps[]>({ variant: "outline", size: "icon" }, rawProps);
