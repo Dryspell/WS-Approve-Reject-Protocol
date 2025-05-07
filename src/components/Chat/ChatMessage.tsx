@@ -1,7 +1,7 @@
 import { formatDistance } from "date-fns";
 import { Component } from "solid-js";
-import { ChatRoom } from "~/lib/Server/chat";
 import { User } from "~/types/user";
+import BsPersonCircle from "./BsPersonCircle";
 
 export default function ChatMessage(props: {
   senderId: string;
@@ -10,26 +10,42 @@ export default function ChatMessage(props: {
   message: string;
   members: User[];
 }) {
+  const sender = props.members.find(member => member.id === props.senderId);
+  const isCurrentUser = props.senderId === props.senderId;
+
   return (
-    <div class={`chat ${props.senderId === props.senderId ? "chat-start" : "chat-end"}`}>
+    <div class={`chat ${isCurrentUser ? "chat-end" : "chat-start"}`}>
       <div class="avatar chat-image">
         <div class="w-10 rounded-full">
-          <img
-            alt="Tailwind CSS chat bubble component"
-            src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.jpg"
-          />
+          {sender?.avatarURL ? (
+            <img
+              alt={`${sender.username}'s avatar`}
+              src={sender.avatarURL}
+              class="h-10 w-10 rounded-full object-cover"
+            />
+          ) : (
+            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+              <BsPersonCircle />
+            </div>
+          )}
         </div>
       </div>
       <div class="chat-header">
-        {props.members.find(member => member.id === props.senderId)?.username}
+        {sender?.username || "Unknown User"}
         <time class="px-2 text-xs opacity-50">
           {formatDistance(new Date(props.timestamp), new Date(), {
             addSuffix: true,
           })}
         </time>
       </div>
-      <div class="chat-bubble">{props.message}</div>
-      <div class="chat-footer opacity-50">Delivered</div>
+      <div class={`chat-bubble ${isCurrentUser ? "chat-bubble-primary" : ""}`}>
+        {props.message}
+      </div>
+      <div class="chat-footer opacity-50">
+        {formatDistance(new Date(props.timestamp), new Date(), {
+          addSuffix: true,
+        })}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { clientSocket, SC_ComType, SignalType, VoteActionResponse } from "~/types/socket";
+import { clientSocket, SC_ComType, SignalType, VoteActionResponse, ChatActionType, ChatActionRequest, ChatActionResponse, ChatEvent } from "~/types/socket";
 import { createEffect, createSignal, For, onMount, useContext } from "solid-js";
 import { Component, ComponentProps } from "solid-js";
 import { createStore, SetStoreFunction } from "solid-js/store";
@@ -13,6 +13,7 @@ import {
   VoteActionType,
   SocketEvent,
 } from "~/types/vote";
+import { Message } from "~/types/chat";
 import { DEFAULT_REQUEST_TIMEOUT, DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { showToast } from "../ui/toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -22,6 +23,7 @@ import { TextField, TextFieldInput } from "../ui/text-field";
 import UserAvatarCard from "../Chat/UserAvatarCard";
 import GamePreStartInteractions from "./GamePreStartInteractions";
 import Game from "./Game";
+import ChatBox from "../Chat/ChatBox";
 import { userIsReady } from "~/lib/game-utils";
 
 const DEFAULT_GAME_ROOM = { id: "game1", name: "Game Room 1" };
@@ -195,6 +197,7 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
   const socket = useContext(SocketContext);
   const [rooms, setRooms] = createStore<Record<string, GameRoom>>({});
   const [roomsReadyState, setRoomsReadyState] = createStore<Record<string, RoundsReadyState>>({});
+  const [roomMessages, setRoomMessages] = createStore<Record<string, Message[]>>({});
   const [currentRoom, setCurrentRoom] = createSignal(DEFAULT_GAME_ROOM.id);
   const [newRoomName, setNewRoomName] = createSignal("");
   const [showCreateRoom, setShowCreateRoom] = createSignal(false);
@@ -215,6 +218,70 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
     setShowCreateRoom(false);
     setCurrentRoom(roomId);
   };
+
+  const handleSendMessage = (message: Message) => {
+    socket
+      .timeout(DEFAULT_REQUEST_TIMEOUT)
+      .emit<ChatActionType.SendMessage>(
+        SignalType.Chat,
+        {
+          type: ChatActionType.SendMessage,
+          comId: createId(),
+          data: { message },
+        } as ChatActionRequest<ChatActionType.SendMessage>,
+        (
+          error: Error | null,
+          response:
+            | { type: SC_ComType.Approve; comId: string; data: { success: boolean } }
+            | { type: SC_ComType.Reject; comId: string; data: { reason: string } }
+        ) => {
+          if (error) {
+            showToast({
+              title: "Error",
+              description: error.message,
+              variant: "error",
+              duration: DEFAULT_TOAST_DURATION,
+            });
+            return;
+          }
+
+          if (response.type === SC_ComType.Reject) {
+            showToast({
+              title: "Error",
+              description: response.data.reason,
+              variant: "error",
+              duration: DEFAULT_TOAST_DURATION,
+            });
+            return;
+          }
+
+          // Update local messages
+          const currentMessages = roomMessages[message.roomId] || [];
+          setRoomMessages({
+            [message.roomId]: [...currentMessages, message],
+          });
+        }
+      );
+  };
+
+  // Add chat message handler
+  socket.on(SignalType.Chat, (event: { type: SC_ComType; comId: string; data: Message | { reason: string } }) => {
+    const { type, data } = event;
+    if (type === SC_ComType.Delta && "senderId" in data) {
+      const message = data as Message;
+      const currentMessages = roomMessages[message.roomId] || [];
+      setRoomMessages({
+        [message.roomId]: [...currentMessages, message],
+      });
+    } else if (type === SC_ComType.Error && "reason" in data) {
+      showToast({
+        title: "Error",
+        description: data.reason,
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    }
+  });
 
   onMount(() => {
     joinRoom(
@@ -332,25 +399,36 @@ const VoteBox: Component<ComponentProps<"div">> = rawProps => {
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel initialSize={0.85} class="p-2">
-                  <div class="flex flex-col items-center justify-center">
-                    {room.startTime == null ? (
-                      <GamePreStartInteractions
-                        socket={socket}
+                  <div class="flex h-full flex-col gap-4">
+                    <div class="flex-1">
+                      {room.startTime == null ? (
+                        <GamePreStartInteractions
+                          socket={socket}
+                          roomId={roomId}
+                          rooms={rooms}
+                          user={() => ({ ...user(), username: user().name })}
+                          roomsPreStart={roomsReadyState}
+                          setRoomsPreStart={setRoomsReadyState}
+                        />
+                      ) : (
+                        <Game
+                          room={room}
+                          setRooms={setRooms}
+                          user={() => ({ ...user(), username: user().name })}
+                          roomsReadyState={roomsReadyState}
+                          setRoomsReadyState={setRoomsReadyState}
+                        />
+                      )}
+                    </div>
+                    <div class="h-64">
+                      <ChatBox
                         roomId={roomId}
-                        rooms={rooms}
-                        user={user}
-                        roomsPreStart={roomsReadyState}
-                        setRoomsPreStart={setRoomsReadyState}
+                        user={() => ({ ...user(), username: user().name })}
+                        messages={roomMessages[roomId] || []}
+                        onSendMessage={handleSendMessage}
+                        roundNumber={room.rounds?.length}
                       />
-                    ) : (
-                      <Game
-                        room={room}
-                        setRooms={setRooms}
-                        user={user}
-                        roomsReadyState={roomsReadyState}
-                        setRoomsReadyState={setRoomsReadyState}
-                      />
-                    )}
+                    </div>
                   </div>
                 </ResizablePanel>
               </Resizable>

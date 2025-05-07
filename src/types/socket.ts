@@ -18,14 +18,25 @@ export interface SocketWithIO extends NetSocket {
   server: SocketServer;
 }
 
-export enum SC_ComType {
-  Approve,
-  Reject,
-  Set,
-  Delta,
-  Loading,
-  Error,
+export enum SignalType {
+  Vote = "vote",
+  Chat = "chat",
 }
+
+export enum SC_ComType {
+  Approve = "approve",
+  Reject = "reject",
+  Set = "set",
+  Delta = "delta",
+  Loading = "loading",
+  Error = "error",
+}
+
+export type SC_ComData<T> = {
+  type: SC_ComType;
+  comId: string;
+  data: T;
+};
 
 export interface ServerToClientEvents {
   [SignalType.Counter]: ReturnType<typeof counterHandler>;
@@ -38,13 +49,6 @@ export interface ServerToClientEvents {
   ) => void;
   [SignalType.Chat]: ReturnType<typeof chatHandler>;
   [SignalType.Vote]: ReturnType<typeof voteHandler>;
-}
-
-export const enum SignalType {
-  Counter = "counter",
-  Pokemon = "pokemon",
-  Chat = "chat",
-  Vote = "vote",
 }
 
 export enum CS_ComType {
@@ -171,43 +175,63 @@ export type VoteActionRequest<T extends VoteActionType> =
       }
     : never;
 
-export type ChatActionType = "CreateOrJoinRoom" | "SendMessage" | "LeaveRoom";
+export enum ChatActionType {
+  SendMessage = "SendMessage",
+  GetMessages = "GetMessages",
+}
 
 export type ChatActionData = {
-  CreateOrJoinRoom: {
-    roomId: string;
-    roomName: string;
-    user: {
-      id: string;
-      username: string;
-    };
-  };
   SendMessage: {
     message: Message;
   };
-  LeaveRoom: {
+  GetMessages: {
     roomId: string;
-    userId: string;
+    limit?: number;
   };
 };
 
 export type ChatActionResponseData = {
-  CreateOrJoinRoom: ChatRoom;
   SendMessage: void;
-  LeaveRoom: void;
+  GetMessages: { messages: Message[] };
 };
 
 export type ChatActionRequest<T extends ChatActionType> = {
   type: T;
   comId: string;
-  data: ChatActionData[T];
+  data: T extends ChatActionType.SendMessage
+    ? { message: Message }
+    : T extends ChatActionType.GetMessages
+    ? { roomId: string; limit?: number }
+    : never;
 };
 
-export type ChatActionResponse<T extends ChatActionType> = T extends keyof ChatActionResponseData
-  ? ChatActionResponseData[T] extends void
-    ? { type: SC_ComType.Approve; comId: string }
-    : { type: SC_ComType.Approve; comId: string; data: ChatActionResponseData[T] }
-  : never;
+export type ChatActionResponse<T extends ChatActionType> =
+  | {
+      type: SC_ComType.Approve;
+      comId: string;
+      data: T extends ChatActionType.SendMessage
+        ? { success: boolean }
+        : T extends ChatActionType.GetMessages
+        ? { messages: Message[] }
+        : never;
+    }
+  | {
+      type: SC_ComType.Reject;
+      comId: string;
+      data: { reason: string };
+    };
+
+export type ChatEvent =
+  | {
+      type: SC_ComType.Delta;
+      comId: string;
+      data: Message;
+    }
+  | {
+      type: SC_ComType.Error;
+      comId: string;
+      data: { reason: string };
+    };
 
 interface SocketIOClientWithTimeout<TEventType extends SignalType> extends Omit<SocketforClient<ServerToClientEvents, ClientToServerEvents>, 'timeout'> {
   timeout(ms: number): {

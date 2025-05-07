@@ -43,6 +43,34 @@
       "when": 1710000000005,
       "tag": "0005_round_ready_states",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1710000000006,
+      "tag": "0006_chat_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1710000000007,
+      "tag": "0007_chat_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1710000000008,
+      "tag": "0008_schema_update",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1710000000009,
+      "tag": "0009_auth_tables",
+      "breakpoints": true
     }
   ]
 } 

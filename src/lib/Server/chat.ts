@@ -1,12 +1,7 @@
-import { SC_ComType, serverSocket, SignalType, sServer, ChatActionRequest, ChatActionResponse } from "~/types/socket";
+import { SC_ComType, serverSocket, SignalType, sServer, ChatActionRequest, ChatActionResponse, ChatActionType } from "~/types/socket";
 import { User } from "~/types/user";
-
-export type Message = {
-  senderId: string;
-  roomId: string;
-  timestamp: number;
-  message: string;
-};
+import { dbService } from "./db";
+import { Message } from "~/types/chat";
 
 export type ChatRoom = {
   roomId: string;
@@ -16,88 +11,91 @@ export type ChatRoom = {
   permissions: string[];
 };
 
-type CreateRoomHandlerArgs = {
-  type: "CreateOrJoinRoom";
-  request: ChatActionRequest<"CreateOrJoinRoom">;
+type ChatHandlerArgs = {
+  type: ChatActionType;
+  request: ChatActionRequest<ChatActionType>;
   callback: (
-    returnData: ChatActionResponse<"CreateOrJoinRoom"> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }
+    returnData: ChatActionResponse<ChatActionType> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }
   ) => void;
 };
-
-type SendMessageHandlerArgs = {
-  type: "SendMessage";
-  request: ChatActionRequest<"SendMessage">;
-  callback: (
-    returnData: ChatActionResponse<"SendMessage"> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }
-  ) => void;
-};
-
-type ChatHandlerArgs = CreateRoomHandlerArgs | SendMessageHandlerArgs;
 
 const userHasPermissionToCreateRoom = (userId: string) => true;
 const userHasPermissionToJoinRoom = (userId: string, roomId: string) => true;
 const userHasPermissionToSendMessage = (userId: string, roomId: string) => true;
+
+export const chatHandler = (socket: serverSocket) => {
+  return async (
+    request: ChatActionRequest<ChatActionType>,
+    callback: (error: Error | null, response: ChatActionResponse<ChatActionType>) => void
+  ) => {
+    const { type, comId, data } = request;
+
+    try {
+      switch (type) {
+        case ChatActionType.SendMessage: {
+          const { message } = data as { message: Message };
+          
+          // Save message to database
+          await dbService.saveMessage(message);
+
+          // Broadcast the message to all clients in the room
+          socket.to(message.roomId).emit(SignalType.Chat, {
+            type: SC_ComType.Delta,
+            comId,
+            data: message,
+          });
+
+          callback(null, {
+            type: SC_ComType.Approve,
+            comId,
+            data: { success: true },
+          } as ChatActionResponse<ChatActionType.SendMessage>);
+          break;
+        }
+
+        case ChatActionType.GetMessages: {
+          const { roomId, limit } = data as { roomId: string; limit?: number };
+          
+          // Get messages from database
+          const messages = await dbService.getMessages(roomId, limit);
+
+          callback(null, {
+            type: SC_ComType.Approve,
+            comId,
+            data: { messages },
+          } as ChatActionResponse<ChatActionType.GetMessages>);
+          break;
+        }
+
+        default:
+          callback(null, {
+            type: SC_ComType.Reject,
+            comId,
+            data: { reason: `Unknown chat action type: ${type}` },
+          });
+      }
+    } catch (error) {
+      console.error(`Failed to handle chat action: ${type}, ${comId}:`, error);
+      callback(null, {
+        type: SC_ComType.Reject,
+        comId,
+        data: { reason: error instanceof Error ? error.message : "Unknown error" },
+      });
+    }
+  };
+};
 
 export default function chat() {
   const rooms = new Map<string, ChatRoom>();
 
   const handler =
     (socket: serverSocket, io: sServer) =>
-    ({ type, request, callback }: ChatHandlerArgs) => {
+    async ({ type, request, callback }: ChatHandlerArgs) => {
       try {
         switch (type) {
-          case "CreateOrJoinRoom": {
+          case ChatActionType.SendMessage: {
             const { comId, data } = request;
-            const { roomId, roomName, user } = data;
-
-            const existingRoom = rooms.get(roomId);
-            console.log(`Received request to create or join room: ${roomId}, ${roomName}, ${user}`);
-
-            if (!existingRoom && userHasPermissionToCreateRoom(user.id)) {
-              const roomData: ChatRoom = {
-                roomId,
-                roomName,
-                members: [user],
-                messages: [],
-                permissions: []
-              };
-              rooms.set(roomId, roomData);
-              socket.join(roomId);
-
-              callback({ type: SC_ComType.Approve, comId, data: roomData });
-              socket.broadcast.emit(SignalType.Chat, { type: SC_ComType.Set, comId, data: roomData });
-            } else if (!existingRoom && !userHasPermissionToCreateRoom(user.id)) {
-              callback({ type: SC_ComType.Reject, comId, data: { reason: "Permission denied to create room" } });
-            } else if (existingRoom && userHasPermissionToJoinRoom(user.id, roomId)) {
-              socket.join(roomId);
-              const updatedRoom: ChatRoom = {
-                roomId,
-                roomName: existingRoom.roomName,
-                members: Array.from(
-                  new Set([...existingRoom.members, user].map(user => user.id))
-                ).map(userId => {
-                  const foundUser = [...existingRoom.members, user].find(member => member.id === userId);
-                  return {
-                    id: userId,
-                    username: foundUser?.username ?? "Unknown User"
-                  };
-                }),
-                messages: existingRoom.messages,
-                permissions: existingRoom.permissions
-              };
-              rooms.set(roomId, updatedRoom);
-
-              callback({ type: SC_ComType.Approve, comId, data: updatedRoom });
-              socket.broadcast.emit(SignalType.Chat, { type: SC_ComType.Set, comId, data: updatedRoom });
-            } else if (existingRoom && !userHasPermissionToJoinRoom(user.id, roomId)) {
-              callback({ type: SC_ComType.Reject, comId, data: { reason: "Permission denied to join room" } });
-            }
-            break;
-          }
-
-          case "SendMessage": {
-            const { comId, data } = request;
-            const { message } = data;
+            const { message } = data as { message: Message };
             const room = rooms.get(message.roomId);
 
             if (!room) {
@@ -106,9 +104,18 @@ export default function chat() {
             }
 
             if (userHasPermissionToSendMessage(message.senderId, message.roomId)) {
+              // Save message to database
+              await dbService.saveMessage(message);
+              
+              // Update in-memory room state
               room.messages.push(message);
               rooms.set(message.roomId, room);
-              callback({ type: SC_ComType.Approve, comId });
+              
+              callback({ 
+                type: SC_ComType.Approve, 
+                comId,
+                data: { success: true }
+              });
               io.to(message.roomId).emit(SignalType.Chat, {
                 type: SC_ComType.Delta,
                 comId,
@@ -117,6 +124,34 @@ export default function chat() {
             } else {
               callback({ type: SC_ComType.Reject, comId, data: { reason: "Permission denied to send message" } });
             }
+            break;
+          }
+
+          case ChatActionType.GetMessages: {
+            const { comId, data } = request;
+            const { roomId, limit } = data as { roomId: string; limit?: number };
+            const room = rooms.get(roomId);
+
+            if (!room) {
+              callback({ type: SC_ComType.Reject, comId, data: { reason: "Room does not exist" } });
+              break;
+            }
+
+            // Get messages from database
+            const dbMessages = await dbService.getMessages(roomId, limit);
+            // Convert null roundNumber to undefined
+            const messages: Message[] = dbMessages.map(msg => ({
+              ...msg,
+              roundNumber: msg.roundNumber ?? undefined
+            }));
+            room.messages = messages;
+            rooms.set(roomId, room);
+
+            callback({ 
+              type: SC_ComType.Approve, 
+              comId,
+              data: { messages }
+            });
             break;
           }
 
