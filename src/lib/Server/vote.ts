@@ -157,7 +157,7 @@ export default function vote() {
   const clocks = new Map<string, NodeJS.Timeout>();
 
   // Load active rooms from database on startup
-  dbService.getActiveRooms().then(activeRooms => {
+  dbService.getActiveRoomsWithDetails().then(activeRooms => {
     activeRooms.forEach(room => {
       rooms.set(room.id, room);
       roomsReadyState.set(room.id, {
@@ -388,7 +388,7 @@ export default function vote() {
               Promise.all([
                 dbService.updateRoom(newRoom),
                 dbService.saveRound(roomId, newRound),
-                dbService.saveTickets(roomId, newRoom.tickets),
+                ...newRoom.tickets.map(ticket => dbService.saveTicket(roomId, ticket))
               ]).catch(error => {
                 console.error('Failed to persist game start to database:', error);
               });
@@ -470,7 +470,7 @@ export default function vote() {
             });
 
             // Persist ready state to database
-            dbService.saveReadyState(roomId, roundReadyState.round, user.id).catch(error => {
+            dbService.saveReadyState(roomId, user.id, roundReadyState.round).catch(error => {
               console.error('Failed to persist ready state to database:', error);
             });
 

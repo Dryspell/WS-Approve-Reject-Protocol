@@ -37,7 +37,7 @@ export const counterHandler =
       }
 
       default: {
-        console.error(`Received unexpected signal type: ${SC_ComType[data.type]}`);
+        console.error(`Received unexpected signal type: ${data.type}`);
       }
     }
   };

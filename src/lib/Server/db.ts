@@ -9,6 +9,16 @@ import { Message } from '~/types/chat';
 const sqlite = new Database('sqlite.db');
 const db = drizzle(sqlite);
 
+// Type for database messages that matches our schema
+type DBChatMessage = {
+  id: string;
+  roomId: string;
+  senderId: string;
+  message: string;
+  timestamp: number;
+  roundNumber?: number;
+};
+
 export const dbService = {
   // Room operations
   async createRoom(room: GameRoom) {
@@ -130,24 +140,36 @@ export const dbService = {
 
   // Chat operations
   async saveMessage(message: Message) {
-    await db.insert(ChatMessages).values({
-      id: message.id,
+    const dbMessage: DBChatMessage = {
+      id: message.id ?? createId(),
       roomId: message.roomId,
       senderId: message.senderId,
       message: message.message,
       timestamp: message.timestamp,
       roundNumber: message.roundNumber,
-    });
+    };
+
+    await db.insert(ChatMessages).values(dbMessage);
   },
 
   async getMessages(roomId: string, limit: number = 50) {
-    return db
+    const dbMessages = await db
       .select()
       .from(ChatMessages)
       .where(eq(ChatMessages.roomId, roomId))
       .orderBy(ChatMessages.timestamp)
       .limit(limit)
       .all();
+
+    // Convert database messages to application messages
+    return dbMessages.map(msg => ({
+      id: msg.id,
+      roomId: msg.roomId,
+      senderId: msg.senderId,
+      message: msg.message,
+      timestamp: msg.timestamp,
+      roundNumber: msg.roundNumber ?? undefined,
+    }));
   },
 
   async getUserPermissions(roomId: string, userId: string) {

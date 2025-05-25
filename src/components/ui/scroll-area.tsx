@@ -1,13 +1,13 @@
 import { Component, JSX } from "solid-js";
 
 interface ScrollAreaProps {
-  ref?: (el: HTMLDivElement) => void;
+  ref?: HTMLDivElement;
   class?: string;
   style?: JSX.CSSProperties;
   children?: JSX.Element;
 }
 
-export const ScrollArea: Component<ScrollAreaProps> = (props) => {
+export const ScrollArea: Component<ScrollAreaProps> = props => {
   return (
     <div
       ref={props.ref}
@@ -21,4 +21,4 @@ export const ScrollArea: Component<ScrollAreaProps> = (props) => {
       {props.children}
     </div>
   );
-}; 
+};

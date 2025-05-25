@@ -4,11 +4,13 @@ import {
   SignalType,
   ChatActionResponse,
   ChatActionRequest,
+  ChatActionType,
 } from "~/types/socket";
 import { createSignal, useContext } from "solid-js";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Component, ComponentProps, For, onMount } from "solid-js";
-import { Message, ChatRoom } from "~/lib/Server/chat";
+import { Message } from "~/types/chat";
+import { ChatRoom } from "~/lib/Server/chat";
 import { createStore, SetStoreFunction } from "solid-js/store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { createId } from "@paralleldrive/cuid2";
@@ -24,7 +26,7 @@ import UserAvatarCard from "./UserAvatarCard";
 
 export const chatHandler =
   (rooms: Record<string, ChatRoom>, setRooms: SetStoreFunction<Record<string, ChatRoom>>) =>
-  (data: { type: SC_ComType; comId: string; data: Message | ChatRoom }) => {
+  (data: { type: SC_ComType; comId: string; data: Message | ChatRoom | { reason: string } }) => {
     try {
       switch (data.type) {
         case SC_ComType.Set: {
@@ -50,15 +52,26 @@ export const chatHandler =
           break;
         }
 
+        case SC_ComType.Error: {
+          const errorData = data.data as { reason: string };
+          showToast({
+            title: "Error",
+            description: errorData.reason,
+            variant: "error",
+            duration: DEFAULT_TOAST_DURATION,
+          });
+          break;
+        }
+
         default: {
           console.error(
-            `Received unexpected signal: ${SC_ComType[data.type]}, ${data.comId}, ${data.data}`,
+            `Received unexpected signal: ${data.type}, ${data.comId}, ${data.data}`,
           );
         }
       }
     } catch (e) {
       console.error(
-        `Failed to properly handle: ${SC_ComType[data.type]}, ${data.comId}, ${data.data}:`,
+        `Failed to properly handle: ${data.type}, ${data.comId}, ${data.data}:`,
         e instanceof Error ? e.message : e,
       );
     }
@@ -79,25 +92,38 @@ const joinRoom = (
   user: { name: string; id: string },
   setRooms: SetStoreFunction<Record<string, ChatRoom>>,
 ) => {
-  const request: ChatActionRequest<"CreateOrJoinRoom"> = {
-    type: "CreateOrJoinRoom",
+  // Create a new room in the local state
+  const newRoom: ChatRoom = {
+    roomId,
+    roomName,
+    members: [{ id: user.id, username: user.name }],
+    messages: [],
+    permissions: [],
+  };
+
+  setRooms({
+    [roomId]: newRoom,
+  });
+
+  // Get initial messages for the room
+  const request: ChatActionRequest<ChatActionType.GetMessages> = {
+    type: ChatActionType.GetMessages,
     comId: createId(),
     data: {
       roomId,
-      roomName,
-      user: { id: user.id, username: user.name },
+      limit: 50,
     },
   };
 
   socket
     .timeout(DEFAULT_REQUEST_TIMEOUT)
-    .emit<"CreateOrJoinRoom">(
+    .emit<ChatActionType.GetMessages>(
       SignalType.Chat,
       request,
       (
         error: Error | null,
         returnData:
-          | ChatActionResponse<"CreateOrJoinRoom">
+          | ChatActionResponse<ChatActionType.GetMessages>
           | { type: SC_ComType.Reject; comId: string; data: { reason: string } },
       ) => {
         if (error) {
@@ -120,15 +146,19 @@ const joinRoom = (
           return;
         }
 
-        const room = returnData.data;
+        const { messages } = returnData.data;
+        setRooms({
+          [roomId]: {
+            ...newRoom,
+            messages,
+          },
+        });
+
         showToast({
           title: "Room Joined!",
-          description: `You have successfully created or joined room: ${room.roomName}`,
+          description: `You have successfully joined room: ${roomName}`,
           variant: "success",
           duration: DEFAULT_TOAST_DURATION,
-        });
-        setRooms({
-          [room.roomId]: room,
         });
       },
     );
@@ -140,21 +170,21 @@ const sendMessage = (
   rooms: Record<string, ChatRoom>,
   setRooms: SetStoreFunction<Record<string, ChatRoom>>,
 ) => {
-  const request: ChatActionRequest<"SendMessage"> = {
-    type: "SendMessage",
+  const request: ChatActionRequest<ChatActionType.SendMessage> = {
+    type: ChatActionType.SendMessage,
     comId: createId(),
     data: { message },
   };
 
   socket
     .timeout(DEFAULT_REQUEST_TIMEOUT)
-    .emit<"SendMessage">(
+    .emit<ChatActionType.SendMessage>(
       SignalType.Chat,
       request,
       (
         error: Error | null,
         returnData:
-          | ChatActionResponse<"SendMessage">
+          | ChatActionResponse<ChatActionType.SendMessage>
           | { type: SC_ComType.Reject; comId: string; data: { reason: string } },
       ) => {
         if (error) {

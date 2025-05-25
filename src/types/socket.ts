@@ -8,7 +8,7 @@ import { chatHandler } from "~/components/Chat/Chat";
 import { voteHandler } from "~/components/Vote/VoteBox";
 import { VoteActionType, GameRoom, RoundsReadyState } from "~/types/vote";
 import { ChatRoom } from "~/lib/Server/chat";
-import { Message } from "~/lib/Server/chat";
+import { Message } from "~/types/chat";
 
 interface SocketServer extends HTTPServer {
   io?: IOServer;
@@ -21,6 +21,8 @@ export interface SocketWithIO extends NetSocket {
 export enum SignalType {
   Vote = "vote",
   Chat = "chat",
+  Counter = "counter",
+  Pokemon = "pokemon",
 }
 
 export enum SC_ComType {
@@ -45,7 +47,7 @@ export interface ServerToClientEvents {
       | { type: SC_ComType.Approve; comId: string; data: PokemonApiResponse }
       | { type: SC_ComType.Reject; comId: string; data: { reason: string } }
       | { type: SC_ComType.Loading; comId: string }
-      | { type: SC_ComType.Error; comId: string; data: { reason: string } }
+      | { type: SC_ComType.Error; comId: string; data: { reason: string } },
   ) => void;
   [SignalType.Chat]: ReturnType<typeof chatHandler>;
   [SignalType.Vote]: ReturnType<typeof voteHandler>;
@@ -69,24 +71,22 @@ export type EmitWithAck<TEventType extends SignalType, TRequest, TResponse> = {
   (event: TEventType, data: TRequest, ack: SocketAck<TResponse>): void;
 };
 
-export type CounterActionResponse<T extends CS_ComType> = 
-  T extends CS_ComType.Get
-    ? { type: SC_ComType.Approve; comId: string; data: { counters: { [k: string]: number } } }
-    : T extends CS_ComType.GetOrCreate
+export type CounterActionResponse<T extends CS_ComType> = T extends CS_ComType.Get
+  ? { type: SC_ComType.Approve; comId: string; data: { counters: { [k: string]: number } } }
+  : T extends CS_ComType.GetOrCreate
     ? { type: SC_ComType.Approve; comId: string; data: { amount: number } }
     : T extends CS_ComType.Delta | CS_ComType.Set | CS_ComType.SetOrCreate
-    ? { type: SC_ComType.Approve; comId: string }
-    : never;
+      ? { type: SC_ComType.Approve; comId: string }
+      : never;
 
-export type CounterActionRequest<T extends CS_ComType> = 
-  T extends CS_ComType.Get
-    ? {
-        type: T;
-        request: {
-          comId: string;
-        };
-      }
-    : T extends CS_ComType.GetOrCreate
+export type CounterActionRequest<T extends CS_ComType> = T extends CS_ComType.Get
+  ? {
+      type: T;
+      request: {
+        comId: string;
+      };
+    }
+  : T extends CS_ComType.GetOrCreate
     ? {
         type: T;
         request: {
@@ -97,46 +97,52 @@ export type CounterActionRequest<T extends CS_ComType> =
         };
       }
     : T extends CS_ComType.Delta | CS_ComType.Set | CS_ComType.SetOrCreate
-    ? {
-        type: T;
-        request: {
-          comId: string;
-          data: {
-            sigId: string;
-            amount: number;
-          };
-        };
-      }
-    : never;
-
-export type VoteActionResponse<T extends VoteActionType> = 
-  T extends VoteActionType.CreateOrJoinRoom 
-    ? { type: SC_ComType.Approve; comId: string; data: { room: GameRoom; readyState: RoundsReadyState } }
-    : T extends VoteActionType.Dev_DeleteRooms
-    ? { type: SC_ComType.Approve; comId: string }
-    : T extends VoteActionType.ToggleReadyGameStart | VoteActionType.ToggleReadyRoundEnd
-    ? { type: SC_ComType.Approve; comId: string; data: { ready: boolean } }
-    : T extends VoteActionType.SetVoteColor
-    ? { type: SC_ComType.Approve; comId: string; data: { ticket: { id: string; owner: string; color: number } } }
-    : never;
-
-export type VoteActionRequest<T extends VoteActionType> = 
-  T extends VoteActionType.CreateOrJoinRoom 
-    ? {
-        type: T;
-        request: {
-          comId: string;
-          data: {
-            roomId: string;
-            roomName: string;
-            user: {
-              id: string;
-              username: string;
+      ? {
+          type: T;
+          request: {
+            comId: string;
+            data: {
+              sigId: string;
+              amount: number;
             };
           };
+        }
+      : never;
+
+export type VoteActionResponse<T extends VoteActionType> = T extends VoteActionType.CreateOrJoinRoom
+  ? {
+      type: SC_ComType.Approve;
+      comId: string;
+      data: { room: GameRoom; readyState: RoundsReadyState };
+    }
+  : T extends VoteActionType.Dev_DeleteRooms
+    ? { type: SC_ComType.Approve; comId: string }
+    : T extends VoteActionType.ToggleReadyGameStart | VoteActionType.ToggleReadyRoundEnd
+      ? { type: SC_ComType.Approve; comId: string; data: { ready: boolean } }
+      : T extends VoteActionType.SetVoteColor
+        ? {
+            type: SC_ComType.Approve;
+            comId: string;
+            data: { ticket: { id: string; owner: string; color: number } };
+          }
+        : never;
+
+export type VoteActionRequest<T extends VoteActionType> = T extends VoteActionType.CreateOrJoinRoom
+  ? {
+      type: T;
+      request: {
+        comId: string;
+        data: {
+          roomId: string;
+          roomName: string;
+          user: {
+            id: string;
+            username: string;
+          };
         };
-      }
-    : T extends VoteActionType.Dev_DeleteRooms
+      };
+    }
+  : T extends VoteActionType.Dev_DeleteRooms
     ? {
         type: T;
         request: {
@@ -145,35 +151,35 @@ export type VoteActionRequest<T extends VoteActionType> =
         };
       }
     : T extends VoteActionType.ToggleReadyGameStart | VoteActionType.ToggleReadyRoundEnd
-    ? {
-        type: T;
-        request: {
-          comId: string;
-          data: {
-            roomId: string;
-            user: {
-              id: string;
-              username: string;
+      ? {
+          type: T;
+          request: {
+            comId: string;
+            data: {
+              roomId: string;
+              user: {
+                id: string;
+                username: string;
+              };
             };
           };
-        };
-      }
-    : T extends VoteActionType.SetVoteColor
-    ? {
-        type: T;
-        request: {
-          comId: string;
-          data: {
-            roomId: string;
-            ticket: {
-              id: string;
-              owner: string;
-              color: number;
+        }
+      : T extends VoteActionType.SetVoteColor
+        ? {
+            type: T;
+            request: {
+              comId: string;
+              data: {
+                roomId: string;
+                ticket: {
+                  id: string;
+                  owner: string;
+                  color: number;
+                };
+              };
             };
-          };
-        };
-      }
-    : never;
+          }
+        : never;
 
 export enum ChatActionType {
   SendMessage = "SendMessage",
@@ -201,8 +207,8 @@ export type ChatActionRequest<T extends ChatActionType> = {
   data: T extends ChatActionType.SendMessage
     ? { message: Message }
     : T extends ChatActionType.GetMessages
-    ? { roomId: string; limit?: number }
-    : never;
+      ? { roomId: string; limit?: number }
+      : never;
 };
 
 export type ChatActionResponse<T extends ChatActionType> =
@@ -212,8 +218,8 @@ export type ChatActionResponse<T extends ChatActionType> =
       data: T extends ChatActionType.SendMessage
         ? { success: boolean }
         : T extends ChatActionType.GetMessages
-        ? { messages: Message[] }
-        : never;
+          ? { messages: Message[] }
+          : never;
     }
   | {
       type: SC_ComType.Reject;
@@ -233,27 +239,35 @@ export type ChatEvent =
       data: { reason: string };
     };
 
-interface SocketIOClientWithTimeout<TEventType extends SignalType> extends Omit<SocketforClient<ServerToClientEvents, ClientToServerEvents>, 'timeout'> {
+interface SocketIOClientWithTimeout<TEventType extends SignalType>
+  extends Omit<SocketforClient<ServerToClientEvents, ClientToServerEvents>, "timeout"> {
   timeout(ms: number): {
     emit<T extends VoteActionType>(
       event: SignalType.Vote,
       data: VoteActionRequest<T>,
-      ack: SocketAck<VoteActionResponse<T> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }>
+      ack: SocketAck<
+        VoteActionResponse<T> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }
+      >,
     ): void;
     emit<T extends CS_ComType>(
       event: SignalType.Counter,
       data: CounterActionRequest<T>,
-      ack: SocketAck<CounterActionResponse<T> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }>
+      ack: SocketAck<
+        | CounterActionResponse<T>
+        | { type: SC_ComType.Reject; comId: string; data: { reason: string } }
+      >,
     ): void;
     emit<T extends ChatActionType>(
       event: SignalType.Chat,
       data: ChatActionRequest<T>,
-      ack: SocketAck<ChatActionResponse<T> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }>
+      ack: SocketAck<
+        ChatActionResponse<T> | { type: SC_ComType.Reject; comId: string; data: { reason: string } }
+      >,
     ): void;
     emit<T extends SignalType>(
       event: T,
       data: ClientToServerEvents[T] extends EmitFunction<infer R, any> ? R : never,
-      ack: SocketAck<ClientToServerEvents[T] extends EmitFunction<any, infer R> ? R : never>
+      ack: SocketAck<ClientToServerEvents[T] extends EmitFunction<any, infer R> ? R : never>,
     ): void;
   };
 }
@@ -316,5 +330,7 @@ export type serverSocket = SocketforServer<
 export type clientSocket = SocketIOClientWithTimeout<SignalType>;
 
 // Add helper type for better type inference in components
-export type SocketResponse<T extends SignalType> = ClientToServerEvents[T] extends EmitFunction<any, infer R> ? R : never;
-export type SocketRequest<T extends SignalType> = ClientToServerEvents[T] extends EmitFunction<infer R, any> ? R : never;
+export type SocketResponse<T extends SignalType> =
+  ClientToServerEvents[T] extends EmitFunction<any, infer R> ? R : never;
+export type SocketRequest<T extends SignalType> =
+  ClientToServerEvents[T] extends EmitFunction<infer R, any> ? R : never;
