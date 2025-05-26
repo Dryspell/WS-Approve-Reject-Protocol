@@ -1,28 +1,39 @@
+# Rust
+/server/target
+**/*.rs.bk
+Cargo.lock
 
-dist
-.solid
-.output
-.vercel
-.netlify
-.vinxi
+# Node
+/node_modules
+/dist
+/.output
+/.solid
+/.vercel
+/.netlify
+/.vinxi
 
 # Environment
 .env
 .env*.local
 
-# dependencies
-/node_modules
+# SpacetimeDB
+src/lib/spacetimedb/
 
-# IDEs and editors
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.cursor/
 /.idea
 .project
 .classpath
 *.launch
 .settings/
 
-# Temp
+# Misc
+*.log
+*.tmp
+sqlite.db
 gitignore
-
-# System Files
-.DS_Store
-Thumbs.db
