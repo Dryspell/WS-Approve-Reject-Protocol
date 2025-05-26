@@ -1,7 +1,10 @@
 # Rust
 /server/target
+/server/debug/
 **/*.rs.bk
 Cargo.lock
+*.pdb
+/.spacetime
 
 # Node
 /node_modules

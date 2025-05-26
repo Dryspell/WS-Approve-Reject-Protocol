@@ -1,9 +1,47 @@
 #![allow(unused)]
-#[macro_use]
-extern crate spacetimedb;
-use spacetimedb::{ReducerContext, Identity, Timestamp};
 
-// Define our tables
+#[macro_use]
+use spacetimedb::{reducer, table, Identity, ReducerContext, Table, Timestamp, rand, SpacetimeType};
+
+// Game-related types
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct Vector2 {
+    x: f32,
+    y: f32,
+}
+
+// Chat-related types
+#[table(name = chat_room, public)]
+#[derive(Clone, Debug)]
+pub struct ChatRoom {
+    #[primary_key]
+    pub id: String,
+    pub name: String,
+    pub created_at: i64,
+}
+
+#[table(name = chat_message, public)]
+#[derive(Clone, Debug)]
+pub struct ChatMessage {
+    #[primary_key]
+    pub id: String,
+    pub room_id: String,
+    pub sender: Identity,
+    pub text: String,
+    pub timestamp: Timestamp,
+    pub round_number: Option<i32>,
+}
+
+#[table(name = chat_permission, public)]
+#[derive(Clone, Debug)]
+pub struct ChatPermission {
+    #[primary_key]
+    pub room_id: String,
+    pub user_id: Identity,
+    pub permission: String, // "read" | "write"
+}
+
+// Game tables
 #[table(name = user, public)]
 pub struct User {
     #[primary_key]
@@ -19,12 +57,64 @@ pub struct Message {
     text: String,
 }
 
+#[table(name = game_room, public)]
+#[derive(Clone)]
+pub struct GameRoom {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    name: String,
+    member_ids: Vec<String>,
+    ticket_ids: Vec<String>,
+    offer_ids: Vec<String>,
+    start_time: Option<i64>,
+    current_round: i32,
+}
+
+#[table(name = unit, public)]
+pub struct Unit {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    room_id: i32,
+    owner_id: String,
+    unit_type: String, // "minion" | "target" | "structure"
+    position: Vector2,
+    dimensions: Vector2,
+    fill_style: String,
+    task_type: Option<String>, // "gather" | "craft" | "upgrade"
+    target_id: Option<String>,
+}
+
+#[table(name = game_event, public)]
+pub struct GameEvent {
+    #[primary_key]
+    id: String,
+    room_id: String,
+    event_type: String, // "combat" | "resource" | "craft" | "upgrade"
+    source_id: String,
+    target_id: String,
+    value: i32,
+    timestamp: i64,
+}
+
+#[table(name = ready_state, public)]
+pub struct ReadyState {
+    #[primary_key]
+    room_id: String,
+    ready_user_ids: Vec<String>,
+    round: i32,
+}
+
 // Reducers
 #[reducer]
 pub fn set_name(ctx: &ReducerContext, name: String) -> Result<(), String> {
     let name = validate_name(name)?;
     if let Some(user) = ctx.db.user().identity().find(ctx.sender) {
-        ctx.db.user().identity().update(User { name: Some(name), ..user });
+        ctx.db.user().identity().update(User {
+            name: Some(name),
+            ..user
+        });
         Ok(())
     } else {
         Err("Cannot set name for unknown user".to_string())
@@ -40,6 +130,164 @@ pub fn send_message(ctx: &ReducerContext, text: String) -> Result<(), String> {
         text,
         sent: ctx.timestamp,
     });
+    Ok(())
+}
+
+#[reducer]
+pub fn create_room(
+    ctx: &ReducerContext,
+    room_id: String,
+    name: String,
+    creator_id: String,
+) -> Result<(), String> {
+    let room = GameRoom {
+        id: 0,
+        name,
+        member_ids: vec![creator_id],
+        ticket_ids: vec![],
+        offer_ids: vec![],
+        start_time: None,
+        current_round: 0,
+    };
+    ctx.db.game_room().insert(room);
+
+    let ready_state = ReadyState {
+        room_id,
+        ready_user_ids: vec![],
+        round: 0,
+    };
+    ctx.db.ready_state().insert(ready_state);
+
+    Ok(())
+}
+
+#[reducer]
+pub fn join_room(ctx: &ReducerContext, room_id: i32, user_id: String) -> Result<(), String> {
+    if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
+        if !room.member_ids.contains(&user_id) {
+            room.member_ids.push(user_id);
+            ctx.db.game_room().id().update(room);
+        }
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn toggle_ready(ctx: &ReducerContext, room_id: i32, user_id: String) -> Result<(), String> {
+    if let Some(mut ready_state) = ctx.db.ready_state().room_id().find(room_id.to_string()) {
+        let ready_user_ids = ready_state.ready_user_ids.clone();
+        if let Some(index) = ready_user_ids
+            .iter()
+            .position(|id| id == &user_id)
+        {
+            ready_state.ready_user_ids.remove(index);
+        } else {
+            ready_state.ready_user_ids.push(user_id);
+        }
+        let ready_count = ready_state.ready_user_ids.len();
+        ctx.db.ready_state().room_id().update(ready_state);
+
+        // Check if all users are ready
+        if let Some(room) = ctx.db.game_room().id().find(room_id) {
+            if ready_count == room.member_ids.len() {
+                start_game(ctx, room_id)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn start_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
+    if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
+        let room_clone = room.clone();
+        room.start_time = Some(ctx.timestamp.to_micros_since_unix_epoch() * 1000 + 5000); // 5 second countdown
+        room.current_round = 1;
+        ctx.db.game_room().id().update(room);
+
+        // Create initial units
+        create_initial_units(ctx, &room_clone)?;
+    }
+    Ok(())
+}
+
+fn create_initial_units(ctx: &ReducerContext, room: &GameRoom) -> Result<(), String> {
+    for member_id in &room.member_ids {
+        let unit = Unit {
+            id: 0, // Will be auto-incremented
+            room_id: room.id,
+            owner_id: member_id.clone(),
+            unit_type: "minion".to_string(),
+            position: Vector2 {
+                x: (rand::random::<f32>() * 100.0) as f32,
+                y: (rand::random::<f32>() * 100.0) as f32,
+            },
+            dimensions: Vector2 { x: 20.0, y: 20.0 },
+            fill_style: format!("#{:06x}", rand::random::<u32>() % 16777215),
+            task_type: None,
+            target_id: None,
+        };
+        ctx.db.unit().insert(unit);
+    }
+    Ok(())
+}
+
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct Position {
+    x: f32,
+    y: f32,
+}
+
+#[reducer]
+pub fn move_unit(
+    ctx: &ReducerContext,
+    unit_id: i32,
+    target_position: Position,
+) -> Result<(), String> {
+    if let Some(mut unit) = ctx.db.unit().id().find(unit_id) {
+        unit.position = Vector2 {
+            x: target_position.x,
+            y: target_position.y,
+        };
+        ctx.db.unit().id().update(unit);
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn set_unit_task(
+    ctx: &ReducerContext,
+    unit_id: i32,
+    task_type: String,
+    target_id: String,
+) -> Result<(), String> {
+    if let Some(mut unit) = ctx.db.unit().id().find(unit_id) {
+        unit.task_type = Some(task_type);
+        unit.target_id = Some(target_id);
+        ctx.db.unit().id().update(unit);
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn create_game_event(
+    ctx: &ReducerContext,
+    room_id: String,
+    event_type: String,
+    source_id: String,
+    target_id: String,
+    value: i32,
+) -> Result<(), String> {
+    let event = GameEvent {
+        id: uuid::Uuid::new_v4().to_string(),
+        room_id,
+        event_type,
+        source_id,
+        target_id,
+        value,
+        timestamp: ctx.timestamp.to_micros_since_unix_epoch() * 1000,
+    };
+    ctx.db.game_event().insert(event);
     Ok(())
 }
 
@@ -64,7 +312,10 @@ fn validate_message(text: String) -> Result<String, String> {
 #[reducer(client_connected)]
 pub fn client_connected(ctx: &ReducerContext) {
     if let Some(user) = ctx.db.user().identity().find(ctx.sender) {
-        ctx.db.user().identity().update(User { online: true, ..user });
+        ctx.db.user().identity().update(User {
+            online: true,
+            ..user
+        });
     } else {
         ctx.db.user().insert(User {
             name: None,
@@ -77,8 +328,90 @@ pub fn client_connected(ctx: &ReducerContext) {
 #[reducer(client_disconnected)]
 pub fn identity_disconnected(ctx: &ReducerContext) {
     if let Some(user) = ctx.db.user().identity().find(ctx.sender) {
-        ctx.db.user().identity().update(User { online: false, ..user });
+        ctx.db.user().identity().update(User {
+            online: false,
+            ..user
+        });
     } else {
-        log::warn!("Disconnect event for unknown user with identity {:?}", ctx.sender);
+        log::warn!(
+            "Disconnect event for unknown user with identity {:?}",
+            ctx.sender
+        );
     }
-} 
+}
+
+// Chat-related reducers
+#[reducer]
+pub fn create_chat_room(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    let room_id = format!("room_{}", ctx.timestamp.to_micros_since_unix_epoch());
+    
+    ctx.db.chat_room().insert(ChatRoom {
+        id: room_id.clone(),
+        name,
+        created_at: ctx.timestamp.to_micros_since_unix_epoch(),
+    });
+
+    // Give creator full permissions
+    ctx.db.chat_permission().insert(ChatPermission {
+        room_id: room_id.clone(),
+        user_id: ctx.sender,
+        permission: "write".to_string(),
+    });
+
+    Ok(())
+}
+
+#[reducer]
+pub fn send_chat_message(
+    ctx: &ReducerContext,
+    room_id: String,
+    text: String,
+    round_number: Option<i32>,
+) -> Result<(), String> {
+    // Check if user has permission to send messages
+    let permissions = ctx.db.chat_permission().iter()
+        .filter(|p| p.room_id == room_id && p.user_id == ctx.sender)
+        .collect::<Vec<_>>();
+    
+    if permissions.is_empty() || permissions[0].permission != "write" {
+        return Err("No permission to send messages".to_string());
+    }
+
+    // Create and insert the message
+    let message_id = format!("msg_{}", ctx.timestamp.to_micros_since_unix_epoch());
+    ctx.db.chat_message().insert(ChatMessage {
+        id: message_id,
+        room_id,
+        sender: ctx.sender,
+        text,
+        timestamp: ctx.timestamp,
+        round_number,
+    });
+
+    Ok(())
+}
+
+#[reducer]
+pub fn set_chat_permission(
+    ctx: &ReducerContext,
+    room_id: String,
+    user_id: Identity,
+    permission: String,
+) -> Result<(), String> {
+    // Only room creator can set permissions
+    if let Some(room) = ctx.db.chat_room().id().find(&room_id) {
+        if room.created_at != ctx.timestamp.to_micros_since_unix_epoch() {
+            return Err("Only room creator can set permissions".to_string());
+        }
+
+        ctx.db.chat_permission().insert(ChatPermission {
+            room_id,
+            user_id,
+            permission,
+        });
+
+        Ok(())
+    } else {
+        Err("Room not found".to_string())
+    }
+}
