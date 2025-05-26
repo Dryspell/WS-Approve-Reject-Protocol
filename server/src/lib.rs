@@ -106,6 +106,41 @@ pub struct ReadyState {
     round: i32,
 }
 
+// Game resource types
+#[table(name = resource, public)]
+#[derive(Clone, Debug)]
+pub struct Resource {
+    #[primary_key]
+    id: String,
+    room_id: i32,
+    resource_type: String, // "wood" | "stone" | "gold"
+    position: Vector2,
+    amount: i32,
+}
+
+#[table(name = unit_stats, public)]
+pub struct UnitStats {
+    #[primary_key]
+    unit_id: i32,
+    health: i32,
+    max_health: i32,
+    attack: i32,
+    defense: i32,
+    speed: i32,
+    gather_rate: i32,
+    craft_rate: i32,
+}
+
+#[table(name = unit_inventory, public)]
+#[derive(Clone)]
+pub struct UnitInventory {
+    #[primary_key]
+    unit_id: i32,
+    wood: i32,
+    stone: i32,
+    gold: i32,
+}
+
 // Reducers
 #[reducer]
 pub fn set_name(ctx: &ReducerContext, name: String) -> Result<(), String> {
@@ -242,14 +277,29 @@ pub struct Position {
 pub fn move_unit(
     ctx: &ReducerContext,
     unit_id: i32,
-    target_position: Position,
+    target_position: Vector2,
 ) -> Result<(), String> {
     if let Some(mut unit) = ctx.db.unit().id().find(unit_id) {
-        unit.position = Vector2 {
-            x: target_position.x,
-            y: target_position.y,
-        };
-        ctx.db.unit().id().update(unit);
+        // Get unit stats for movement speed
+        if let Some(stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
+            let dx = target_position.x - unit.position.x;
+            let dy = target_position.y - unit.position.y;
+            let distance = (dx * dx + dy * dy).sqrt();
+            
+            // Move unit based on its speed
+            if distance <= stats.speed as f32 {
+                unit.position = target_position;
+                ctx.db.unit().id().update(unit);
+            } else {
+                // Move partially towards target
+                let ratio = stats.speed as f32 / distance;
+                unit.position = Vector2 {
+                    x: unit.position.x + dx * ratio,
+                    y: unit.position.y + dy * ratio,
+                };
+                ctx.db.unit().id().update(unit);
+            }
+        }
     }
     Ok(())
 }
@@ -288,6 +338,122 @@ pub fn create_game_event(
         timestamp: ctx.timestamp.to_micros_since_unix_epoch() * 1000,
     };
     ctx.db.game_event().insert(event);
+    Ok(())
+}
+
+#[reducer]
+pub fn gather_resource(
+    ctx: &ReducerContext,
+    unit_id: i32,
+    resource_id: String,
+) -> Result<(), String> {
+    if let Some(unit) = ctx.db.unit().id().find(unit_id) {
+        if let Some(resource) = ctx.db.resource().id().find(&resource_id) {
+            if let Some(stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
+                if let Some(mut inventory) = ctx.db.unit_inventory().unit_id().find(unit_id) {
+                    // Calculate distance between unit and resource
+                    let dx = resource.position.x - unit.position.x;
+                    let dy = resource.position.y - unit.position.y;
+                    let distance = (dx * dx + dy * dy).sqrt();
+                    
+                    if distance <= 30.0 { // Gathering range
+                        let gather_amount = stats.gather_rate.min(resource.amount);
+                        match resource.resource_type.as_str() {
+                            "wood" => inventory.wood += gather_amount,
+                            "stone" => inventory.stone += gather_amount,
+                            "gold" => inventory.gold += gather_amount,
+                            _ => return Err("Invalid resource type".to_string()),
+                        }
+                        
+                        // Update resource amount
+                        let mut updated_resource = resource.clone();
+                        updated_resource.amount -= gather_amount;
+                        if updated_resource.amount <= 0 {
+                            ctx.db.resource().id().delete(&resource_id);
+                        } else {
+                            ctx.db.resource().id().update(updated_resource);
+                        }
+                        
+                        // Update inventory
+                        ctx.db.unit_inventory().unit_id().update(inventory);
+                        
+                        // Create resource gathering event
+                        create_game_event(
+                            ctx,
+                            unit.room_id.to_string(),
+                            "resource".to_string(),
+                            unit_id.to_string(),
+                            resource_id,
+                            gather_amount,
+                        )?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn upgrade_unit(
+    ctx: &ReducerContext,
+    unit_id: i32,
+    upgrade_type: String,
+) -> Result<(), String> {
+    if let Some(mut stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
+        if let Some(inventory) = ctx.db.unit_inventory().unit_id().find(unit_id) {
+            // Check if unit has enough resources for upgrade
+            let (cost_wood, cost_stone, cost_gold) = match upgrade_type.as_str() {
+                "health" => (10, 5, 2),
+                "attack" => (5, 10, 3),
+                "defense" => (5, 5, 5),
+                "speed" => (3, 3, 10),
+                "gather" => (2, 2, 2),
+                "craft" => (2, 2, 2),
+                _ => return Err("Invalid upgrade type".to_string()),
+            };
+            
+            if inventory.wood >= cost_wood && inventory.stone >= cost_stone && inventory.gold >= cost_gold {
+                // Apply upgrade
+                match upgrade_type.as_str() {
+                    "health" => {
+                        stats.max_health += 10;
+                        stats.health += 10;
+                    },
+                    "attack" => stats.attack += 2,
+                    "defense" => stats.defense += 2,
+                    "speed" => stats.speed += 1,
+                    "gather" => stats.gather_rate += 1,
+                    "craft" => stats.craft_rate += 1,
+                    _ => return Err("Invalid upgrade type".to_string()),
+                }
+                
+                // Update stats
+                ctx.db.unit_stats().unit_id().update(stats);
+                
+                // Deduct resources
+                let mut updated_inventory = inventory.clone();
+                updated_inventory.wood -= cost_wood;
+                updated_inventory.stone -= cost_stone;
+                updated_inventory.gold -= cost_gold;
+                ctx.db.unit_inventory().unit_id().update(updated_inventory);
+                
+                // Create upgrade event
+                if let Some(unit) = ctx.db.unit().id().find(unit_id) {
+                    create_game_event(
+                        ctx,
+                        unit.room_id.to_string(),
+                        "upgrade".to_string(),
+                        unit_id.to_string(),
+                        upgrade_type,
+                        1,
+                    )?;
+                }
+            } else {
+                return Err("Not enough resources for upgrade".to_string());
+            }
+        }
+    }
     Ok(())
 }
 
