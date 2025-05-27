@@ -11,6 +11,45 @@
 - [ ] Add resource management for eliminated units (resources lost or transferred)
 - [ ] Integrate market with unit and vote trading
 
+## Resource System
+### Resource Gathering
+- [ ] Add resource depletion mechanics
+  - Implement resource regeneration over time
+  - Add resource respawn system
+  - Show resource depletion effects
+- [ ] Enhance gathering animations
+  - Add particle effects during gathering
+  - Show resource collection animations
+  - Add gathering progress indicators
+- [ ] Implement gathering efficiency
+  - Add gathering speed modifiers
+  - Show gathering rate indicators
+  - Add gathering tool upgrades
+
+### Resource Storage
+- [ ] Add inventory system
+  - Implement unit inventory limits
+  - Add storage buildings
+  - Show inventory UI
+- [ ] Add resource transfer
+  - Allow units to transfer resources
+  - Implement resource sharing
+  - Add resource trading
+
+### Crafting System
+- [ ] Implement crafting recipes
+  - Add recipe definitions
+  - Create recipe UI
+  - Show crafting requirements
+- [ ] Add crafting buildings
+  - Implement workshop placement
+  - Add crafting queue
+  - Show crafting progress
+- [ ] Add crafting upgrades
+  - Implement crafting efficiency
+  - Add recipe unlocks
+  - Show upgrade paths
+
 ## Market System
 - [ ] Create market interface for bulk vote trading
 - [ ] Add market history and analytics
@@ -44,6 +83,7 @@
 - SpacetimeDB type generation and schema sync is now complete! Types are generated in `client/src/module_bindings` and should be used throughout the frontend.
 - WASM/uuid/rand issues were resolved by removing direct usage and switching to `ctx.rng()` in reducers.
 - Manual type definitions are no longer needed for SpacetimeDB tables.
+- Basic resource gathering system implemented with visual feedback and task queuing.
 
 # Voting System TODOs
 

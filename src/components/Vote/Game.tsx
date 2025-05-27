@@ -1,6 +1,5 @@
 import { Component, onMount, createSignal, Show } from "solid-js";
-import type { GameRoom, Unit } from "~/module_bindings";
-import type { UnitTaskQueue } from "~/types/spacetime-client";
+import type { GameRoom, Unit, Resource, UnitInventory, UnitTaskQueue } from "~/types/spacetime-client";
 import { useVoteStore } from "~/stores/voteStore";
 import { showToast } from "../ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
@@ -8,11 +7,39 @@ import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { Resizable, ResizableHandle, ResizablePanel } from "~/components/ui/resizable";
 import { circle, rect } from "~/lib/canvas/shapes";
 import { getMousePosition } from "~/lib/canvas/utils";
-import { withinCircle } from "~/lib/canvas/spatial";
-import { getGameTickSystem } from "~/lib/game-tick";
+import { withinCircle } from "../../lib/canvas/spatial";
+import { getGameTickSystem, RESOURCE_TYPES } from "~/lib/game-tick";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
+
+// Add combat-related constants
+const COMBAT_EFFECT_DURATION = 500; // ms
+const COMBAT_EFFECT_COLOR = "#ff0000";
+
+// Resource colors
+const RESOURCE_COLORS: Record<string, string> = {
+  wood: "#8B4513",
+  stone: "#808080",
+  gold: "#FFD700",
+  coal: "#36454F",
+  gems: "#FF00FF",
+  fiber: "#90EE90",
+  hide: "#DEB887",
+  sand: "#F4A460",
+  food: "#FFA500"
+} as const;
+
+const RESOURCE_DEPLETION_COLOR = "#4A4A4A";
+const RESOURCE_REGENERATION_COLOR = "#90EE90";
+const RESOURCE_RADIUS = 15;
+const RESOURCE_DEPLETION_RADIUS = 10;
+const RESOURCE_REGENERATION_RADIUS = 12;
+
+// Add storage-related constants
+const STORAGE_BUILDING_COLOR = "#808080";
+const STORAGE_BUILDING_SIZE = 40;
+const DEFAULT_STORAGE_CAPACITY = 1000;
 
 interface Props {
   room: GameRoom;
@@ -26,14 +53,20 @@ const Game: Component<Props> = (props) => {
   const { voteState, subscribeToVotes, setUnitVoteColor, tradeUnitVote } = useVoteStore();
   const { db, connected } = useSpacetimeDB();
   const [units, setUnits] = createSignal<Record<number, Unit>>({});
+  const [resources, setResources] = createSignal<Record<string, Resource>>({});
   const [hoveredUnit, setHoveredUnit] = createSignal<Unit | undefined>();
+  const [hoveredResource, setHoveredResource] = createSignal<Resource | undefined>();
   const [gameCanvas, setGameCanvas] = createSignal<HTMLCanvasElement | undefined>();
   const [isDragging, setIsDragging] = createSignal(false);
   const [dragStart, setDragStart] = createSignal<[number, number]>([0, 0]);
   const [dragEnd, setDragEnd] = createSignal<[number, number]>([0, 0]);
   const [tickInterval, setTickInterval] = createSignal<NodeJS.Timeout | undefined>();
   const [taskQueues, setTaskQueues] = createSignal<Record<number, UnitTaskQueue[]>>({});
-  const gameTickSystem = getGameTickSystem(db);
+  const gameTickSystem = getGameTickSystem(() => ({ db, connected }));
+  const [scale, setScale] = createSignal(1);
+  const [offsetX, setOffsetX] = createSignal(0);
+  const [offsetY, setOffsetY] = createSignal(0);
+  const [inventories, setInventories] = createSignal<Record<number, UnitInventory>>({});
 
   onMount(() => {
     subscribeToVotes();
@@ -49,14 +82,40 @@ const Game: Component<Props> = (props) => {
         ...prev,
         [unit.id]: unit
       }));
-      gameTickSystem.updateUnits(units());
+      // Convert Unit type to match module_bindings.Unit
+      const convertedUnits = Object.fromEntries(
+        Object.entries(units()).map(([id, unit]) => [
+          id,
+          {
+            ...unit,
+            taskType: unit.taskType || undefined,
+            targetId: unit.targetId || undefined,
+            voteColor: unit.voteColor || undefined,
+            voteGuarantee: unit.voteGuarantee || undefined,
+            votePrice: unit.votePrice || undefined,
+            voteOwner: unit.voteOwner || undefined,
+            storageCapacity: unit.storageCapacity || undefined
+          }
+        ])
+      );
+      gameTickSystem.updateUnits(convertedUnits);
+    });
+
+    // Subscribe to resource updates
+    client.subscribe("resource", "*", (resource: Resource) => {
+      if (!resource) return;
+      setResources(prev => ({
+        ...prev,
+        [resource.id]: resource
+      }));
+      gameTickSystem.updateResources(resources());
     });
 
     // Subscribe to task queue updates
     client.subscribe("unit_task_queue", "*", (task: UnitTaskQueue) => {
       if (!task) return;
       setTaskQueues(prev => {
-        const unitTasks = prev[task.unit_id] || [];
+        const unitTasks = prev[task.unitId] || [];
         const existingIndex = unitTasks.findIndex(t => t.id === task.id);
         
         if (existingIndex >= 0) {
@@ -67,10 +126,19 @@ const Game: Component<Props> = (props) => {
         
         return {
           ...prev,
-          [task.unit_id]: unitTasks
+          [task.unitId]: unitTasks
         };
       });
       gameTickSystem.updateTaskQueues(Object.values(taskQueues()).flat());
+    });
+
+    // Subscribe to inventory updates
+    client.subscribe("unit_inventory", "*", (inventory: UnitInventory) => {
+      if (!inventory) return;
+      setInventories(prev => ({
+        ...prev,
+        [inventory.unitId]: inventory
+      }));
     });
 
     // Initialize canvas
@@ -92,6 +160,11 @@ const Game: Component<Props> = (props) => {
           withinCircle([mouseX, mouseY], unit.position, 20)
         );
         setHoveredUnit(hovered);
+
+        const hoveredRes = Object.values(resources()).find(resource => 
+          withinCircle([mouseX, mouseY], resource.position, 15)
+        );
+        setHoveredResource(hoveredRes);
       }
     });
 
@@ -148,9 +221,59 @@ const Game: Component<Props> = (props) => {
       e.preventDefault();
     });
 
-    // Game loop for rendering only
+    // Game loop for rendering
     const gameLoop = () => {
       ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      // Draw resources
+      Object.values(resources()).forEach(resource => {
+        const { x, y } = resource.position;
+        const screenX = x * scale() + offsetX();
+        const screenY = y * scale() + offsetY();
+
+        // Draw resource node
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, RESOURCE_RADIUS, 0, Math.PI * 2);
+        
+        // Determine resource color based on state
+        let resourceColor = RESOURCE_COLORS[resource.resourceType.toLowerCase()];
+        if (resource.amount <= resource.depletionThreshold) {
+          resourceColor = RESOURCE_DEPLETION_COLOR;
+        } else if (resource.regenerationTimer > 0) {
+          resourceColor = RESOURCE_REGENERATION_COLOR;
+        }
+        
+        ctx.fillStyle = resourceColor;
+        ctx.fill();
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw resource amount
+        ctx.fillStyle = "#000";
+        ctx.font = "12px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(resource.amount.toString(), screenX, screenY);
+
+        // Draw regeneration timer if active
+        if (resource.regenerationTimer > 0) {
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, RESOURCE_REGENERATION_RADIUS, 0, (resource.regenerationTimer / 10) * Math.PI * 2);
+          ctx.strokeStyle = RESOURCE_REGENERATION_COLOR;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+
+        // Draw depletion effect if resource is depleted
+        if (resource.amount <= resource.depletionThreshold) {
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, RESOURCE_DEPLETION_RADIUS, 0, Math.PI * 2);
+          ctx.strokeStyle = RESOURCE_DEPLETION_COLOR;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      });
 
       // Draw units
       Object.values(units()).forEach(unit => {
@@ -170,6 +293,48 @@ const Game: Component<Props> = (props) => {
           ctx.arc(unit.position.x, unit.position.y, 25, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]);
+        }
+
+        // Draw combat effects
+        const combatEffect = gameTickSystem.getCombatEffect(unit.id);
+        if (combatEffect) {
+          const elapsed = Date.now() - combatEffect.startTime;
+          if (elapsed < COMBAT_EFFECT_DURATION) {
+            ctx.strokeStyle = COMBAT_EFFECT_COLOR;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(unit.position.x, unit.position.y, 30, 0, Math.PI * 2);
+            ctx.stroke();
+
+            const target = units()[combatEffect.targetId];
+            if (target) {
+              ctx.beginPath();
+              ctx.moveTo(unit.position.x, unit.position.y);
+              ctx.lineTo(target.position.x, target.position.y);
+              ctx.stroke();
+            }
+          }
+        }
+
+        // Draw gathering effects
+        const gatherEffect = gameTickSystem.getGatherEffect(unit.id);
+        if (gatherEffect) {
+          const elapsed = Date.now() - gatherEffect.startTime;
+          if (elapsed < 500) {
+            ctx.strokeStyle = "#00ff00";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(unit.position.x, unit.position.y, 30, 0, Math.PI * 2);
+            ctx.stroke();
+
+            const resource = resources()[gatherEffect.resourceId];
+            if (resource) {
+              ctx.beginPath();
+              ctx.moveTo(unit.position.x, unit.position.y);
+              ctx.lineTo(resource.position.x, resource.position.y);
+              ctx.stroke();
+            }
+          }
         }
 
         // Draw unit ID
@@ -192,6 +357,23 @@ const Game: Component<Props> = (props) => {
           ctx.fillStyle = "#000";
           ctx.font = "10px Arial";
           ctx.fillText(`${unitTasks.length} tasks`, unit.position.x, unit.position.y - 25);
+        }
+
+        // Draw storage building
+        if (unit.isStorage) {
+          rect(ctx, unit.position.x - STORAGE_BUILDING_SIZE/2, unit.position.y - STORAGE_BUILDING_SIZE/2, 
+            STORAGE_BUILDING_SIZE, STORAGE_BUILDING_SIZE, {
+            fillStyle: STORAGE_BUILDING_COLOR,
+            strokeStyle: hoveredUnit()?.id === unit.id ? "#00ff00" : "#000",
+            lineWidth: hoveredUnit()?.id === unit.id ? 3 : 1,
+          });
+
+          // Draw storage icon
+          ctx.fillStyle = "#fff";
+          ctx.font = "20px Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("S", unit.position.x, unit.position.y);
         }
       });
 
@@ -231,6 +413,48 @@ const Game: Component<Props> = (props) => {
       showToast({
         title: "Success",
         description: "Vote trade completed",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    } catch (error) {
+      // Error is already handled by withSpacetimeDBErrorHandling
+    }
+  };
+
+  // Add resource gathering functions
+  const handleGather = (resource: Resource) => {
+    if (!hoveredUnit()) return;
+    gameTickSystem.gatherResource(hoveredUnit()!.id, resource.id);
+  };
+
+  const handleGroupGather = (resource: Resource) => {
+    gameTickSystem.gatherGroupResource(resource.id);
+  };
+
+  // Add storage-related functions
+  const handleCreateStorage = async (position: { x: number; y: number }) => {
+    try {
+      await db()?.create_storage_building(props.room.id, position, DEFAULT_STORAGE_CAPACITY);
+      showToast({
+        title: "Success",
+        description: "Storage building created",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    } catch (error) {
+      // Error is already handled by withSpacetimeDBErrorHandling
+    }
+  };
+
+  const handleTransferResources = async (
+    sourceId: number,
+    targetId: number,
+    resourceType: string,
+    amount: number
+  ) => {
+    try {
+      await db()?.transfer_resources(sourceId, targetId, resourceType, amount);
+      showToast({
+        title: "Success",
+        description: "Resources transferred",
         duration: DEFAULT_TOAST_DURATION,
       });
     } catch (error) {
@@ -292,7 +516,7 @@ const Game: Component<Props> = (props) => {
         <ResizableHandle withHandle />
         <ResizablePanel initialSize={0.25} class="overflow-hidden">
           <div class="p-4">
-            <h3 class="mb-4 text-lg font-semibold">Unit Details</h3>
+            <h3 class="mb-4 text-lg font-semibold">Details</h3>
             <Show when={hoveredUnit()}>
               <div class="rounded-lg border p-4">
                 <div class="space-y-2">
@@ -346,7 +570,7 @@ const Game: Component<Props> = (props) => {
                       {(taskQueues()[hoveredUnit()!.id] || []).map(task => (
                         <div class="flex items-center justify-between rounded border p-2">
                           <div>
-                            <div class="font-medium">{task.task_type}</div>
+                            <div class="font-medium">{task.taskType}</div>
                             <div class="text-sm text-gray-500">Status: {task.status}</div>
                           </div>
                           {task.status === "pending" && (
@@ -361,6 +585,85 @@ const Game: Component<Props> = (props) => {
                       ))}
                     </div>
                   </div>
+                </div>
+              </div>
+            </Show>
+            <Show when={hoveredResource()}>
+              <div class="mt-4 rounded-lg border p-4">
+                <div class="space-y-2">
+                  <div class="flex items-center gap-2">
+                    <div
+                      class="h-4 w-4 rounded-full"
+                      style={{ "background-color": RESOURCE_COLORS[hoveredResource()!.resourceType.toLowerCase()] || "#ccc" }}
+                    />
+                    <span class="font-semibold">{hoveredResource()!.resourceType}</span>
+                  </div>
+                  <div class="text-sm text-gray-600">
+                    <div>Amount: {hoveredResource()!.amount}</div>
+                  </div>
+                  <div class="mt-4 flex gap-2">
+                    <button
+                      onClick={() => handleGather(hoveredResource()!)}
+                      class="rounded bg-green-500 px-2 py-1 text-white hover:bg-green-600"
+                    >
+                      Gather
+                    </button>
+                    <button
+                      onClick={() => handleGroupGather(hoveredResource()!)}
+                      class="rounded bg-green-700 px-2 py-1 text-white hover:bg-green-800"
+                    >
+                      Group Gather
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Show>
+            <Show when={inventories()[hoveredUnit()!.id]}>
+              <div class="mt-4 rounded-lg border p-4">
+                <div class="space-y-2">
+                  <h4 class="font-semibold">Inventory</h4>
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>Wood: {inventories()[hoveredUnit()!.id]?.wood || 0}</div>
+                    <div>Stone: {inventories()[hoveredUnit()!.id]?.stone || 0}</div>
+                    <div>Gold: {inventories()[hoveredUnit()!.id]?.gold || 0}</div>
+                    <div>Capacity: {inventories()[hoveredUnit()!.id]?.maxCapacity || 0}</div>
+                  </div>
+                  
+                  {!hoveredUnit()!.isStorage && (
+                    <div class="mt-4">
+                      <h4 class="font-semibold">Transfer Resources</h4>
+                      <div class="space-y-2">
+                        <select class="w-full rounded border p-1">
+                          <option value="wood">Wood</option>
+                          <option value="stone">Stone</option>
+                          <option value="gold">Gold</option>
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          max={inventories()[hoveredUnit()!.id]?.maxCapacity || 0}
+                          class="w-full rounded border p-1"
+                          placeholder="Amount"
+                        />
+                        <button
+                          onClick={() => {
+                            const targetStorage = Object.values(units()).find(u => u.isStorage);
+                            if (targetStorage) {
+                              handleTransferResources(
+                                hoveredUnit()!.id,
+                                targetStorage.id,
+                                "wood", // Get from select
+                                10 // Get from input
+                              );
+                            }
+                          }}
+                          class="w-full rounded bg-blue-500 px-2 py-1 text-white hover:bg-blue-600"
+                        >
+                          Transfer to Storage
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </Show>

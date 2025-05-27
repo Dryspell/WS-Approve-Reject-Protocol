@@ -73,23 +73,27 @@ pub struct GameRoom {
 }
 
 #[table(name = unit, public)]
+#[derive(Clone)]
 pub struct Unit {
     #[primary_key]
     #[auto_inc]
     id: i32,
     room_id: i32,
     owner_id: String,
-    unit_type: String, // "minion" | "target" | "structure"
+    unit_type: String, // "minion" | "target" | "structure" | "storage"
     position: Vector2,
     dimensions: Vector2,
     fill_style: String,
-    task_type: Option<String>, // "gather" | "craft" | "upgrade"
+    task_type: Option<String>, // "gather" | "craft" | "upgrade" | "transfer"
     target_id: Option<String>,
     // New voting-related fields
     vote_color: Option<String>, // "red" | "blue"
     vote_guarantee: Option<String>, // "red" | "blue" | null
     vote_price: Option<i32>, // Price in MT if unit is for sale
     vote_owner: Option<String>, // Owner of the vote if different from unit owner
+    // New storage-related fields
+    storage_capacity: Option<i32>, // Storage capacity for storage buildings
+    is_storage: bool, // Whether this unit is a storage building
 }
 
 #[table(name = game_event, public)]
@@ -122,6 +126,10 @@ pub struct Resource {
     resource_type: String, // "wood" | "stone" | "gold"
     position: Vector2,
     amount: i32,
+    max_amount: i32,
+    regeneration_rate: i32, // Amount regenerated per tick
+    regeneration_timer: i32, // Ticks until next regeneration
+    depletion_threshold: i32, // Amount at which resource is considered depleted
 }
 
 #[table(name = unit_stats, public)]
@@ -145,6 +153,7 @@ pub struct UnitInventory {
     wood: i32,
     stone: i32,
     gold: i32,
+    max_capacity: i32, // Maximum capacity for this unit's inventory
 }
 
 // Reducers
@@ -253,6 +262,7 @@ pub fn start_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
 }
 
 fn create_initial_units(ctx: &ReducerContext, room: &GameRoom) -> Result<(), String> {
+    // Create units
     for member_id in &room.member_ids {
         let unit = Unit {
             id: 0, // Will be auto-incremented
@@ -271,9 +281,44 @@ fn create_initial_units(ctx: &ReducerContext, room: &GameRoom) -> Result<(), Str
             vote_guarantee: None,
             vote_price: None,
             vote_owner: None,
+            storage_capacity: None,
+            is_storage: false,
         };
-        ctx.db.unit().insert(unit);
+        let inserted_unit = ctx.db.unit().insert(unit);
+
+        // Create inventory for unit
+        let inventory = UnitInventory {
+            unit_id: inserted_unit.id,
+            wood: 0,
+            stone: 0,
+            gold: 0,
+            max_capacity: 100, // Default inventory capacity for units
+        };
+        ctx.db.unit_inventory().insert(inventory);
     }
+
+    // Create initial resources
+    let resource_types = ["wood", "stone", "gold"];
+    for _ in 0..10 { // Create 10 resources of each type
+        for resource_type in resource_types.iter() {
+            let resource = Resource {
+                id: format!("resource_{}_{}", resource_type, ctx.rng().gen::<u32>()),
+                room_id: room.id,
+                resource_type: resource_type.to_string(),
+                position: Vector2 {
+                    x: (ctx.rng().gen::<f32>() * 100.0) as f32,
+                    y: (ctx.rng().gen::<f32>() * 100.0) as f32,
+                },
+                amount: 100,
+                max_amount: 100,
+                regeneration_rate: 5,
+                regeneration_timer: 0,
+                depletion_threshold: 20,
+            };
+            ctx.db.resource().insert(resource);
+        }
+    }
+
     Ok(())
 }
 
@@ -728,6 +773,7 @@ pub struct GameTickTimer {
 }
 
 #[table(name = unit_task_queue, public)]
+#[derive(Clone)]
 pub struct UnitTaskQueue {
     #[primary_key]
     #[auto_inc]
@@ -789,54 +835,63 @@ pub fn game_tick(ctx: &ReducerContext, _timer: GameTickTimer) -> Result<(), Stri
     let units = ctx.db.unit().iter().collect::<Vec<_>>();
     
     // Process each unit
-    for mut unit in units {
+    for unit in units {
         // Get the next pending task for this unit
-        if let Some(mut task) = ctx.db.unit_task_queue().iter()
+        if let Some(task) = ctx.db.unit_task_queue().iter()
             .filter(|t| t.unit_id == unit.id && t.status == "pending")
             .next() 
         {
+            // Clone task before using it
+            let task_type = task.task_type.clone();
+            let target_id = task.target_id.clone();
+            
             // Start the task
-            task.status = "in_progress".to_string();
-            task.started_at = Some(ctx.timestamp);
-            ctx.db.unit_task_queue().id().update(task);
+            let mut updated_task = task.clone();
+            updated_task.status = "in_progress".to_string();
+            updated_task.started_at = Some(ctx.timestamp);
+            ctx.db.unit_task_queue().id().update(updated_task);
 
             // Update unit's current task
-            unit.task_type = Some(task.task_type.clone());
-            unit.target_id = Some(task.target_id.clone());
-            ctx.db.unit().id().update(unit);
+            let mut updated_unit = unit.clone();
+            updated_unit.task_type = Some(task_type.clone());
+            updated_unit.target_id = Some(target_id.clone());
+            ctx.db.unit().id().update(updated_unit);
 
             // Process the task
-            match task.task_type.as_str() {
+            match task_type.as_str() {
                 "move" => {
-                    if let Some(target_unit) = ctx.db.unit().id().find(task.target_id.parse::<i32>().unwrap_or(0)) {
+                    if let Some(target_unit) = ctx.db.unit().id().find(target_id.parse::<i32>().unwrap_or(0)) {
                         let dx = target_unit.position.x - unit.position.x;
                         let dy = target_unit.position.y - unit.position.y;
                         let distance = (dx * dx + dy * dy).sqrt();
                         
                         if distance <= 1.0 {
                             // Task completed
-                            task.status = "completed".to_string();
-                            task.completed_at = Some(ctx.timestamp);
-                            ctx.db.unit_task_queue().id().update(task);
+                            let mut completed_task = task.clone();
+                            completed_task.status = "completed".to_string();
+                            completed_task.completed_at = Some(ctx.timestamp);
+                            ctx.db.unit_task_queue().id().update(completed_task);
                             
                             // Clear unit's current task
-                            unit.task_type = None;
-                            unit.target_id = None;
-                            ctx.db.unit().id().update(unit);
+                            let mut cleared_unit = unit.clone();
+                            cleared_unit.task_type = None;
+                            cleared_unit.target_id = None;
+                            ctx.db.unit().id().update(cleared_unit);
                         } else {
                             // Move unit towards target
                             let speed = 2.0;
                             let ratio = speed / distance;
-                            unit.position = Vector2 {
+                            let mut moved_unit = unit.clone();
+                            moved_unit.position = Vector2 {
                                 x: unit.position.x + dx * ratio,
                                 y: unit.position.y + dy * ratio,
                             };
-                            ctx.db.unit().id().update(unit);
+                            ctx.db.unit().id().update(moved_unit);
                         }
                     }
                 },
                 "gather" => {
-                    if let Some(resource) = ctx.db.resource().id().find(&task.target_id) {
+                    if let Some(mut resource) = ctx.db.resource().id().find(&target_id) {
                         let dx = resource.position.x - unit.position.x;
                         let dy = resource.position.y - unit.position.y;
                         let distance = (dx * dx + dy * dy).sqrt();
@@ -845,33 +900,50 @@ pub fn game_tick(ctx: &ReducerContext, _timer: GameTickTimer) -> Result<(), Stri
                             // Process gathering
                             if let Some(mut inventory) = ctx.db.unit_inventory().unit_id().find(unit.id) {
                                 let gather_amount = 5;
-                                match resource.resource_type.as_str() {
-                                    "wood" => inventory.wood += gather_amount,
-                                    "stone" => inventory.stone += gather_amount,
-                                    "gold" => inventory.gold += gather_amount,
-                                    _ => continue,
+                                
+                                // Check if resource has enough amount
+                                if resource.amount >= gather_amount {
+                                    match resource.resource_type.as_str() {
+                                        "wood" => inventory.wood += gather_amount,
+                                        "stone" => inventory.stone += gather_amount,
+                                        "gold" => inventory.gold += gather_amount,
+                                        _ => continue,
+                                    }
+                                    ctx.db.unit_inventory().unit_id().update(inventory);
+                                    
+                                    // Update resource amount
+                                    resource.amount -= gather_amount;
+                                    
+                                    // If resource is depleted, start regeneration timer
+                                    if resource.amount <= resource.depletion_threshold {
+                                        resource.regeneration_timer = 10; // 10 ticks until regeneration starts
+                                    }
+                                    
+                                    ctx.db.resource().id().update(resource);
+                                    
+                                    // Task completed
+                                    let mut completed_task = task.clone();
+                                    completed_task.status = "completed".to_string();
+                                    completed_task.completed_at = Some(ctx.timestamp);
+                                    ctx.db.unit_task_queue().id().update(completed_task);
+                                    
+                                    // Clear unit's current task
+                                    let mut cleared_unit = unit.clone();
+                                    cleared_unit.task_type = None;
+                                    cleared_unit.target_id = None;
+                                    ctx.db.unit().id().update(cleared_unit);
                                 }
-                                ctx.db.unit_inventory().unit_id().update(inventory);
-                                
-                                // Task completed
-                                task.status = "completed".to_string();
-                                task.completed_at = Some(ctx.timestamp);
-                                ctx.db.unit_task_queue().id().update(task);
-                                
-                                // Clear unit's current task
-                                unit.task_type = None;
-                                unit.target_id = None;
-                                ctx.db.unit().id().update(unit);
                             }
                         } else {
                             // Move towards resource
                             let speed = 2.0;
                             let ratio = speed / distance;
-                            unit.position = Vector2 {
+                            let mut moved_unit = unit.clone();
+                            moved_unit.position = Vector2 {
                                 x: unit.position.x + dx * ratio,
                                 y: unit.position.y + dy * ratio,
                             };
-                            ctx.db.unit().id().update(unit);
+                            ctx.db.unit().id().update(moved_unit);
                         }
                     }
                 },
@@ -880,5 +952,133 @@ pub fn game_tick(ctx: &ReducerContext, _timer: GameTickTimer) -> Result<(), Stri
         }
     }
     
+    // Process resource regeneration
+    let resources = ctx.db.resource().iter().collect::<Vec<_>>();
+    for mut resource in resources {
+        if resource.amount < resource.max_amount {
+            if resource.regeneration_timer > 0 {
+                resource.regeneration_timer -= 1;
+            } else {
+                // Regenerate resource
+                resource.amount = (resource.amount + resource.regeneration_rate).min(resource.max_amount);
+            }
+            ctx.db.resource().id().update(resource);
+        }
+    }
+    
     Ok(())
+}
+
+#[reducer]
+pub fn create_storage_building(
+    ctx: &ReducerContext,
+    room_id: i32,
+    position: Vector2,
+    capacity: i32,
+) -> Result<(), String> {
+    // Create storage building unit
+    let storage = Unit {
+        id: 0, // Will be auto-incremented
+        room_id,
+        owner_id: ctx.sender.to_string(),
+        unit_type: "storage".to_string(),
+        position,
+        dimensions: Vector2 { x: 40.0, y: 40.0 }, // Larger than regular units
+        fill_style: "#808080".to_string(), // Gray color for storage
+        task_type: None,
+        target_id: None,
+        vote_color: None,
+        vote_guarantee: None,
+        vote_price: None,
+        vote_owner: None,
+        storage_capacity: Some(capacity),
+        is_storage: true,
+    };
+    let inserted_storage = ctx.db.unit().insert(storage);
+
+    // Create inventory for storage
+    let inventory = UnitInventory {
+        unit_id: inserted_storage.id,
+        wood: 0,
+        stone: 0,
+        gold: 0,
+        max_capacity: capacity,
+    };
+    ctx.db.unit_inventory().insert(inventory);
+
+    Ok(())
+}
+
+#[reducer]
+pub fn transfer_resources(
+    ctx: &ReducerContext,
+    source_id: i32,
+    target_id: i32,
+    resource_type: String,
+    amount: i32,
+) -> Result<(), String> {
+    // Get source and target inventories
+    if let (Some(mut source_inv), Some(mut target_inv)) = (
+        ctx.db.unit_inventory().unit_id().find(source_id),
+        ctx.db.unit_inventory().unit_id().find(target_id)
+    ) {
+        // Check if source has enough resources
+        let source_amount = match resource_type.as_str() {
+            "wood" => source_inv.wood,
+            "stone" => source_inv.stone,
+            "gold" => source_inv.gold,
+            _ => return Err("Invalid resource type".to_string()),
+        };
+
+        if source_amount < amount {
+            return Err("Not enough resources".to_string());
+        }
+
+        // Check if target has enough capacity
+        let target_amount = match resource_type.as_str() {
+            "wood" => target_inv.wood,
+            "stone" => target_inv.stone,
+            "gold" => target_inv.gold,
+            _ => return Err("Invalid resource type".to_string()),
+        };
+
+        if target_amount + amount > target_inv.max_capacity {
+            return Err("Target inventory full".to_string());
+        }
+
+        // Transfer resources
+        match resource_type.as_str() {
+            "wood" => {
+                source_inv.wood -= amount;
+                target_inv.wood += amount;
+            },
+            "stone" => {
+                source_inv.stone -= amount;
+                target_inv.stone += amount;
+            },
+            "gold" => {
+                source_inv.gold -= amount;
+                target_inv.gold += amount;
+            },
+            _ => return Err("Invalid resource type".to_string()),
+        }
+
+        // Update inventories
+        ctx.db.unit_inventory().unit_id().update(source_inv);
+        ctx.db.unit_inventory().unit_id().update(target_inv);
+
+        // Create transfer event
+        create_game_event(
+            ctx,
+            source_id.to_string(),
+            "transfer".to_string(),
+            source_id.to_string(),
+            target_id.to_string(),
+            amount,
+        )?;
+
+        Ok(())
+    } else {
+        Err("Source or target inventory not found".to_string())
+    }
 }

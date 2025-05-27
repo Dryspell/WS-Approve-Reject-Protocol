@@ -1,47 +1,83 @@
 import type { Identity } from "@clockworklabs/spacetimedb-sdk";
-import type { Unit, GameEvent } from "~/module_bindings";
+
+export interface Unit {
+  id: number;
+  roomId: number;
+  ownerId: string;
+  unitType: string;
+  position: { x: number; y: number };
+  dimensions: { x: number; y: number };
+  fillStyle: string;
+  taskType: string | null;
+  targetId: string | null;
+  voteColor: string | null;
+  voteGuarantee: string | null;
+  votePrice: number | null;
+  voteOwner: string | null;
+  storageCapacity: number | null;
+  isStorage: boolean;
+}
+
+export interface UnitInventory {
+  unitId: number;
+  wood: number;
+  stone: number;
+  gold: number;
+  maxCapacity: number;
+}
+
+export interface Resource {
+  id: string;
+  roomId: number;
+  resourceType: string;
+  position: { x: number; y: number };
+  amount: number;
+  maxAmount: number;
+  regenerationRate: number;
+  regenerationTimer: number;
+  depletionThreshold: number;
+}
 
 export interface UnitTaskQueue {
   id: number;
-  unit_id: number;
-  task_type: string;
-  target_id: string;
-  status: string;
-  created_at: number;
-  started_at: number | null;
-  completed_at: number | null;
+  unitId: number;
+  taskType: string;
+  targetId: string;
+  status: "pending" | "in_progress" | "completed" | "failed";
+  createdAt: number;
+  startedAt: number | null;
+  completedAt: number | null;
+}
+
+export interface GameEvent {
+  id: string;
+  roomId: string;
+  eventType: string;
+  sourceId: string;
+  targetId: string;
+  value: number;
+  timestamp: number;
+}
+
+export interface GameRoom {
+  id: number;
+  name: string;
+  memberIds: string[];
+  ticketIds: string[];
+  offerIds: string[];
+  startTime: number | null;
+  currentRound: number;
 }
 
 export interface SpacetimeDBGameClient {
-  // User methods
-  set_name(name: string): Promise<void>;
-  send_message(text: string): Promise<void>;
-
-  // Room methods
-  create_room(roomId: string, name: string, creatorId: string): Promise<void>;
-  join_room(roomId: number, userId: string): Promise<void>;
-  toggle_ready(roomId: number, userId: string): Promise<void>;
-  start_game(roomId: number): Promise<void>;
-
-  // Unit methods
-  move_unit(unitId: number, position: { x: number; y: number }): Promise<void>;
-  set_unit_task(unitId: number, taskType: string, targetId: string): Promise<void>;
-  gather_resource(unitId: number, resourceId: string): Promise<void>;
-  upgrade_unit(unitId: number, upgradeType: string): Promise<void>;
-
-  // Vote methods
-  set_unit_vote_color(unitId: number, color: string): Promise<void>;
-  trade_unit_vote(unitId: number, buyerId: string, price: number): Promise<void>;
-  process_round_votes(roomId: number, roundNumber: number): Promise<void>;
-
-  // Task Queue Methods
+  subscribe(
+    table: "unit" | "unit_task_queue" | "game_event" | "message" | "game_room" | "ready_state" | "resource" | "unit_inventory",
+    filter: string,
+    callback: (data: any) => void
+  ): void;
   queue_unit_task(unitId: number, taskType: string, targetId: string): Promise<void>;
   cancel_unit_task(taskId: number): Promise<void>;
-  
-  // Subscribe to updates
-  subscribe(
-    tableName: "unit" | "unit_task_queue" | "game_event" | "message" | "game_room" | "ready_state",
-    filter: string,
-    callback: (data: Unit | UnitTaskQueue | GameEvent | any) => void
-  ): void;
+  create_game_event(roomId: string, eventType: string, sourceId: string, targetId: string, value: number): Promise<void>;
+  create_storage_building(roomId: number, position: { x: number; y: number }, capacity: number): Promise<void>;
+  transfer_resources(sourceId: number, targetId: number, resourceType: string, amount: number): Promise<void>;
 } 

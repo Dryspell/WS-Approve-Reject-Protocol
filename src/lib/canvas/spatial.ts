@@ -6,8 +6,9 @@ export function withinCircle(
   center: { x: number; y: number },
   radius: number
 ): boolean {
-  const dx = point[0] - center.x;
-  const dy = point[1] - center.y;
+  const [x, y] = point;
+  const dx = x - center.x;
+  const dy = y - center.y;
   return dx * dx + dy * dy <= radius * radius;
 }
 
@@ -18,11 +19,12 @@ export function withinRect(
   point: [number, number],
   rect: { x: number; y: number; width: number; height: number }
 ): boolean {
+  const [x, y] = point;
   return (
-    point[0] >= rect.x &&
-    point[0] <= rect.x + rect.width &&
-    point[1] >= rect.y &&
-    point[1] <= rect.y + rect.height
+    x >= rect.x &&
+    x <= rect.x + rect.width &&
+    y >= rect.y &&
+    y <= rect.y + rect.height
   );
 }
 
@@ -30,10 +32,10 @@ export function withinRect(
  * Calculate squared distance between two points
  */
 export function distance2(
-  p1: { x: number; y: number },
-  p2: { x: number; y: number }
+  point1: { x: number; y: number },
+  point2: { x: number; y: number }
 ): number {
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
+  const dx = point2.x - point1.x;
+  const dy = point2.y - point1.y;
   return dx * dx + dy * dy;
 } 
