@@ -718,3 +718,167 @@ pub fn process_round_votes(
     
     Ok(())
 }
+
+#[table(name = game_tick_timer, scheduled(game_tick))]
+pub struct GameTickTimer {
+    #[primary_key]
+    #[auto_inc]
+    scheduled_id: u64,
+    scheduled_at: spacetimedb::ScheduleAt,
+}
+
+#[table(name = unit_task_queue, public)]
+pub struct UnitTaskQueue {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    unit_id: i32,
+    task_type: String, // "move" | "gather" | "craft" | "upgrade"
+    target_id: String,
+    status: String, // "pending" | "in_progress" | "completed" | "failed"
+    created_at: Timestamp,
+    started_at: Option<Timestamp>,
+    completed_at: Option<Timestamp>,
+}
+
+#[reducer]
+pub fn queue_unit_task(
+    ctx: &ReducerContext,
+    unit_id: i32,
+    task_type: String,
+    target_id: String,
+) -> Result<(), String> {
+    // Validate task type
+    if !["move", "gather", "craft", "upgrade"].contains(&task_type.as_str()) {
+        return Err("Invalid task type".to_string());
+    }
+
+    // Create new task in queue
+    ctx.db.unit_task_queue().insert(UnitTaskQueue {
+        id: 0, // Will be auto-incremented
+        unit_id,
+        task_type,
+        target_id,
+        status: "pending".to_string(),
+        created_at: ctx.timestamp,
+        started_at: None,
+        completed_at: None,
+    });
+
+    Ok(())
+}
+
+#[reducer]
+pub fn cancel_unit_task(
+    ctx: &ReducerContext,
+    task_id: i32,
+) -> Result<(), String> {
+    if let Some(mut task) = ctx.db.unit_task_queue().id().find(task_id) {
+        if task.status == "pending" {
+            task.status = "failed".to_string();
+            task.completed_at = Some(ctx.timestamp);
+            ctx.db.unit_task_queue().id().update(task);
+        }
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn game_tick(ctx: &ReducerContext, _timer: GameTickTimer) -> Result<(), String> {
+    // Get all units
+    let units = ctx.db.unit().iter().collect::<Vec<_>>();
+    
+    // Process each unit
+    for mut unit in units {
+        // Get the next pending task for this unit
+        if let Some(mut task) = ctx.db.unit_task_queue().iter()
+            .filter(|t| t.unit_id == unit.id && t.status == "pending")
+            .next() 
+        {
+            // Start the task
+            task.status = "in_progress".to_string();
+            task.started_at = Some(ctx.timestamp);
+            ctx.db.unit_task_queue().id().update(task);
+
+            // Update unit's current task
+            unit.task_type = Some(task.task_type.clone());
+            unit.target_id = Some(task.target_id.clone());
+            ctx.db.unit().id().update(unit);
+
+            // Process the task
+            match task.task_type.as_str() {
+                "move" => {
+                    if let Some(target_unit) = ctx.db.unit().id().find(task.target_id.parse::<i32>().unwrap_or(0)) {
+                        let dx = target_unit.position.x - unit.position.x;
+                        let dy = target_unit.position.y - unit.position.y;
+                        let distance = (dx * dx + dy * dy).sqrt();
+                        
+                        if distance <= 1.0 {
+                            // Task completed
+                            task.status = "completed".to_string();
+                            task.completed_at = Some(ctx.timestamp);
+                            ctx.db.unit_task_queue().id().update(task);
+                            
+                            // Clear unit's current task
+                            unit.task_type = None;
+                            unit.target_id = None;
+                            ctx.db.unit().id().update(unit);
+                        } else {
+                            // Move unit towards target
+                            let speed = 2.0;
+                            let ratio = speed / distance;
+                            unit.position = Vector2 {
+                                x: unit.position.x + dx * ratio,
+                                y: unit.position.y + dy * ratio,
+                            };
+                            ctx.db.unit().id().update(unit);
+                        }
+                    }
+                },
+                "gather" => {
+                    if let Some(resource) = ctx.db.resource().id().find(&task.target_id) {
+                        let dx = resource.position.x - unit.position.x;
+                        let dy = resource.position.y - unit.position.y;
+                        let distance = (dx * dx + dy * dy).sqrt();
+                        
+                        if distance <= 30.0 {
+                            // Process gathering
+                            if let Some(mut inventory) = ctx.db.unit_inventory().unit_id().find(unit.id) {
+                                let gather_amount = 5;
+                                match resource.resource_type.as_str() {
+                                    "wood" => inventory.wood += gather_amount,
+                                    "stone" => inventory.stone += gather_amount,
+                                    "gold" => inventory.gold += gather_amount,
+                                    _ => continue,
+                                }
+                                ctx.db.unit_inventory().unit_id().update(inventory);
+                                
+                                // Task completed
+                                task.status = "completed".to_string();
+                                task.completed_at = Some(ctx.timestamp);
+                                ctx.db.unit_task_queue().id().update(task);
+                                
+                                // Clear unit's current task
+                                unit.task_type = None;
+                                unit.target_id = None;
+                                ctx.db.unit().id().update(unit);
+                            }
+                        } else {
+                            // Move towards resource
+                            let speed = 2.0;
+                            let ratio = speed / distance;
+                            unit.position = Vector2 {
+                                x: unit.position.x + dx * ratio,
+                                y: unit.position.y + dy * ratio,
+                            };
+                            ctx.db.unit().id().update(unit);
+                        }
+                    }
+                },
+                _ => continue,
+            }
+        }
+    }
+    
+    Ok(())
+}

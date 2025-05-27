@@ -1,15 +1,38 @@
+interface CircleOptions {
+  fillStyle?: string;
+  strokeStyle?: string;
+  lineWidth?: number;
+}
+
+interface RectOptions {
+  fillStyle?: string;
+  strokeStyle?: string;
+  lineWidth?: number;
+}
+
 export const rect = (
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   width: number,
   height: number,
-  options: { fillStyle?: CanvasRenderingContext2D["fillStyle"] },
+  options: RectOptions = {}
 ) => {
-  const { fillStyle } = { fillStyle: "red", ...options };
+  const { fillStyle, strokeStyle, lineWidth = 1 } = options;
 
-  ctx.fillStyle = fillStyle;
-  ctx.fillRect(x, y, width, height);
+  ctx.beginPath();
+  ctx.rect(x, y, width, height);
+  
+  if (fillStyle) {
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+  }
+  
+  if (strokeStyle) {
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+  }
 };
 
 export const circle = (
@@ -17,28 +40,23 @@ export const circle = (
   x: number,
   y: number,
   radius: number,
-  options?: {
-    strokeStyle?: CanvasRenderingContext2D["strokeStyle"];
-    lineWidth?: number;
-    fillStyle?: CanvasRenderingContext2D["fillStyle"];
-  },
+  options: CircleOptions = {}
 ) => {
-  const { strokeStyle, lineWidth, fillStyle } = {
-    strokeStyle: "black",
-    lineWidth: 1,
-    ...options,
-  };
+  const { fillStyle, strokeStyle, lineWidth = 1 } = options;
 
   ctx.beginPath();
-  ctx.arc(x, y, radius, 0, 2 * Math.PI);
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  
   if (fillStyle) {
     ctx.fillStyle = fillStyle;
     ctx.fill();
   }
-
-  ctx.lineWidth = lineWidth;
-  ctx.strokeStyle = strokeStyle;
-  ctx.stroke();
+  
+  if (strokeStyle) {
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+  }
 };
 
 export const line = (

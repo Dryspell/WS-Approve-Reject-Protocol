@@ -38,3 +38,19 @@ export function hexToRgb(hex: string): RGB | null {
 }
 
 export const scaleWeightToColor = (w: number) => Math.floor(w * 255);
+
+export const getMousePosition = (
+  canvas: HTMLCanvasElement,
+  event: MouseEvent,
+  callback?: (x: number, y: number) => void
+): [number, number] => {
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  
+  if (callback) {
+    callback(x, y);
+  }
+  
+  return [x, y];
+};
