@@ -1,9 +1,9 @@
-import { RoundsReadyState } from "~/types/vote";
+import type { ReadyState } from "~/module_bindings";
 
 export const userIsReady = (
   roomId: string,
   userId: string,
-  roomsReadyState: Record<string, RoundsReadyState>,
+  roomsReadyState: Record<string, ReadyState>,
 ) => {
-  return roomsReadyState[roomId]?.readyUsers.includes(userId);
+  return roomsReadyState[roomId]?.readyUserIds.includes(userId);
 }; 

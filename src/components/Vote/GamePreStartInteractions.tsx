@@ -1,6 +1,6 @@
 import { Accessor } from "solid-js";
 import { SetStoreFunction } from "solid-js/store";
-import { GameRoom, RoundsReadyState } from "~/types/vote";
+import type { GameRoom, ReadyState } from "~/module_bindings";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { showToast } from "../ui/toast";
 import { Button } from "../ui/button";
@@ -14,8 +14,8 @@ const readyGameStart = async (
   client: any,
   roomId: string,
   user: { name: string; id: string },
-  roomsReadyState: Record<string, RoundsReadyState>,
-  setRoomsReadyState: SetStoreFunction<Record<string, RoundsReadyState>>,
+  roomsReadyState: Record<string, ReadyState>,
+  setRoomsReadyState: SetStoreFunction<Record<string, ReadyState>>,
 ) => {
   try {
     await client.reducers.toggle_ready(roomId, user.id);
@@ -27,15 +27,15 @@ const readyGameStart = async (
       [roomId]: {
         roomId,
         round: 0,
-        readyUsers: currentState.readyUsers.includes(user.id)
-          ? currentState.readyUsers.filter(id => id !== user.id)
-          : [...currentState.readyUsers, user.id],
+        readyUserIds: currentState.readyUserIds.includes(user.id)
+          ? currentState.readyUserIds.filter(id => id !== user.id)
+          : [...currentState.readyUserIds, user.id],
       },
     });
 
     showToast({
-      title: currentState.readyUsers.includes(user.id) ? "Unreadied" : "Readied Up",
-      description: currentState.readyUsers.includes(user.id)
+      title: currentState.readyUserIds.includes(user.id) ? "Unreadied" : "Readied Up",
+      description: currentState.readyUserIds.includes(user.id)
         ? "You are not ready."
         : "You are ready to start the game!",
       variant: "success",
@@ -55,23 +55,23 @@ export default function GamePreStartInteractions(props: {
   roomId: string;
   rooms: Record<string, GameRoom>;
   user: Accessor<{ name: string; id: string }>;
-  roomsPreStart: Record<string, RoundsReadyState>;
-  setRoomsPreStart: SetStoreFunction<Record<string, RoundsReadyState>>;
+  roomsPreStart: Record<string, ReadyState>;
+  setRoomsPreStart: SetStoreFunction<Record<string, ReadyState>>;
 }) {
   const { db } = useSpacetimeDB();
   const room = props.rooms[props.roomId];
   if (!room) return null;
   
-  const { members } = room;
+  const { memberIds } = room;
 
   return (
     <>
       <div class="flex flex-row items-center justify-between">
-        <For each={members}>
-          {member => (
-            <UserAvatarCard user={member}>
+        <For each={memberIds}>
+          {memberId => (
+            <UserAvatarCard user={{ id: memberId, username: memberId }}>
               <div class="flex justify-end">
-                {userIsReady(props.roomId, member.id, props.roomsPreStart) ? (
+                {userIsReady(props.roomId, memberId, props.roomsPreStart) ? (
                   <Badge class="bg-green-700">Ready</Badge>
                 ) : (
                   <Badge class="bg-orange-600">Not Ready</Badge>

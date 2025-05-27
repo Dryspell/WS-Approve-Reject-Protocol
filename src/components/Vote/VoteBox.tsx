@@ -11,13 +11,12 @@ import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "../ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { createStore } from "solid-js/store";
-import type { GameRoom as SpacetimeGameRoom, ReadyState as SpacetimeReadyState } from "../../types/spacetime";
-import type { GameRoom, RoundsReadyState } from "~/types/vote";
+import type { GameRoom, ReadyState } from "~/module_bindings";
 import { withSpacetimeDBErrorHandling, withRetry, SpacetimeDBErrorCodes, SpacetimeDBError } from "~/lib/spacetime-errors";
 
 const VoteBox: Component = () => {
   const [rooms, setRooms] = createSignal<Record<string, GameRoom>>({});
-  const [roomsReadyState, setRoomsReadyState] = createStore<Record<string, RoundsReadyState>>({});
+  const [roomsReadyState, setRoomsReadyState] = createStore<Record<string, ReadyState>>({});
   const [currentRoom, setCurrentRoom] = createSignal<string | undefined>(undefined);
   const [newRoomName, setNewRoomName] = createSignal("");
   const [showCreateRoom, setShowCreateRoom] = createSignal(false);
@@ -41,23 +40,11 @@ const VoteBox: Component = () => {
 
     // Subscribe to all rooms with error handling
     try {
-      client.subscribe("game_room", "*", (room: SpacetimeGameRoom) => {
+      client.subscribe("game_room", "*", (room: GameRoom) => {
         if (!room) return;
-        
-        // Convert SpacetimeDB room to expected format
-        const gameRoom: GameRoom = {
-          id: room.id.toString(),
-          name: room.name,
-          members: room.member_ids.map((id: string) => ({ id, username: id })),
-          tickets: [],
-          offers: [],
-          startTime: room.start_time,
-          rounds: []
-        };
-        
         setRooms(prev => ({
           ...prev,
-          [room.id]: gameRoom
+          [room.id]: room
         }));
       });
     } catch (error) {
@@ -70,18 +57,10 @@ const VoteBox: Component = () => {
 
     // Subscribe to ready state updates with error handling
     try {
-      client.subscribe("ready_state", "*", (readyState: SpacetimeReadyState) => {
+      client.subscribe("ready_state", "*", (readyState: ReadyState) => {
         if (!readyState) return;
-        
-        // Convert SpacetimeDB ready state to expected format
-        const roundsReadyState: RoundsReadyState = {
-          roomId: readyState.room_id,
-          round: readyState.round,
-          readyUsers: readyState.ready_user_ids
-        };
-        
         setRoomsReadyState({
-          [readyState.room_id]: roundsReadyState
+          [readyState.roomId]: readyState
         });
       });
     } catch (error) {
@@ -127,7 +106,6 @@ const VoteBox: Component = () => {
     }
 
     await withSpacetimeDBErrorHandling(async () => {
-      // Since join_room doesn't exist, we'll use create_room as a workaround
       await withRetry(() => client.reducers.create_room(roomId));
       setCurrentRoom(roomId);
     }, "Failed to join room");
@@ -173,27 +151,29 @@ const VoteBox: Component = () => {
         <TabsList>
           <For each={Object.entries(rooms())}>
             {([roomId, room]) => (
-              <TabsTrigger value={roomId}>{room.name}</TabsTrigger>
+              <TabsTrigger value={roomId.toString()}>{room.name}</TabsTrigger>
             )}
           </For>
         </TabsList>
 
         <For each={Object.entries(rooms())}>
           {([roomId, room]) => (
-            <TabsContent value={roomId}>
+            <TabsContent value={roomId.toString()}>
               <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
                 <ResizablePanel initialSize={0.15} class="p-2">
-                  <For each={room.members}>
-                    {member => <UserAvatarCard user={member} />}
+                  <For each={room.memberIds}>
+                    {memberId => (
+                      <UserAvatarCard user={{ id: memberId, username: memberId }} />
+                    )}
                   </For>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel initialSize={0.85} class="p-2">
                   <div class="flex h-full flex-col gap-4">
                     <div class="flex-1">
-                      {room.startTime == null ? (
+                      {!room.startTime ? (
                         <GamePreStartInteractions
-                          roomId={roomId}
+                          roomId={roomId.toString()}
                           rooms={rooms()}
                           user={user}
                           roomsPreStart={roomsReadyState}

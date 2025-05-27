@@ -35,7 +35,6 @@
     "clsx": "^2.1.1",
     "d3": "^7.9.0",
     "date-fns": "4.1.0",
-    "drizzle-orm": "^0.43.1",
     "embla-carousel-solid": "^8.6.0",
     "graphology": "^0.25.4",
     "jsonwebtoken": "^9.0.2",

@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { withSpacetimeDBErrorHandling, withRetry, SpacetimeDBErrorCodes, SpacetimeDBError } from "~/lib/spacetime-errors";
-import type { Unit, Vote } from "~/types/spacetime";
+import type { Unit, Vote, GameRoom } from "~/module_bindings";
 import type { SpacetimeDBGameClient } from "~/types/spacetime-client";
 
 export interface VoteState {
@@ -51,10 +51,10 @@ export const useVoteStore = () => {
       if (!unit) return;
 
       setVoteState("unitVotes", unit.id, {
-        color: unit.vote_color,
-        owner: unit.vote_owner,
-        price: unit.vote_price,
-        guarantee: unit.vote_guarantee,
+        color: unit.voteColor,
+        owner: unit.voteOwner,
+        price: unit.votePrice,
+        guarantee: unit.voteGuarantee,
       });
     });
 
@@ -62,9 +62,9 @@ export const useVoteStore = () => {
     client.subscribe("vote", "*", (vote: Vote) => {
       if (!vote) return;
 
-      setVoteState("roundVotes", vote.round_number, {
-        roundNumber: vote.round_number,
-        votes: [...(voteState.roundVotes[vote.round_number]?.votes || []), vote],
+      setVoteState("roundVotes", vote.roundNumber, {
+        roundNumber: vote.roundNumber,
+        votes: [...(voteState.roundVotes[vote.roundNumber]?.votes || []), vote],
         timestamp: Date.now(),
       });
     });
@@ -80,13 +80,7 @@ export const useVoteStore = () => {
     }
 
     await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.reducers.create_game_event(
-        unitId.toString(),
-        "vote_color",
-        unitId.toString(),
-        color,
-        0
-      ));
+      await withRetry(() => client.reducers.set_unit_vote_color(unitId, color));
     }, "Failed to set unit vote color");
   };
 
@@ -100,13 +94,7 @@ export const useVoteStore = () => {
     }
 
     await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.reducers.create_game_event(
-        unitId.toString(),
-        "vote_trade",
-        buyerId,
-        unitId.toString(),
-        price
-      ));
+      await withRetry(() => client.reducers.trade_unit_vote(unitId, buyerId, price));
     }, "Failed to trade unit vote");
   };
 
@@ -120,13 +108,7 @@ export const useVoteStore = () => {
     }
 
     await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.reducers.create_game_event(
-        roomId.toString(),
-        "round_end",
-        roomId.toString(),
-        roundNumber.toString(),
-        0
-      ));
+      await withRetry(() => client.reducers.process_round_votes(roomId, roundNumber));
     }, "Failed to process round votes");
   };
 

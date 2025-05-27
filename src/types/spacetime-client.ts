@@ -12,6 +12,9 @@ export interface SpacetimeDBGameClient {
       target_id: string,
       value: number
     ) => Promise<void>;
+    set_unit_vote_color: (unit_id: number, color: string) => Promise<void>;
+    trade_unit_vote: (unit_id: number, buyer_id: string, price: number) => Promise<void>;
+    process_round_votes: (room_id: number, round_number: number) => Promise<void>;
   };
   subscribe: <T>(table: string, filter: string, callback: (data: T) => void) => void;
   on: (event: string, callback: () => void) => void;

@@ -1,8 +1,9 @@
-import { Component, onMount } from "solid-js";
-import type { GameRoom } from "~/types/vote";
+import { Component, onMount, createSignal } from "solid-js";
+import type { GameRoom, Unit } from "~/module_bindings";
 import { useVoteStore } from "~/stores/voteStore";
 import { showToast } from "../ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
+import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 
 interface Props {
   room: GameRoom;
@@ -14,9 +15,23 @@ interface Props {
 
 const Game: Component<Props> = (props) => {
   const { voteState, subscribeToVotes, setUnitVoteColor, tradeUnitVote } = useVoteStore();
+  const { db, connected } = useSpacetimeDB();
+  const [units, setUnits] = createSignal<Record<number, Unit>>({});
 
   onMount(() => {
     subscribeToVotes();
+    
+    // Subscribe to unit updates
+    const client = db();
+    if (!client || !connected()) return;
+
+    client.subscribe("unit", "*", (unit: Unit) => {
+      if (!unit) return;
+      setUnits(prev => ({
+        ...prev,
+        [unit.id]: unit
+      }));
+    });
   });
 
   const handleVoteColorChange = async (unitId: number, color: string) => {
@@ -50,7 +65,7 @@ const Game: Component<Props> = (props) => {
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-bold">{props.room.name}</h2>
         <div class="text-sm text-gray-500">
-          Round {props.room.rounds.length + 1}
+          Round {props.room.currentRound}
         </div>
       </div>
 
@@ -59,17 +74,17 @@ const Game: Component<Props> = (props) => {
         <div class="rounded-lg border p-4">
           <h3 class="mb-4 text-lg font-semibold">Units</h3>
           <div class="space-y-2">
-            {Object.entries(voteState.unitVotes).map(([unitId, vote]) => (
+            {Object.entries(units()).map(([unitId, unit]) => (
               <div class="flex items-center justify-between rounded border p-2">
                 <div class="flex items-center gap-2">
                   <div
                     class="h-4 w-4 rounded-full"
-                    style={{ "background-color": vote.color || "#ccc" }}
+                    style={{ "background-color": unit.voteColor || "#ccc" }}
                   />
                   <span>Unit {unitId}</span>
-                  {vote.owner && (
+                  {unit.voteOwner && (
                     <span class="text-sm text-gray-500">
-                      (Owned by {vote.owner})
+                      (Owned by {unit.voteOwner})
                     </span>
                   )}
                 </div>
@@ -86,7 +101,7 @@ const Game: Component<Props> = (props) => {
                   >
                     Blue
                   </button>
-                  {vote.price === null ? (
+                  {unit.votePrice === null ? (
                     <button
                       onClick={() => handleVoteTrade(Number(unitId), 100)}
                       class="rounded bg-green-500 px-2 py-1 text-white hover:bg-green-600"
@@ -95,10 +110,10 @@ const Game: Component<Props> = (props) => {
                     </button>
                   ) : (
                     <button
-                      onClick={() => handleVoteTrade(Number(unitId), vote.price!)}
+                      onClick={() => handleVoteTrade(Number(unitId), unit.votePrice!)}
                       class="rounded bg-yellow-500 px-2 py-1 text-white hover:bg-yellow-600"
                     >
-                      Buy ({vote.price})
+                      Buy ({unit.votePrice})
                     </button>
                   )}
                 </div>
@@ -121,7 +136,7 @@ const Game: Component<Props> = (props) => {
                         class="h-3 w-3 rounded-full"
                         style={{ "background-color": vote.color }}
                       />
-                      <span>Unit {vote.unit_id}</span>
+                      <span>Unit {vote.unitId}</span>
                     </div>
                   ))}
                 </div>
