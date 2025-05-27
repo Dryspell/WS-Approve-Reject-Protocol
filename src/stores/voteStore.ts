@@ -80,7 +80,7 @@ export const useVoteStore = () => {
     }
 
     await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.reducers.set_unit_vote_color(unitId, color));
+      await withRetry(() => client.set_unit_vote_color(unitId, color));
     }, "Failed to set unit vote color");
   };
 
@@ -94,7 +94,7 @@ export const useVoteStore = () => {
     }
 
     await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.reducers.trade_unit_vote(unitId, buyerId, price));
+      await withRetry(() => client.trade_unit_vote(unitId, buyerId, price));
     }, "Failed to trade unit vote");
   };
 
@@ -108,7 +108,7 @@ export const useVoteStore = () => {
     }
 
     await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.reducers.process_round_votes(roomId, roundNumber));
+      await withRetry(() => client.process_round_votes(roomId, roundNumber));
     }, "Failed to process round votes");
   };
 

@@ -1,5 +1,5 @@
 import { Component, onMount, createSignal, Show } from "solid-js";
-import type { GameRoom, Unit, Resource, UnitInventory, UnitTaskQueue } from "~/types/spacetime-client";
+import type { GameRoom, Unit, Resource, UnitInventory, UnitTaskQueue, UnitStats } from "~/types/spacetime-client";
 import { useVoteStore } from "~/stores/voteStore";
 import { showToast } from "../ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
@@ -9,6 +9,7 @@ import { circle, rect } from "~/lib/canvas/shapes";
 import { getMousePosition } from "~/lib/canvas/utils";
 import { withinCircle } from "../../lib/canvas/spatial";
 import { getGameTickSystem, RESOURCE_TYPES } from "~/lib/game-tick";
+import { CRAFTING_RECIPES, canCraftRecipe, getCraftingCost, getCraftingTime, type CraftingRecipe } from "~/lib/crafting";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -67,6 +68,8 @@ const Game: Component<Props> = (props) => {
   const [offsetX, setOffsetX] = createSignal(0);
   const [offsetY, setOffsetY] = createSignal(0);
   const [inventories, setInventories] = createSignal<Record<number, UnitInventory>>({});
+  const [selectedRecipe, setSelectedRecipe] = createSignal<string | null>(null);
+  const [craftingProgress, setCraftingProgress] = createSignal<number>(0);
 
   onMount(() => {
     subscribeToVotes();
@@ -462,6 +465,54 @@ const Game: Component<Props> = (props) => {
     }
   };
 
+  // Add crafting functions
+  const handleStartCrafting = async (recipeId: string) => {
+    if (!hoveredUnit()) return;
+    const recipe = CRAFTING_RECIPES[recipeId as keyof typeof CRAFTING_RECIPES] as CraftingRecipe;
+    if (!recipe) return;
+
+    const inventory = inventories()[hoveredUnit()!.id];
+    if (!inventory || !canCraftRecipe(inventory as any, recipe)) {
+      showToast({
+        title: "Error",
+        description: "Not enough resources to craft this item",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
+
+    try {
+      // Queue crafting task
+      await db()?.queue_unit_task(hoveredUnit()!.id, "craft", recipeId);
+      setSelectedRecipe(recipeId);
+      
+      // Start progress animation
+      const craftTime = getCraftingTime(recipe, { craftRate: 1 } as UnitStats); // TODO: Get actual craft rate from unit stats
+      const startTime = Date.now();
+      const updateProgress = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(100, (elapsed / craftTime) * 100);
+        setCraftingProgress(progress);
+        
+        if (progress < 100) {
+          requestAnimationFrame(updateProgress);
+        } else {
+          setCraftingProgress(0);
+          setSelectedRecipe(null);
+        }
+      };
+      requestAnimationFrame(updateProgress);
+
+      showToast({
+        title: "Success",
+        description: `Started crafting ${recipe.name}`,
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    } catch (error) {
+      // Error is already handled by withSpacetimeDBErrorHandling
+    }
+  };
+
   return (
     <main class="relative mx-auto p-4 text-gray-700">
       <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
@@ -625,7 +676,7 @@ const Game: Component<Props> = (props) => {
                   <div class="grid grid-cols-2 gap-2">
                     <div>Wood: {inventories()[hoveredUnit()!.id]?.wood || 0}</div>
                     <div>Stone: {inventories()[hoveredUnit()!.id]?.stone || 0}</div>
-                    <div>Gold: {inventories()[hoveredUnit()!.id]?.gold || 0}</div>
+                    <div>Metal Ore: {inventories()[hoveredUnit()!.id]?.metal_ore || 0}</div>
                     <div>Capacity: {inventories()[hoveredUnit()!.id]?.maxCapacity || 0}</div>
                   </div>
                   
@@ -664,6 +715,41 @@ const Game: Component<Props> = (props) => {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+            </Show>
+            
+            {/* Add Crafting Panel */}
+            <Show when={hoveredUnit()}>
+              <div class="mt-4 rounded-lg border p-4">
+                <h4 class="mb-4 font-semibold">Crafting</h4>
+                <div class="space-y-4">
+                  {Object.values(CRAFTING_RECIPES).map(recipe => (
+                    <div class="rounded border p-3">
+                      <div class="mb-2">
+                        <h5 class="font-medium">{recipe.name}</h5>
+                        <p class="text-sm text-gray-600">{recipe.description}</p>
+                      </div>
+                      <div class="mb-2 text-sm">
+                        <div class="text-gray-700">Cost: {getCraftingCost(recipe)}</div>
+                        <div class="text-gray-700">Time: {recipe.craftTime / 1000}s</div>
+                      </div>
+                      <button
+                        onClick={() => handleStartCrafting(recipe.id)}
+                        disabled={!canCraftRecipe(inventories()[hoveredUnit()!.id] as any, recipe) || selectedRecipe() !== null}
+                        class="w-full rounded bg-blue-500 px-2 py-1 text-white hover:bg-blue-600 disabled:bg-gray-400"
+                      >
+                        {selectedRecipe() === recipe.id ? (
+                          <div class="flex items-center justify-center">
+                            <div class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            Crafting... {Math.round(craftingProgress())}%
+                          </div>
+                        ) : (
+                          "Craft"
+                        )}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             </Show>

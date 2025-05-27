@@ -46,6 +46,8 @@ export type Unit = {
   voteGuarantee: string | undefined,
   votePrice: number | undefined,
   voteOwner: string | undefined,
+  storageCapacity: number | undefined,
+  isStorage: boolean,
 };
 
 /**
@@ -71,6 +73,8 @@ export namespace Unit {
       new ProductTypeElement("voteGuarantee", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
       new ProductTypeElement("votePrice", AlgebraicType.createOptionType(AlgebraicType.createI32Type())),
       new ProductTypeElement("voteOwner", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
+      new ProductTypeElement("storageCapacity", AlgebraicType.createOptionType(AlgebraicType.createI32Type())),
+      new ProductTypeElement("isStorage", AlgebraicType.createBoolType()),
     ]);
   }
 

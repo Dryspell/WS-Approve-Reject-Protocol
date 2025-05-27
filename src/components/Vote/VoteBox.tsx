@@ -13,6 +13,7 @@ import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { createStore } from "solid-js/store";
 import type { GameRoom, ReadyState } from "~/module_bindings";
 import { withSpacetimeDBErrorHandling, withRetry, SpacetimeDBErrorCodes, SpacetimeDBError } from "~/lib/spacetime-errors";
+import type { SpacetimeDBGameClient } from "~/types/spacetime-client";
 
 const VoteBox: Component = () => {
   const [rooms, setRooms] = createSignal<Record<string, GameRoom>>({});
@@ -83,7 +84,7 @@ const VoteBox: Component = () => {
 
     await withSpacetimeDBErrorHandling(async () => {
       const roomName = newRoomName() || `Game Room ${Object.keys(rooms()).length + 1}`;
-      await withRetry(() => client.reducers.create_room(roomName));
+      await withRetry(() => client.create_chat_room(roomName));
       
       showToast({
         title: "Success",
@@ -106,7 +107,7 @@ const VoteBox: Component = () => {
     }
 
     await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.reducers.create_room(roomId));
+      await withRetry(() => client.create_chat_room(roomId));
       setCurrentRoom(roomId);
     }, "Failed to join room");
   };
@@ -181,7 +182,10 @@ const VoteBox: Component = () => {
                         />
                       ) : (
                         <Game
-                          room={room}
+                          room={{
+                            ...room,
+                            startTime: room.startTime ? Number(room.startTime) : null
+                          }}
                           user={user()}
                         />
                       )}

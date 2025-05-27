@@ -30,50 +30,38 @@ import {
   Timestamp,
   deepEqual,
 } from "@clockworklabs/spacetimedb-sdk";
-import { Vector2 as __Vector2 } from "./vector_2_type";
 
-export type Resource = {
-  id: string,
-  roomId: number,
+export type TransferResources = {
+  sourceId: number,
+  targetId: number,
   resourceType: string,
-  position: __Vector2,
   amount: number,
-  maxAmount: number,
-  regenerationRate: number,
-  regenerationTimer: number,
-  depletionThreshold: number,
 };
 
 /**
  * A namespace for generated helper functions.
  */
-export namespace Resource {
+export namespace TransferResources {
   /**
   * A function which returns this type represented as an AlgebraicType.
   * This function is derived from the AlgebraicType used to generate this type.
   */
   export function getTypeScriptAlgebraicType(): AlgebraicType {
     return AlgebraicType.createProductType([
-      new ProductTypeElement("id", AlgebraicType.createStringType()),
-      new ProductTypeElement("roomId", AlgebraicType.createI32Type()),
+      new ProductTypeElement("sourceId", AlgebraicType.createI32Type()),
+      new ProductTypeElement("targetId", AlgebraicType.createI32Type()),
       new ProductTypeElement("resourceType", AlgebraicType.createStringType()),
-      new ProductTypeElement("position", __Vector2.getTypeScriptAlgebraicType()),
       new ProductTypeElement("amount", AlgebraicType.createI32Type()),
-      new ProductTypeElement("maxAmount", AlgebraicType.createI32Type()),
-      new ProductTypeElement("regenerationRate", AlgebraicType.createI32Type()),
-      new ProductTypeElement("regenerationTimer", AlgebraicType.createI32Type()),
-      new ProductTypeElement("depletionThreshold", AlgebraicType.createI32Type()),
     ]);
   }
 
-  export function serialize(writer: BinaryWriter, value: Resource): void {
-    Resource.getTypeScriptAlgebraicType().serialize(writer, value);
+  export function serialize(writer: BinaryWriter, value: TransferResources): void {
+    TransferResources.getTypeScriptAlgebraicType().serialize(writer, value);
   }
 
-  export function deserialize(reader: BinaryReader): Resource {
-    return Resource.getTypeScriptAlgebraicType().deserialize(reader);
+  export function deserialize(reader: BinaryReader): TransferResources {
+    return TransferResources.getTypeScriptAlgebraicType().deserialize(reader);
   }
 
 }
-
 

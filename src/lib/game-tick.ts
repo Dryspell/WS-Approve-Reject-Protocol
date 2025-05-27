@@ -1,6 +1,7 @@
 import type { Unit, GameEvent, Resource } from "~/module_bindings";
-import type { UnitTaskQueue, SpacetimeDBGameClient } from "~/types/spacetime-client";
+import type { UnitTaskQueue, SpacetimeDBGameClient, UnitInventory } from "~/types/spacetime-client";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { CRAFTING_RECIPES, canCraftRecipe, type CraftingRecipe } from "./crafting";
 
 // Constants
 const MOVEMENT_SPEED = 0.1;
@@ -44,6 +45,8 @@ interface GameState {
   selectedUnits: Set<number>;
   combatEffects: Map<number, { targetId: number; startTime: number }>;
   gatherEffects: Map<number, { resourceId: number; startTime: number }>;
+  craftingProgress: Map<number, number>;
+  inventories: Map<number, UnitInventory>;
 }
 
 // Helper functions
@@ -78,7 +81,9 @@ function createInitialState(): GameState {
     taskQueues: new Map(),
     selectedUnits: new Set(),
     combatEffects: new Map(),
-    gatherEffects: new Map()
+    gatherEffects: new Map(),
+    craftingProgress: new Map(),
+    inventories: new Map()
   };
 }
 
@@ -210,6 +215,61 @@ function processGathering(state: GameState, client: SpacetimeDBGameClient, unit:
   }
 }
 
+// Crafting functions
+function processCrafting(state: GameState, client: SpacetimeDBGameClient, unit: Unit, task: UnitTaskQueue): GameState {
+  const recipe = CRAFTING_RECIPES[task.targetId as keyof typeof CRAFTING_RECIPES] as CraftingRecipe;
+  if (!recipe) {
+    cancelUnitTask(state, client, task.id);
+    return state;
+  }
+
+  const inventory = state.inventories.get(unit.id);
+  if (!inventory || !canCraftRecipe(inventory as any, recipe)) {
+    cancelUnitTask(state, client, task.id);
+    return state;
+  }
+
+  // Get or initialize crafting progress
+  const currentProgress = state.craftingProgress.get(task.id) || 0;
+  const craftRate = 1; // TODO: Get from unit stats
+  const progressIncrement = (100 / (recipe.craftTime / 1000)) * craftRate;
+
+  // Update progress
+  const newProgress = Math.min(100, currentProgress + progressIncrement);
+  state.craftingProgress.set(task.id, newProgress);
+
+  // If crafting is complete
+  if (newProgress >= 100) {
+    // Deduct resources
+    const updatedInventory: UnitInventory = { ...inventory };
+    if (recipe.requirements.wood) {
+      updatedInventory.wood -= recipe.requirements.wood;
+    }
+    if (recipe.requirements.stone) {
+      updatedInventory.stone -= recipe.requirements.stone;
+    }
+    if (recipe.requirements.metal_ore) {
+      updatedInventory.metal_ore -= recipe.requirements.metal_ore;
+    }
+    state.inventories.set(unit.id, updatedInventory);
+
+    // Create crafting event
+    client.create_game_event(
+      unit.roomId.toString(),
+      "craft",
+      unit.id.toString(),
+      recipe.id,
+      1 // Default amount of 1 for crafted items
+    );
+
+    // Complete task
+    cancelUnitTask(state, client, task.id);
+    state.craftingProgress.delete(task.id);
+  }
+
+  return state;
+}
+
 // Game tick function
 function tick(state: GameState, client: SpacetimeDBGameClient): GameState {
   let newState = { ...state };
@@ -254,6 +314,11 @@ function tick(state: GameState, client: SpacetimeDBGameClient): GameState {
         }
         
         newState = processCombat(newState, client, unit, target);
+        break;
+      }
+      
+      case "craft": {
+        newState = processCrafting(newState, client, unit, currentTask);
         break;
       }
     }

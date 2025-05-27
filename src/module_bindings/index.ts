@@ -32,6 +32,8 @@ import {
 } from "@clockworklabs/spacetimedb-sdk";
 
 // Import and reexport all reducer arg types
+import { CancelUnitTask } from "./cancel_unit_task_reducer.ts";
+export { CancelUnitTask };
 import { ClientConnected } from "./client_connected_reducer.ts";
 export { ClientConnected };
 import { CreateChatRoom } from "./create_chat_room_reducer.ts";
@@ -40,6 +42,10 @@ import { CreateGameEvent } from "./create_game_event_reducer.ts";
 export { CreateGameEvent };
 import { CreateRoom } from "./create_room_reducer.ts";
 export { CreateRoom };
+import { CreateStorageBuilding } from "./create_storage_building_reducer.ts";
+export { CreateStorageBuilding };
+import { GameTick } from "./game_tick_reducer.ts";
+export { GameTick };
 import { GatherResource } from "./gather_resource_reducer.ts";
 export { GatherResource };
 import { IdentityDisconnected } from "./identity_disconnected_reducer.ts";
@@ -50,6 +56,8 @@ import { MoveUnit } from "./move_unit_reducer.ts";
 export { MoveUnit };
 import { ProcessRoundVotes } from "./process_round_votes_reducer.ts";
 export { ProcessRoundVotes };
+import { QueueUnitTask } from "./queue_unit_task_reducer.ts";
+export { QueueUnitTask };
 import { SendChatMessage } from "./send_chat_message_reducer.ts";
 export { SendChatMessage };
 import { SendMessage } from "./send_message_reducer.ts";
@@ -68,6 +76,8 @@ import { ToggleReady } from "./toggle_ready_reducer.ts";
 export { ToggleReady };
 import { TradeUnitVote } from "./trade_unit_vote_reducer.ts";
 export { TradeUnitVote };
+import { TransferResources } from "./transfer_resources_reducer.ts";
+export { TransferResources };
 import { UpgradeUnit } from "./upgrade_unit_reducer.ts";
 export { UpgradeUnit };
 
@@ -82,6 +92,8 @@ import { GameEventTableHandle } from "./game_event_table.ts";
 export { GameEventTableHandle };
 import { GameRoomTableHandle } from "./game_room_table.ts";
 export { GameRoomTableHandle };
+import { GameTickTimerTableHandle } from "./game_tick_timer_table.ts";
+export { GameTickTimerTableHandle };
 import { MessageTableHandle } from "./message_table.ts";
 export { MessageTableHandle };
 import { ReadyStateTableHandle } from "./ready_state_table.ts";
@@ -94,6 +106,8 @@ import { UnitInventoryTableHandle } from "./unit_inventory_table.ts";
 export { UnitInventoryTableHandle };
 import { UnitStatsTableHandle } from "./unit_stats_table.ts";
 export { UnitStatsTableHandle };
+import { UnitTaskQueueTableHandle } from "./unit_task_queue_table.ts";
+export { UnitTaskQueueTableHandle };
 import { UserTableHandle } from "./user_table.ts";
 export { UserTableHandle };
 import { VoteTableHandle } from "./vote_table.ts";
@@ -110,6 +124,8 @@ import { GameEvent } from "./game_event_type.ts";
 export { GameEvent };
 import { GameRoom } from "./game_room_type.ts";
 export { GameRoom };
+import { GameTickTimer } from "./game_tick_timer_type.ts";
+export { GameTickTimer };
 import { Message } from "./message_type.ts";
 export { Message };
 import { ReadyState } from "./ready_state_type.ts";
@@ -122,6 +138,8 @@ import { UnitInventory } from "./unit_inventory_type.ts";
 export { UnitInventory };
 import { UnitStats } from "./unit_stats_type.ts";
 export { UnitStats };
+import { UnitTaskQueue } from "./unit_task_queue_type.ts";
+export { UnitTaskQueue };
 import { User } from "./user_type.ts";
 export { User };
 import { Vector2 } from "./vector_2_type.ts";
@@ -156,6 +174,11 @@ const REMOTE_MODULE = {
       rowType: GameRoom.getTypeScriptAlgebraicType(),
       primaryKey: "id",
     },
+    game_tick_timer: {
+      tableName: "game_tick_timer",
+      rowType: GameTickTimer.getTypeScriptAlgebraicType(),
+      primaryKey: "scheduledId",
+    },
     message: {
       tableName: "message",
       rowType: Message.getTypeScriptAlgebraicType(),
@@ -185,6 +208,11 @@ const REMOTE_MODULE = {
       rowType: UnitStats.getTypeScriptAlgebraicType(),
       primaryKey: "unitId",
     },
+    unit_task_queue: {
+      tableName: "unit_task_queue",
+      rowType: UnitTaskQueue.getTypeScriptAlgebraicType(),
+      primaryKey: "id",
+    },
     user: {
       tableName: "user",
       rowType: User.getTypeScriptAlgebraicType(),
@@ -197,6 +225,10 @@ const REMOTE_MODULE = {
     },
   },
   reducers: {
+    cancel_unit_task: {
+      reducerName: "cancel_unit_task",
+      argsType: CancelUnitTask.getTypeScriptAlgebraicType(),
+    },
     client_connected: {
       reducerName: "client_connected",
       argsType: ClientConnected.getTypeScriptAlgebraicType(),
@@ -212,6 +244,14 @@ const REMOTE_MODULE = {
     create_room: {
       reducerName: "create_room",
       argsType: CreateRoom.getTypeScriptAlgebraicType(),
+    },
+    create_storage_building: {
+      reducerName: "create_storage_building",
+      argsType: CreateStorageBuilding.getTypeScriptAlgebraicType(),
+    },
+    game_tick: {
+      reducerName: "game_tick",
+      argsType: GameTick.getTypeScriptAlgebraicType(),
     },
     gather_resource: {
       reducerName: "gather_resource",
@@ -232,6 +272,10 @@ const REMOTE_MODULE = {
     process_round_votes: {
       reducerName: "process_round_votes",
       argsType: ProcessRoundVotes.getTypeScriptAlgebraicType(),
+    },
+    queue_unit_task: {
+      reducerName: "queue_unit_task",
+      argsType: QueueUnitTask.getTypeScriptAlgebraicType(),
     },
     send_chat_message: {
       reducerName: "send_chat_message",
@@ -269,6 +313,10 @@ const REMOTE_MODULE = {
       reducerName: "trade_unit_vote",
       argsType: TradeUnitVote.getTypeScriptAlgebraicType(),
     },
+    transfer_resources: {
+      reducerName: "transfer_resources",
+      argsType: TransferResources.getTypeScriptAlgebraicType(),
+    },
     upgrade_unit: {
       reducerName: "upgrade_unit",
       argsType: UpgradeUnit.getTypeScriptAlgebraicType(),
@@ -300,15 +348,19 @@ const REMOTE_MODULE = {
 
 // A type representing all the possible variants of a reducer.
 export type Reducer = never
+| { name: "CancelUnitTask", args: CancelUnitTask }
 | { name: "ClientConnected", args: ClientConnected }
 | { name: "CreateChatRoom", args: CreateChatRoom }
 | { name: "CreateGameEvent", args: CreateGameEvent }
 | { name: "CreateRoom", args: CreateRoom }
+| { name: "CreateStorageBuilding", args: CreateStorageBuilding }
+| { name: "GameTick", args: GameTick }
 | { name: "GatherResource", args: GatherResource }
 | { name: "IdentityDisconnected", args: IdentityDisconnected }
 | { name: "JoinRoom", args: JoinRoom }
 | { name: "MoveUnit", args: MoveUnit }
 | { name: "ProcessRoundVotes", args: ProcessRoundVotes }
+| { name: "QueueUnitTask", args: QueueUnitTask }
 | { name: "SendChatMessage", args: SendChatMessage }
 | { name: "SendMessage", args: SendMessage }
 | { name: "SetChatPermission", args: SetChatPermission }
@@ -318,11 +370,28 @@ export type Reducer = never
 | { name: "StartGame", args: StartGame }
 | { name: "ToggleReady", args: ToggleReady }
 | { name: "TradeUnitVote", args: TradeUnitVote }
+| { name: "TransferResources", args: TransferResources }
 | { name: "UpgradeUnit", args: UpgradeUnit }
 ;
 
 export class RemoteReducers {
   constructor(private connection: DbConnectionImpl, private setCallReducerFlags: SetReducerFlags) {}
+
+  cancelUnitTask(taskId: number) {
+    const __args = { taskId };
+    let __writer = new BinaryWriter(1024);
+    CancelUnitTask.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("cancel_unit_task", __argsBuffer, this.setCallReducerFlags.cancelUnitTaskFlags);
+  }
+
+  onCancelUnitTask(callback: (ctx: ReducerEventContext, taskId: number) => void) {
+    this.connection.onReducer("cancel_unit_task", callback);
+  }
+
+  removeOnCancelUnitTask(callback: (ctx: ReducerEventContext, taskId: number) => void) {
+    this.connection.offReducer("cancel_unit_task", callback);
+  }
 
   onClientConnected(callback: (ctx: ReducerEventContext) => void) {
     this.connection.onReducer("client_connected", callback);
@@ -378,6 +447,38 @@ export class RemoteReducers {
 
   removeOnCreateRoom(callback: (ctx: ReducerEventContext, roomId: string, name: string, creatorId: string) => void) {
     this.connection.offReducer("create_room", callback);
+  }
+
+  createStorageBuilding(roomId: number, position: Vector2, capacity: number) {
+    const __args = { roomId, position, capacity };
+    let __writer = new BinaryWriter(1024);
+    CreateStorageBuilding.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("create_storage_building", __argsBuffer, this.setCallReducerFlags.createStorageBuildingFlags);
+  }
+
+  onCreateStorageBuilding(callback: (ctx: ReducerEventContext, roomId: number, position: Vector2, capacity: number) => void) {
+    this.connection.onReducer("create_storage_building", callback);
+  }
+
+  removeOnCreateStorageBuilding(callback: (ctx: ReducerEventContext, roomId: number, position: Vector2, capacity: number) => void) {
+    this.connection.offReducer("create_storage_building", callback);
+  }
+
+  gameTick(timer: GameTickTimer) {
+    const __args = { timer };
+    let __writer = new BinaryWriter(1024);
+    GameTick.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("game_tick", __argsBuffer, this.setCallReducerFlags.gameTickFlags);
+  }
+
+  onGameTick(callback: (ctx: ReducerEventContext, timer: GameTickTimer) => void) {
+    this.connection.onReducer("game_tick", callback);
+  }
+
+  removeOnGameTick(callback: (ctx: ReducerEventContext, timer: GameTickTimer) => void) {
+    this.connection.offReducer("game_tick", callback);
   }
 
   gatherResource(unitId: number, resourceId: string) {
@@ -450,6 +551,22 @@ export class RemoteReducers {
 
   removeOnProcessRoundVotes(callback: (ctx: ReducerEventContext, roomId: number, roundNumber: number) => void) {
     this.connection.offReducer("process_round_votes", callback);
+  }
+
+  queueUnitTask(unitId: number, taskType: string, targetId: string) {
+    const __args = { unitId, taskType, targetId };
+    let __writer = new BinaryWriter(1024);
+    QueueUnitTask.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("queue_unit_task", __argsBuffer, this.setCallReducerFlags.queueUnitTaskFlags);
+  }
+
+  onQueueUnitTask(callback: (ctx: ReducerEventContext, unitId: number, taskType: string, targetId: string) => void) {
+    this.connection.onReducer("queue_unit_task", callback);
+  }
+
+  removeOnQueueUnitTask(callback: (ctx: ReducerEventContext, unitId: number, taskType: string, targetId: string) => void) {
+    this.connection.offReducer("queue_unit_task", callback);
   }
 
   sendChatMessage(roomId: string, text: string, roundNumber: number | undefined) {
@@ -596,6 +713,22 @@ export class RemoteReducers {
     this.connection.offReducer("trade_unit_vote", callback);
   }
 
+  transferResources(sourceId: number, targetId: number, resourceType: string, amount: number) {
+    const __args = { sourceId, targetId, resourceType, amount };
+    let __writer = new BinaryWriter(1024);
+    TransferResources.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("transfer_resources", __argsBuffer, this.setCallReducerFlags.transferResourcesFlags);
+  }
+
+  onTransferResources(callback: (ctx: ReducerEventContext, sourceId: number, targetId: number, resourceType: string, amount: number) => void) {
+    this.connection.onReducer("transfer_resources", callback);
+  }
+
+  removeOnTransferResources(callback: (ctx: ReducerEventContext, sourceId: number, targetId: number, resourceType: string, amount: number) => void) {
+    this.connection.offReducer("transfer_resources", callback);
+  }
+
   upgradeUnit(unitId: number, upgradeType: string) {
     const __args = { unitId, upgradeType };
     let __writer = new BinaryWriter(1024);
@@ -615,6 +748,11 @@ export class RemoteReducers {
 }
 
 export class SetReducerFlags {
+  cancelUnitTaskFlags: CallReducerFlags = 'FullUpdate';
+  cancelUnitTask(flags: CallReducerFlags) {
+    this.cancelUnitTaskFlags = flags;
+  }
+
   createChatRoomFlags: CallReducerFlags = 'FullUpdate';
   createChatRoom(flags: CallReducerFlags) {
     this.createChatRoomFlags = flags;
@@ -628,6 +766,16 @@ export class SetReducerFlags {
   createRoomFlags: CallReducerFlags = 'FullUpdate';
   createRoom(flags: CallReducerFlags) {
     this.createRoomFlags = flags;
+  }
+
+  createStorageBuildingFlags: CallReducerFlags = 'FullUpdate';
+  createStorageBuilding(flags: CallReducerFlags) {
+    this.createStorageBuildingFlags = flags;
+  }
+
+  gameTickFlags: CallReducerFlags = 'FullUpdate';
+  gameTick(flags: CallReducerFlags) {
+    this.gameTickFlags = flags;
   }
 
   gatherResourceFlags: CallReducerFlags = 'FullUpdate';
@@ -648,6 +796,11 @@ export class SetReducerFlags {
   processRoundVotesFlags: CallReducerFlags = 'FullUpdate';
   processRoundVotes(flags: CallReducerFlags) {
     this.processRoundVotesFlags = flags;
+  }
+
+  queueUnitTaskFlags: CallReducerFlags = 'FullUpdate';
+  queueUnitTask(flags: CallReducerFlags) {
+    this.queueUnitTaskFlags = flags;
   }
 
   sendChatMessageFlags: CallReducerFlags = 'FullUpdate';
@@ -695,6 +848,11 @@ export class SetReducerFlags {
     this.tradeUnitVoteFlags = flags;
   }
 
+  transferResourcesFlags: CallReducerFlags = 'FullUpdate';
+  transferResources(flags: CallReducerFlags) {
+    this.transferResourcesFlags = flags;
+  }
+
   upgradeUnitFlags: CallReducerFlags = 'FullUpdate';
   upgradeUnit(flags: CallReducerFlags) {
     this.upgradeUnitFlags = flags;
@@ -725,6 +883,10 @@ export class RemoteTables {
     return new GameRoomTableHandle(this.connection.clientCache.getOrCreateTable<GameRoom>(REMOTE_MODULE.tables.game_room));
   }
 
+  get gameTickTimer(): GameTickTimerTableHandle {
+    return new GameTickTimerTableHandle(this.connection.clientCache.getOrCreateTable<GameTickTimer>(REMOTE_MODULE.tables.game_tick_timer));
+  }
+
   get message(): MessageTableHandle {
     return new MessageTableHandle(this.connection.clientCache.getOrCreateTable<Message>(REMOTE_MODULE.tables.message));
   }
@@ -747,6 +909,10 @@ export class RemoteTables {
 
   get unitStats(): UnitStatsTableHandle {
     return new UnitStatsTableHandle(this.connection.clientCache.getOrCreateTable<UnitStats>(REMOTE_MODULE.tables.unit_stats));
+  }
+
+  get unitTaskQueue(): UnitTaskQueueTableHandle {
+    return new UnitTaskQueueTableHandle(this.connection.clientCache.getOrCreateTable<UnitTaskQueue>(REMOTE_MODULE.tables.unit_task_queue));
   }
 
   get user(): UserTableHandle {

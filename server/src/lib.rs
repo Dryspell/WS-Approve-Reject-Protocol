@@ -150,9 +150,25 @@ pub struct UnitStats {
 pub struct UnitInventory {
     #[primary_key]
     unit_id: i32,
+    // Primary Resources
     wood: i32,
     stone: i32,
-    gold: i32,
+    metal_ore: i32,
+    coal: i32,
+    gems: i32,
+    fiber: i32,
+    hide: i32,
+    sand: i32,
+    food: i32,
+    // Secondary Resources
+    wooden_pole: i32,
+    lumber: i32,
+    cut_stone: i32,
+    metal_ingot: i32,
+    cloth: i32,
+    rope: i32,
+    leather: i32,
+    glass: i32,
     max_capacity: i32, // Maximum capacity for this unit's inventory
 }
 
@@ -289,16 +305,35 @@ fn create_initial_units(ctx: &ReducerContext, room: &GameRoom) -> Result<(), Str
         // Create inventory for unit
         let inventory = UnitInventory {
             unit_id: inserted_unit.id,
+            // Primary Resources
             wood: 0,
             stone: 0,
-            gold: 0,
+            metal_ore: 0,
+            coal: 0,
+            gems: 0,
+            fiber: 0,
+            hide: 0,
+            sand: 0,
+            food: 0,
+            // Secondary Resources
+            wooden_pole: 0,
+            lumber: 0,
+            cut_stone: 0,
+            metal_ingot: 0,
+            cloth: 0,
+            rope: 0,
+            leather: 0,
+            glass: 0,
             max_capacity: 100, // Default inventory capacity for units
         };
         ctx.db.unit_inventory().insert(inventory);
     }
 
     // Create initial resources
-    let resource_types = ["wood", "stone", "gold"];
+    let resource_types = [
+        "wood", "stone", "metal_ore", "coal", "gems", 
+        "fiber", "hide", "sand", "food"
+    ];
     for _ in 0..10 { // Create 10 resources of each type
         for resource_type in resource_types.iter() {
             let resource = Resource {
@@ -416,7 +451,13 @@ pub fn gather_resource(
                         match resource.resource_type.as_str() {
                             "wood" => inventory.wood += gather_amount,
                             "stone" => inventory.stone += gather_amount,
-                            "gold" => inventory.gold += gather_amount,
+                            "metal_ore" => inventory.metal_ore += gather_amount,
+                            "coal" => inventory.coal += gather_amount,
+                            "gems" => inventory.gems += gather_amount,
+                            "fiber" => inventory.fiber += gather_amount,
+                            "hide" => inventory.hide += gather_amount,
+                            "sand" => inventory.sand += gather_amount,
+                            "food" => inventory.food += gather_amount,
                             _ => return Err("Invalid resource type".to_string()),
                         }
                         
@@ -458,17 +499,17 @@ pub fn upgrade_unit(
     if let Some(mut stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
         if let Some(inventory) = ctx.db.unit_inventory().unit_id().find(unit_id) {
             // Check if unit has enough resources for upgrade
-            let (cost_wood, cost_stone, cost_gold) = match upgrade_type.as_str() {
-                "health" => (10, 5, 2),
-                "attack" => (5, 10, 3),
-                "defense" => (5, 5, 5),
-                "speed" => (3, 3, 10),
-                "gather" => (2, 2, 2),
-                "craft" => (2, 2, 2),
+            let (cost_wood, cost_stone, cost_metal_ore, cost_coal, cost_gems) = match upgrade_type.as_str() {
+                "health" => (10, 5, 2, 2, 1),
+                "attack" => (5, 10, 3, 3, 2),
+                "defense" => (5, 5, 5, 5, 5),
+                "speed" => (3, 3, 10, 10, 10),
+                "gather" => (2, 2, 2, 2, 2),
+                "craft" => (2, 2, 2, 2, 2),
                 _ => return Err("Invalid upgrade type".to_string()),
             };
             
-            if inventory.wood >= cost_wood && inventory.stone >= cost_stone && inventory.gold >= cost_gold {
+            if inventory.wood >= cost_wood && inventory.stone >= cost_stone && inventory.metal_ore >= cost_metal_ore && inventory.coal >= cost_coal && inventory.gems >= cost_gems {
                 // Apply upgrade
                 match upgrade_type.as_str() {
                     "health" => {
@@ -490,7 +531,9 @@ pub fn upgrade_unit(
                 let mut updated_inventory = inventory.clone();
                 updated_inventory.wood -= cost_wood;
                 updated_inventory.stone -= cost_stone;
-                updated_inventory.gold -= cost_gold;
+                updated_inventory.metal_ore -= cost_metal_ore;
+                updated_inventory.coal -= cost_coal;
+                updated_inventory.gems -= cost_gems;
                 ctx.db.unit_inventory().unit_id().update(updated_inventory);
                 
                 // Create upgrade event
@@ -906,7 +949,13 @@ pub fn game_tick(ctx: &ReducerContext, _timer: GameTickTimer) -> Result<(), Stri
                                     match resource.resource_type.as_str() {
                                         "wood" => inventory.wood += gather_amount,
                                         "stone" => inventory.stone += gather_amount,
-                                        "gold" => inventory.gold += gather_amount,
+                                        "metal_ore" => inventory.metal_ore += gather_amount,
+                                        "coal" => inventory.coal += gather_amount,
+                                        "gems" => inventory.gems += gather_amount,
+                                        "fiber" => inventory.fiber += gather_amount,
+                                        "hide" => inventory.hide += gather_amount,
+                                        "sand" => inventory.sand += gather_amount,
+                                        "food" => inventory.food += gather_amount,
                                         _ => continue,
                                     }
                                     ctx.db.unit_inventory().unit_id().update(inventory);
@@ -999,9 +1048,25 @@ pub fn create_storage_building(
     // Create inventory for storage
     let inventory = UnitInventory {
         unit_id: inserted_storage.id,
+        // Primary Resources
         wood: 0,
         stone: 0,
-        gold: 0,
+        metal_ore: 0,
+        coal: 0,
+        gems: 0,
+        fiber: 0,
+        hide: 0,
+        sand: 0,
+        food: 0,
+        // Secondary Resources
+        wooden_pole: 0,
+        lumber: 0,
+        cut_stone: 0,
+        metal_ingot: 0,
+        cloth: 0,
+        rope: 0,
+        leather: 0,
+        glass: 0,
         max_capacity: capacity,
     };
     ctx.db.unit_inventory().insert(inventory);
@@ -1026,7 +1091,13 @@ pub fn transfer_resources(
         let source_amount = match resource_type.as_str() {
             "wood" => source_inv.wood,
             "stone" => source_inv.stone,
-            "gold" => source_inv.gold,
+            "metal_ore" => source_inv.metal_ore,
+            "coal" => source_inv.coal,
+            "gems" => source_inv.gems,
+            "fiber" => source_inv.fiber,
+            "hide" => source_inv.hide,
+            "sand" => source_inv.sand,
+            "food" => source_inv.food,
             _ => return Err("Invalid resource type".to_string()),
         };
 
@@ -1038,7 +1109,13 @@ pub fn transfer_resources(
         let target_amount = match resource_type.as_str() {
             "wood" => target_inv.wood,
             "stone" => target_inv.stone,
-            "gold" => target_inv.gold,
+            "metal_ore" => target_inv.metal_ore,
+            "coal" => target_inv.coal,
+            "gems" => target_inv.gems,
+            "fiber" => target_inv.fiber,
+            "hide" => target_inv.hide,
+            "sand" => target_inv.sand,
+            "food" => target_inv.food,
             _ => return Err("Invalid resource type".to_string()),
         };
 
@@ -1056,9 +1133,33 @@ pub fn transfer_resources(
                 source_inv.stone -= amount;
                 target_inv.stone += amount;
             },
-            "gold" => {
-                source_inv.gold -= amount;
-                target_inv.gold += amount;
+            "metal_ore" => {
+                source_inv.metal_ore -= amount;
+                target_inv.metal_ore += amount;
+            },
+            "coal" => {
+                source_inv.coal -= amount;
+                target_inv.coal += amount;
+            },
+            "gems" => {
+                source_inv.gems -= amount;
+                target_inv.gems += amount;
+            },
+            "fiber" => {
+                source_inv.fiber -= amount;
+                target_inv.fiber += amount;
+            },
+            "hide" => {
+                source_inv.hide -= amount;
+                target_inv.hide += amount;
+            },
+            "sand" => {
+                source_inv.sand -= amount;
+                target_inv.sand += amount;
+            },
+            "food" => {
+                source_inv.food -= amount;
+                target_inv.food += amount;
             },
             _ => return Err("Invalid resource type".to_string()),
         }
