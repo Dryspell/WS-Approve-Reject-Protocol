@@ -2,6 +2,7 @@
 
 #[macro_use]
 use spacetimedb::{reducer, table, Identity, ReducerContext, Table, Timestamp, rand, SpacetimeType};
+use rand::Rng;
 
 // Game-related types
 #[derive(SpacetimeType, Clone, Debug)]
@@ -84,6 +85,11 @@ pub struct Unit {
     fill_style: String,
     task_type: Option<String>, // "gather" | "craft" | "upgrade"
     target_id: Option<String>,
+    // New voting-related fields
+    vote_color: Option<String>, // "red" | "blue"
+    vote_guarantee: Option<String>, // "red" | "blue" | null
+    vote_price: Option<i32>, // Price in MT if unit is for sale
+    vote_owner: Option<String>, // Owner of the vote if different from unit owner
 }
 
 #[table(name = game_event, public)]
@@ -254,13 +260,17 @@ fn create_initial_units(ctx: &ReducerContext, room: &GameRoom) -> Result<(), Str
             owner_id: member_id.clone(),
             unit_type: "minion".to_string(),
             position: Vector2 {
-                x: (rand::random::<f32>() * 100.0) as f32,
-                y: (rand::random::<f32>() * 100.0) as f32,
+                x: (ctx.rng().gen::<f32>() * 100.0) as f32,
+                y: (ctx.rng().gen::<f32>() * 100.0) as f32,
             },
             dimensions: Vector2 { x: 20.0, y: 20.0 },
-            fill_style: format!("#{:06x}", rand::random::<u32>() % 16777215),
+            fill_style: format!("#{:06x}", ctx.rng().gen::<u32>() % 16777215),
             task_type: None,
             target_id: None,
+            vote_color: None,
+            vote_guarantee: None,
+            vote_price: None,
+            vote_owner: None,
         };
         ctx.db.unit().insert(unit);
     }
@@ -329,7 +339,7 @@ pub fn create_game_event(
     value: i32,
 ) -> Result<(), String> {
     let event = GameEvent {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: format!("event_{}_{}", ctx.timestamp.to_micros_since_unix_epoch(), ctx.rng().gen::<u32>()),
         room_id,
         event_type,
         source_id,
@@ -580,4 +590,131 @@ pub fn set_chat_permission(
     } else {
         Err("Room not found".to_string())
     }
+}
+
+#[table(name = vote, public)]
+pub struct Vote {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    room_id: i32,
+    round_number: i32,
+    unit_id: i32,
+    color: String, // "red" | "blue"
+    timestamp: Timestamp,
+}
+
+#[reducer]
+pub fn set_unit_vote_color(
+    ctx: &ReducerContext,
+    unit_id: i32,
+    color: String,
+) -> Result<(), String> {
+    if let Some(mut unit) = ctx.db.unit().id().find(unit_id) {
+        if color != "red" && color != "blue" {
+            return Err("Invalid vote color".to_string());
+        }
+        unit.vote_color = Some(color);
+        ctx.db.unit().id().update(unit);
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn trade_unit_vote(
+    ctx: &ReducerContext,
+    unit_id: i32,
+    buyer_id: String,
+    price: i32,
+) -> Result<(), String> {
+    if let Some(mut unit) = ctx.db.unit().id().find(unit_id) {
+        if unit.vote_price.is_none() {
+            return Err("Unit vote is not for sale".to_string());
+        }
+        if unit.vote_price.unwrap() != price {
+            return Err("Price mismatch".to_string());
+        }
+        
+        // Clone values before moving
+        let owner_id = unit.owner_id.clone();
+        let room_id = unit.room_id;
+        let buyer_id = buyer_id.clone();
+        
+        // Transfer vote ownership
+        unit.vote_owner = Some(buyer_id.clone());
+        unit.vote_price = None;
+        ctx.db.unit().id().update(unit);
+        
+        // Create trade event
+        create_game_event(
+            ctx,
+            room_id.to_string(),
+            "vote_trade".to_string(),
+            owner_id,
+            buyer_id,
+            price,
+        )?;
+    }
+    Ok(())
+}
+
+#[reducer]
+pub fn process_round_votes(
+    ctx: &ReducerContext,
+    room_id: i32,
+    round_number: i32,
+) -> Result<(), String> {
+    // Get all units in the room
+    let units = ctx.db.unit().iter()
+        .filter(|u| u.room_id == room_id)
+        .collect::<Vec<_>>();
+    
+    // Count votes
+    let mut red_votes = 0;
+    let mut blue_votes = 0;
+    
+    for unit in &units {
+        if let Some(color) = &unit.vote_color {
+            match color.as_str() {
+                "red" => red_votes += 1,
+                "blue" => blue_votes += 1,
+                _ => continue,
+            }
+            
+            // Record vote
+            ctx.db.vote().insert(Vote {
+                id: 0, // Will be auto-incremented
+                room_id,
+                round_number,
+                unit_id: unit.id,
+                color: color.clone(),
+                timestamp: ctx.timestamp,
+            });
+        }
+    }
+    
+    // Determine majority
+    let majority = if red_votes > blue_votes { "red" } else { "blue" };
+    
+    // Eliminate units in majority
+    for mut unit in units {
+        if let Some(color) = &unit.vote_color {
+            if color == majority {
+                // Create elimination event
+                create_game_event(
+                    ctx,
+                    room_id.to_string(),
+                    "elimination".to_string(),
+                    unit.id.to_string(),
+                    "majority".to_string(),
+                    0,
+                )?;
+                
+                // Remove unit
+                ctx.db.unit().id().delete(&unit.id);
+            }
+        }
+    }
+    
+    Ok(())
 }

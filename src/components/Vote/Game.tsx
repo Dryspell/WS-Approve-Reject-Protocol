@@ -1,204 +1,137 @@
-import { createSignal, onMount, onCleanup } from "solid-js";
-import { gameService } from "~/lib/game";
-import { gameTickSystem } from "~/lib/game-tick";
-import type { GameState } from "~/lib/game";
-import type { GameRoom as SpacetimeGameRoom } from "~/spacetime/game.sd";
-import { createPolled } from "@solid-primitives/timer";
+import { Component, onMount } from "solid-js";
+import type { GameRoom } from "~/types/vote";
+import { useVoteStore } from "~/stores/voteStore";
+import { showToast } from "../ui/toast";
+import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 
-export default function Game(props: {
-  room: SpacetimeGameRoom;
-  user: { id: string; name: string };
-}) {
-  const [gameState, setGameState] = createSignal<GameState>({
-    room: null,
-    units: [],
-    events: [],
-    readyState: null,
-  });
+interface Props {
+  room: GameRoom;
+  user: {
+    id: string;
+    name: string;
+  };
+}
 
-  const [gameCanvas, setGameCanvas] = createSignal<HTMLCanvasElement | undefined>(undefined);
-  const [tickRate, setTickRate] = createSignal(1000);
-  const [tickInterval, setTickInterval] = createSignal<NodeJS.Timeout | undefined>(undefined);
-  const clock = createPolled(() => Date.now(), 1000);
+const Game: Component<Props> = (props) => {
+  const { voteState, subscribeToVotes, setUnitVoteColor, tradeUnitVote } = useVoteStore();
 
-  // Subscribe to game state updates
-  const unsubscribe = gameService.subscribe(state => {
-    setGameState(state);
-  });
-
-  onCleanup(() => {
-    unsubscribe();
-    if (tickInterval()) {
-      clearInterval(tickInterval());
-    }
-  });
-
-  // Initialize game when canvas is ready
   onMount(() => {
-    const gc = gameCanvas();
-    if (!gc) return;
-
-    const ctx = gc.getContext("2d");
-    if (!ctx) return;
-
-    const renderGame = () => {
-      const state = gameState();
-      if (!state.room) return;
-
-      // Clear canvas
-      ctx.clearRect(0, 0, gc.width, gc.height);
-
-      // Render units
-      for (const unit of state.units) {
-        ctx.fillStyle = unit.fillStyle;
-        ctx.fillRect(
-          unit.position[0],
-          unit.position[1],
-          unit.dimensions[0],
-          unit.dimensions[1]
-        );
-
-        // Render unit task indicator
-        if (unit.taskType) {
-          ctx.strokeStyle = "yellow";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(
-            unit.position[0],
-            unit.position[1],
-            unit.dimensions[0],
-            unit.dimensions[1]
-          );
-        }
-      }
-
-      // Render game events
-      for (const event of state.events) {
-        const sourceUnit = state.units.find(u => u.id === event.sourceId);
-        const targetUnit = state.units.find(u => u.id === event.targetId);
-        
-        if (sourceUnit && targetUnit) {
-          // Draw event effect
-          ctx.beginPath();
-          ctx.moveTo(
-            sourceUnit.position[0] + sourceUnit.dimensions[0] / 2,
-            sourceUnit.position[1] + sourceUnit.dimensions[1] / 2
-          );
-          ctx.lineTo(
-            targetUnit.position[0] + targetUnit.dimensions[0] / 2,
-            targetUnit.position[1] + targetUnit.dimensions[1] / 2
-          );
-          
-          switch (event.type) {
-            case "combat":
-              ctx.strokeStyle = "red";
-              break;
-            case "resource":
-              ctx.strokeStyle = "green";
-              break;
-            case "craft":
-              ctx.strokeStyle = "blue";
-              break;
-            case "upgrade":
-              ctx.strokeStyle = "purple";
-              break;
-          }
-          
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
-      }
-    };
-
-    // Set up game loop
-    const gameLoop = () => {
-      renderGame();
-      requestAnimationFrame(gameLoop);
-    };
-    gameLoop();
-
-    // Set up mouse interaction
-    gc.addEventListener("mousedown", e => {
-      const rect = gc.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      // Find clicked unit
-      const clickedUnit = gameState().units.find(unit => {
-        return (
-          x >= unit.position[0] &&
-          x <= unit.position[0] + unit.dimensions[0] &&
-          y >= unit.position[1] &&
-          y <= unit.position[1] + unit.dimensions[1]
-        );
-      });
-
-      if (clickedUnit) {
-        // Handle unit selection
-        console.log("Selected unit:", clickedUnit);
-      }
-    });
-
-    gc.addEventListener("contextmenu", e => {
-      e.preventDefault();
-      const rect = gc.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      // Move selected units to clicked position
-      // This is a simplified version - you'll want to add pathfinding
-      for (const unit of gameState().units) {
-        if (unit.ownerId === props.user.id) {
-          gameService.moveUnit(unit.id, [x, y]);
-        }
-      }
-    });
+    subscribeToVotes();
   });
+
+  const handleVoteColorChange = async (unitId: number, color: string) => {
+    try {
+      await setUnitVoteColor(unitId, color);
+      showToast({
+        title: "Success",
+        description: "Vote color updated",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    } catch (error) {
+      // Error is already handled by withSpacetimeDBErrorHandling
+    }
+  };
+
+  const handleVoteTrade = async (unitId: number, price: number) => {
+    try {
+      await tradeUnitVote(unitId, props.user.id, price);
+      showToast({
+        title: "Success",
+        description: "Vote trade completed",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    } catch (error) {
+      // Error is already handled by withSpacetimeDBErrorHandling
+    }
+  };
 
   return (
-    <div class="flex flex-col gap-4">
+    <div class="flex h-full flex-col gap-4">
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-bold">{props.room.name}</h2>
-        <div class="flex items-center gap-2">
-          {props.room.startTime == null ? (
-            <p>Waiting for players...</p>
-          ) : props.room.startTime > clock() ? (
-            <p>{`Game will start in ${Math.floor((props.room.startTime - clock()) / 1000)} seconds`}</p>
-          ) : (
-            <>
-              <button
-                class="px-4 py-2 bg-blue-500 text-white rounded"
-                onClick={() => {
-                  if (tickInterval()) {
-                    clearInterval(tickInterval());
-                    setTickInterval(undefined);
-                  } else {
-                    setTickInterval(setInterval(() => {
-                      gameTickSystem.tick();
-                    }, tickRate()));
-                  }
-                }}
-              >
-                {tickInterval() ? "Pause" : "Play"}
-              </button>
-              <button
-                class="px-4 py-2 bg-green-500 text-white rounded"
-                onClick={() => gameService.toggleReady(props.room.id, props.user.id)}
-              >
-                {gameState().readyState?.readyUserIds.includes(props.user.id)
-                  ? "Not Ready"
-                  : "Ready"}
-              </button>
-            </>
-          )}
+        <div class="text-sm text-gray-500">
+          Round {props.room.rounds.length + 1}
         </div>
       </div>
 
-      <canvas
-        ref={setGameCanvas}
-        width={800}
-        height={600}
-        class="border border-gray-300"
-      />
+      <div class="grid grid-cols-2 gap-4">
+        {/* Unit List */}
+        <div class="rounded-lg border p-4">
+          <h3 class="mb-4 text-lg font-semibold">Units</h3>
+          <div class="space-y-2">
+            {Object.entries(voteState.unitVotes).map(([unitId, vote]) => (
+              <div class="flex items-center justify-between rounded border p-2">
+                <div class="flex items-center gap-2">
+                  <div
+                    class="h-4 w-4 rounded-full"
+                    style={{ "background-color": vote.color || "#ccc" }}
+                  />
+                  <span>Unit {unitId}</span>
+                  {vote.owner && (
+                    <span class="text-sm text-gray-500">
+                      (Owned by {vote.owner})
+                    </span>
+                  )}
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    onClick={() => handleVoteColorChange(Number(unitId), "red")}
+                    class="rounded bg-red-500 px-2 py-1 text-white hover:bg-red-600"
+                  >
+                    Red
+                  </button>
+                  <button
+                    onClick={() => handleVoteColorChange(Number(unitId), "blue")}
+                    class="rounded bg-blue-500 px-2 py-1 text-white hover:bg-blue-600"
+                  >
+                    Blue
+                  </button>
+                  {vote.price === null ? (
+                    <button
+                      onClick={() => handleVoteTrade(Number(unitId), 100)}
+                      class="rounded bg-green-500 px-2 py-1 text-white hover:bg-green-600"
+                    >
+                      Sell
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleVoteTrade(Number(unitId), vote.price!)}
+                      class="rounded bg-yellow-500 px-2 py-1 text-white hover:bg-yellow-600"
+                    >
+                      Buy ({vote.price})
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Round History */}
+        <div class="rounded-lg border p-4">
+          <h3 class="mb-4 text-lg font-semibold">Round History</h3>
+          <div class="space-y-2">
+            {Object.entries(voteState.roundVotes).map(([roundNumber, round]) => (
+              <div class="rounded border p-2">
+                <div class="mb-2 font-semibold">Round {roundNumber}</div>
+                <div class="space-y-1">
+                  {round.votes.map((vote) => (
+                    <div class="flex items-center gap-2 text-sm">
+                      <div
+                        class="h-3 w-3 rounded-full"
+                        style={{ "background-color": vote.color }}
+                      />
+                      <span>Unit {vote.unit_id}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
-}
+};
+
+export default Game;

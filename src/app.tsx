@@ -1,32 +1,19 @@
 import { Router } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
-import { createContext, Suspense, useContext } from "solid-js";
+import { createContext, Suspense } from "solid-js";
 import Nav from "~/components/Nav";
 import "./app.css";
 import "@fontsource/inter";
 import { Toaster } from "./components/ui/toast";
-import { socket } from "./lib/Client/socket";
-import { clientSocket } from "./types/socket";
 import { MetaProvider, Title } from "@solidjs/meta";
 import { SpacetimeDBClient, createSpacetimeDBClient } from "~/lib/spacetimedb";
 
-export const SocketContext = createContext(socket as clientSocket);
-
-// Create SpacetimeDB context
-const SpacetimeDBContext = createContext<SpacetimeDBClient>();
-
-export const useSpacetimeDB = () => {
-	const context = useContext(SpacetimeDBContext);
-	if (!context) {
-		throw new Error("useSpacetimeDB must be used within a SpacetimeDBProvider");
-	}
-	return context;
-};
+export const SpacetimeDBContext = createContext<SpacetimeDBClient | null>(null);
 
 export const SpacetimeDBProvider = (props: { children: any }) => {
 	const client = createSpacetimeDBClient({
-		host: "localhost:3000", // Replace with your SpacetimeDB server address
-		database: "chat", // Replace with your database name
+		host: import.meta.env.VITE_SPACETIME_HOST || "localhost:3000",
+		database: import.meta.env.VITE_SPACETIME_DATABASE || "game",
 	});
 
 	return (
@@ -37,10 +24,6 @@ export const SpacetimeDBProvider = (props: { children: any }) => {
 };
 
 export default function App() {
-	socket.on("connect", () => {
-		console.log("connected to server!!");
-	});
-
 	return (
 		<Router
 			root={props => (

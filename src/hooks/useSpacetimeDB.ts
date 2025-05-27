@@ -1,5 +1,6 @@
-import { createSignal, onMount } from "solid-js";
-import { SpacetimeDB, Identity } from "@clockworklabs/spacetimedb-sdk";
+import { createSignal, onMount, onCleanup } from "solid-js";
+import { DbConnection, Identity } from "@clockworklabs/spacetimedb-sdk";
+import type { SpacetimeDBGameClient } from "~/types/spacetime-client";
 
 // Types matching our Rust server
 export interface ChatRoom {
@@ -34,30 +35,35 @@ export interface SpacetimeDBClient {
   disconnect: () => void;
 }
 
-export function useSpacetimeDB() {
-  const [db, setDb] = createSignal<SpacetimeDBClient | null>(null);
+export const useSpacetimeDB = () => {
+  const [db, setDb] = createSignal<SpacetimeDBGameClient | null>(null);
   const [connected, setConnected] = createSignal(false);
 
   onMount(() => {
-    // Initialize SpacetimeDB connection
-    const spacetime = new SpacetimeDB({
-      host: import.meta.env.VITE_SPACETIME_HOST || "localhost:3000",
-      database: import.meta.env.VITE_SPACETIME_DATABASE || "chat",
-    });
+    const client = DbConnection.builder()
+      .withUri(import.meta.env.VITE_SPACETIME_HOST || "http://localhost:3000")
+      .withModuleName(import.meta.env.VITE_SPACETIME_DATABASE || "game")
+      .onConnect((connection, identity, token) => {
+        setDb(connection as unknown as SpacetimeDBGameClient);
+        setConnected(true);
+      })
+      .onConnectError((ctx, error) => {
+        console.error("Failed to connect to SpacetimeDB:", error);
+      })
+      .build() as unknown as SpacetimeDBGameClient;
 
-    // Connect to the database
-    spacetime.connect().then(() => {
-      setDb(spacetime as unknown as SpacetimeDBClient);
-      setConnected(true);
-    }).catch((error: Error) => {
-      console.error("Failed to connect to SpacetimeDB:", error);
-    });
+    const handleConnect = () => setConnected(true);
+    const handleDisconnect = () => setConnected(false);
 
-    // Cleanup on unmount
-    return () => {
-      spacetime.disconnect();
-    };
+    client.on("connect", handleConnect);
+    client.on("disconnect", handleDisconnect);
+
+    onCleanup(() => {
+      client.off("connect", handleConnect);
+      client.off("disconnect", handleDisconnect);
+      client.disconnect();
+    });
   });
 
   return { db, connected };
-} 
+}; 

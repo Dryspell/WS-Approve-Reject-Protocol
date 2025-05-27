@@ -6,7 +6,8 @@
     "build": "vinxi build",
     "start": "vinxi start",
     "test": "pnpx tsx ./src/tests/serialization/tests.ts",
-    "db:migrate": "tsx drizzle/migrate.ts"
+    "db:migrate": "tsx drizzle/migrate.ts",
+    "generate": "spacetime generate --lang typescript --out-dir client/src/module_bindings --project-path server"
   },
   "dependencies": {
     "@clockworklabs/spacetimedb-sdk": "^1.1.0",
@@ -41,8 +42,6 @@
     "munkres-js": "^1.2.2",
     "postcss": "^8.5.3",
     "simplex-noise": "^4.0.3",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1",
     "solid-icons": "^1.1.0",
     "solid-js": "^1.9.7",
     "tailwind-merge": "^2.6.0",

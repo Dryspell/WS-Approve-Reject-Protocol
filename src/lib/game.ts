@@ -118,6 +118,18 @@ export class GameService {
     const results = await this.client.query("ReadyState", { roomId });
     return results[0] || null;
   }
+
+  async setUnitVoteColor(unitId: number, color: string): Promise<void> {
+    await this.client.call("set_unit_vote_color", unitId, color);
+  }
+
+  async tradeUnitVote(unitId: number, buyerId: string, price: number): Promise<void> {
+    await this.client.call("trade_unit_vote", unitId, buyerId, price);
+  }
+
+  async processRoundVotes(roomId: number, roundNumber: number): Promise<void> {
+    await this.client.call("process_round_votes", roomId, roundNumber);
+  }
 }
 
 // Create a singleton instance
