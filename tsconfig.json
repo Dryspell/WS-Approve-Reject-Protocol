@@ -11,7 +11,8 @@
     "noEmit": true,
     "strict": true,
     "types": [
-      "vinxi/types/client"
+      "vinxi/types/client",
+      "vitest/globals"
     ],
     "isolatedModules": true,
     "paths": {

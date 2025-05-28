@@ -5,7 +5,9 @@
     "dev": "vinxi dev",
     "build": "vinxi build",
     "start": "vinxi start",
-    "test": "pnpx tsx ./src/tests/serialization/tests.ts",
+    "test": "vitest --config vitest.config.ts",
+    "test:coverage": "vitest run --coverage",
+    "test:db": "tsx scripts/test-db.ts",
     "db:migrate": "tsx drizzle/migrate.ts",
     "generate": "spacetime generate --lang typescript --out-dir src/module_bindings --project-path server"
   },
@@ -30,7 +32,7 @@
     "axios-cache-interceptor": "^1.8.0",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^11.10.0",
-    "canvas": "^2.11.2",
+    "canvas": "^3.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "d3": "^7.9.0",
@@ -56,8 +58,11 @@
   "devDependencies": {
     "@flydotio/dockerfile": "^0.5.9",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.23",
+    "@vitest/coverage-v8": "^3.1.4",
     "daisyui": "^4.12.24",
     "prettier": "^3.5.3",
-    "prettier-plugin-tailwindcss": "^0.6.11"
+    "prettier-plugin-tailwindcss": "^0.6.11",
+    "vitest": "^3.1.4"
   }
 }
