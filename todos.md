@@ -77,6 +77,40 @@
 - [ ] Add scaling vote power (e.g., based on resources or upgrades)
 - [ ] Implement alliances or team voting
 
+## SpacetimeDB Deployment
+### Development Setup
+- [x] Configure Docker Compose for local SpacetimeDB
+- [x] Add development scripts for database management
+- [x] Set up environment variables for development
+
+### Production Deployment
+- [x] Set up Nginx reverse proxy
+  - [x] Configure basic routing for HTTP and WebSocket
+  - [x] Configure SSL/TLS with Let's Encrypt
+  - [x] Configure security headers
+- [x] Configure systemd service
+  - [x] Create service file for SpacetimeDB
+  - [x] Set up automatic startup
+  - [x] Configure logging
+- [x] Set up monitoring and logging
+  - [x] Configure basic logging
+  - [x] Set up monitoring alerts
+  - [x] Add health checks
+- [x] Implement backup strategy
+  - [x] Set up regular database backups
+  - [x] Configure backup retention
+  - [ ] Test backup restoration
+
+### Security
+- [ ] Configure row-level security
+  - [ ] Set up proper access controls
+  - [ ] Implement user permissions
+  - [ ] Add audit logging
+- [ ] Set up authentication
+  - [ ] Configure identity management
+  - [ ] Implement session handling
+  - [ ] Add rate limiting
+
 ---
 
 **Progress update:**

@@ -1,9 +1,18 @@
 "use server";
 import { redirect } from "@solidjs/router";
 import { useSession } from "vinxi/http";
-import { eq } from "drizzle-orm";
-import { db } from "./db";
-import { Users } from "../../../drizzle/schema";
+import { createSpacetimeDBClient } from "~/lib/spacetimedb";
+import bcrypt from "bcryptjs";
+
+const spacetime = createSpacetimeDBClient({
+  host: import.meta.env.VITE_SPACETIME_HOST || "localhost:3000",
+  database: import.meta.env.VITE_SPACETIME_DATABASE || "game",
+});
+
+interface User {
+  id: string;
+  username: string;
+}
 
 function validateUsername(username: unknown) {
   if (typeof username !== "string" || username.length < 3) {
@@ -17,16 +26,39 @@ function validatePassword(password: unknown) {
   }
 }
 
-async function login(username: string, password: string) {
-  const user = db.select().from(Users).where(eq(Users.username, username)).get();
-  if (!user || password !== user.password) throw new Error("Invalid login");
-  return user;
+async function login(username: string, password: string): Promise<User> {
+  const users = await spacetime.query(
+    "SELECT * FROM user WHERE username = ?",
+    [username]
+  );
+
+  const user = users[0];
+  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    throw new Error("Invalid login");
+  }
+
+  await spacetime.call("update_last_login", [user.id]);
+  return { id: user.id, username: user.username };
 }
 
-async function register(username: string, password: string) {
-  const existingUser = db.select().from(Users).where(eq(Users.username, username)).get();
-  if (existingUser) throw new Error("User already exists");
-  return db.insert(Users).values({ username, password }).returning().get();
+async function register(username: string, password: string): Promise<User> {
+  const users = await spacetime.query(
+    "SELECT * FROM user WHERE username = ?",
+    [username]
+  );
+
+  if (users.length > 0) {
+    throw new Error("User already exists");
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const userId = await spacetime.call("register", [
+    username,
+    `${username}@example.com`, // TODO: Add email field to registration form
+    passwordHash
+  ]);
+
+  return { id: userId, username };
 }
 
 function getSession() {
@@ -62,13 +94,18 @@ export async function logout() {
   throw redirect("/login");
 }
 
-export async function getUser() {
+export async function getUser(): Promise<User> {
   const session = await getSession();
   const userId = session.data.userId;
   if (userId === undefined) throw redirect("/login");
 
   try {
-    const user = db.select().from(Users).where(eq(Users.id, userId)).get();
+    const users = await spacetime.query(
+      "SELECT * FROM user WHERE id = ?",
+      [userId]
+    );
+
+    const user = users[0];
     if (!user) throw redirect("/login");
     return { id: user.id, username: user.username };
   } catch {

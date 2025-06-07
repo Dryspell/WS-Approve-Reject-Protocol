@@ -1,0 +1,17 @@
+[Unit]
+Description=SpacetimeDB Server
+After=network.target
+
+[Service]
+Type=simple
+User=spacetimedb
+WorkingDirectory=/stdb
+ExecStart=/usr/local/bin/spacetime --root-dir=/stdb start --listen-addr=0.0.0.0:3000
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=spacetimedb
+
+[Install]
+WantedBy=multi-user.target 
