@@ -22,6 +22,10 @@ const routes = [
     value: "vote",
     label: "Vote",
   },
+  {
+    value: "db-inspector",
+    label: "DB Inspector",
+  },
 ];
 
 export default function Nav() {

@@ -1,5 +1,10 @@
 import { Component, onMount, createSignal, Show } from "solid-js";
-import type { GameRoom, Unit, Resource, UnitInventory, UnitTaskQueue, UnitStats } from "~/types/spacetime-client";
+import type { Unit } from "~/module_bindings/unit_type";
+import type { Resource } from "~/module_bindings/resource_type";
+import type { UnitInventory } from "~/module_bindings/unit_inventory_type";
+import type { UnitTaskQueue } from "~/module_bindings/unit_task_queue_type";
+import type { UnitStats } from "~/module_bindings/unit_stats_type";
+import type { GameRoom } from "~/module_bindings/game_room_type";
 import { useVoteStore } from "~/stores/voteStore";
 import { showToast } from "../ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
@@ -51,8 +56,8 @@ interface Props {
 }
 
 const Game: Component<Props> = (props) => {
-  const { voteState, subscribeToVotes, setUnitVoteColor, tradeUnitVote } = useVoteStore();
-  const { db, connected } = useSpacetimeDB();
+  const { voteState, setUnitVoteColor, tradeUnitVote } = useVoteStore();
+  const { conn, connected, identity } = useSpacetimeDB();
   const [units, setUnits] = createSignal<Record<number, Unit>>({});
   const [resources, setResources] = createSignal<Record<string, Resource>>({});
   const [hoveredUnit, setHoveredUnit] = createSignal<Unit | undefined>();
@@ -63,7 +68,7 @@ const Game: Component<Props> = (props) => {
   const [dragEnd, setDragEnd] = createSignal<[number, number]>([0, 0]);
   const [tickInterval, setTickInterval] = createSignal<NodeJS.Timeout | undefined>();
   const [taskQueues, setTaskQueues] = createSignal<Record<number, UnitTaskQueue[]>>({});
-  const gameTickSystem = getGameTickSystem(() => ({ db, connected }));
+  const gameTickSystem = getGameTickSystem(() => ({ conn, identity, connected }));
   const [scale, setScale] = createSignal(1);
   const [offsetX, setOffsetX] = createSignal(0);
   const [offsetY, setOffsetY] = createSignal(0);
@@ -72,14 +77,11 @@ const Game: Component<Props> = (props) => {
   const [craftingProgress, setCraftingProgress] = createSignal<number>(0);
 
   onMount(() => {
-    subscribeToVotes();
-    
-    // Subscribe to unit updates
-    const client = db();
-    if (!client || !connected()) return;
+    const connection = conn();
+    if (!connection || !connected()) return;
 
     // Subscribe to unit updates
-    client.subscribe("unit", "*", (unit: Unit) => {
+    connection.db.unit.onInsert((_ctx, unit: Unit) => {
       if (!unit) return;
       setUnits(prev => ({
         ...prev,
@@ -91,13 +93,13 @@ const Game: Component<Props> = (props) => {
           id,
           {
             ...unit,
-            taskType: unit.taskType || undefined,
-            targetId: unit.targetId || undefined,
-            voteColor: unit.voteColor || undefined,
-            voteGuarantee: unit.voteGuarantee || undefined,
-            votePrice: unit.votePrice || undefined,
-            voteOwner: unit.voteOwner || undefined,
-            storageCapacity: unit.storageCapacity || undefined
+            taskType: unit.taskType || null,
+            targetId: unit.targetId || null,
+            voteColor: unit.voteColor || null,
+            voteGuarantee: unit.voteGuarantee || null,
+            votePrice: unit.votePrice || null,
+            voteOwner: unit.voteOwner || null,
+            storageCapacity: unit.storageCapacity || null
           }
         ])
       );
@@ -105,7 +107,7 @@ const Game: Component<Props> = (props) => {
     });
 
     // Subscribe to resource updates
-    client.subscribe("resource", "*", (resource: Resource) => {
+    connection.db.resource.onInsert((_ctx, resource: Resource) => {
       if (!resource) return;
       setResources(prev => ({
         ...prev,
@@ -115,7 +117,7 @@ const Game: Component<Props> = (props) => {
     });
 
     // Subscribe to task queue updates
-    client.subscribe("unit_task_queue", "*", (task: UnitTaskQueue) => {
+    connection.db.unitTaskQueue.onInsert((_ctx, task: UnitTaskQueue) => {
       if (!task) return;
       setTaskQueues(prev => {
         const unitTasks = prev[task.unitId] || [];
@@ -136,7 +138,7 @@ const Game: Component<Props> = (props) => {
     });
 
     // Subscribe to inventory updates
-    client.subscribe("unit_inventory", "*", (inventory: UnitInventory) => {
+    connection.db.unitInventory.onInsert((_ctx, inventory: UnitInventory) => {
       if (!inventory) return;
       setInventories(prev => ({
         ...prev,
@@ -435,8 +437,11 @@ const Game: Component<Props> = (props) => {
 
   // Add storage-related functions
   const handleCreateStorage = async (position: { x: number; y: number }) => {
+    const connection = conn();
+    if (!connection || !connected()) return;
+
     try {
-      await db()?.create_storage_building(props.room.id, position, DEFAULT_STORAGE_CAPACITY);
+      await connection.reducers.createStorageBuilding(props.room.id, position, DEFAULT_STORAGE_CAPACITY);
       showToast({
         title: "Success",
         description: "Storage building created",
@@ -453,8 +458,11 @@ const Game: Component<Props> = (props) => {
     resourceType: string,
     amount: number
   ) => {
+    const connection = conn();
+    if (!connection || !connected()) return;
+
     try {
-      await db()?.transfer_resources(sourceId, targetId, resourceType, amount);
+      await connection.reducers.transferResources(sourceId, targetId, resourceType, amount);
       showToast({
         title: "Success",
         description: "Resources transferred",
@@ -467,7 +475,9 @@ const Game: Component<Props> = (props) => {
 
   // Add crafting functions
   const handleStartCrafting = async (recipeId: string) => {
-    if (!hoveredUnit()) return;
+    const connection = conn();
+    if (!connection || !connected() || !hoveredUnit()) return;
+
     const recipe = CRAFTING_RECIPES[recipeId as keyof typeof CRAFTING_RECIPES] as CraftingRecipe;
     if (!recipe) return;
 
@@ -483,7 +493,7 @@ const Game: Component<Props> = (props) => {
 
     try {
       // Queue crafting task
-      await db()?.queue_unit_task(hoveredUnit()!.id, "craft", recipeId);
+      await connection.reducers.queueUnitTask(hoveredUnit()!.id, "craft", recipeId);
       setSelectedRecipe(recipeId);
       
       // Start progress animation
@@ -676,7 +686,7 @@ const Game: Component<Props> = (props) => {
                   <div class="grid grid-cols-2 gap-2">
                     <div>Wood: {inventories()[hoveredUnit()!.id]?.wood || 0}</div>
                     <div>Stone: {inventories()[hoveredUnit()!.id]?.stone || 0}</div>
-                    <div>Metal Ore: {inventories()[hoveredUnit()!.id]?.metal_ore || 0}</div>
+                    <div>Metal Ore: {inventories()[hoveredUnit()!.id]?.metalOre || 0}</div>
                     <div>Capacity: {inventories()[hoveredUnit()!.id]?.maxCapacity || 0}</div>
                   </div>
                   

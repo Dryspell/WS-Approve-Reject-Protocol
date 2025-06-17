@@ -1,8 +1,12 @@
 import { createStore } from "solid-js/store";
+import { createEffect } from "solid-js";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { withSpacetimeDBErrorHandling, withRetry, SpacetimeDBErrorCodes, SpacetimeDBError } from "~/lib/spacetime-errors";
-import type { Unit, Vote, GameRoom } from "~/module_bindings";
-import type { SpacetimeDBGameClient } from "~/types/spacetime-client";
+
+// Import types from their specific modules to avoid conflicts
+import type { Unit } from "~/module_bindings/unit_type";
+import type { Vote } from "~/module_bindings/vote_type";
+import type { GameRoom } from "~/module_bindings/game_room_type";
 
 export interface VoteState {
   unitVotes: Record<number, {
@@ -35,86 +39,118 @@ const [voteState, setVoteState] = createStore<VoteState>({
 });
 
 export const useVoteStore = () => {
-  const { db, connected } = useSpacetimeDB();
+  const { conn, connected } = useSpacetimeDB();
 
-  const subscribeToVotes = () => {
-    const client = db() as SpacetimeDBGameClient;
-    if (!client || !connected()) {
-      throw new SpacetimeDBError(
-        "Not connected to SpacetimeDB",
-        SpacetimeDBErrorCodes.CONNECTION_ERROR
-      );
-    }
+  createEffect(() => {
+    const connection = conn();
+    if (!connection || !connected()) return;
 
     // Subscribe to unit updates
-    client.subscribe("unit", "*", (unit: Unit) => {
-      if (!unit) return;
-
-      setVoteState("unitVotes", unit.id, {
-        color: unit.voteColor,
-        owner: unit.voteOwner,
-        price: unit.votePrice,
-        guarantee: unit.voteGuarantee,
+    const onUnitInsert = (_ctx: any, row: Unit) => {
+      setVoteState("unitVotes", row.id, {
+        color: row.voteColor,
+        owner: row.voteOwner,
+        price: row.votePrice,
+        guarantee: row.voteGuarantee,
       });
-    });
+    };
+
+    const onUnitUpdate = (_ctx: any, oldRow: Unit, newRow: Unit) => {
+      setVoteState("unitVotes", newRow.id, {
+        color: newRow.voteColor,
+        owner: newRow.voteOwner,
+        price: newRow.votePrice,
+        guarantee: newRow.voteGuarantee,
+      });
+    };
+
+    const onUnitDelete = (_ctx: any, row: Unit) => {
+      const { [row.id]: _, ...rest } = voteState.unitVotes;
+      setVoteState("unitVotes", rest);
+    };
 
     // Subscribe to vote updates
-    client.subscribe("vote", "*", (vote: Vote) => {
-      if (!vote) return;
-
-      setVoteState("roundVotes", vote.roundNumber, {
-        roundNumber: vote.roundNumber,
-        votes: [...(voteState.roundVotes[vote.roundNumber]?.votes || []), vote],
+    const onVoteInsert = (_ctx: any, row: Vote) => {
+      setVoteState("roundVotes", row.roundNumber, (prev) => ({
+        roundNumber: row.roundNumber,
+        votes: [...(prev?.votes || []), row],
         timestamp: Date.now(),
-      });
-    });
-  };
+      }));
+    };
+
+    connection.db.unit.onInsert(onUnitInsert);
+    connection.db.unit.onUpdate(onUnitUpdate);
+    connection.db.unit.onDelete(onUnitDelete);
+    connection.db.vote.onInsert(onVoteInsert);
+
+    // Cleanup subscriptions
+    return () => {
+      connection.db.unit.removeOnInsert(onUnitInsert);
+      connection.db.unit.removeOnUpdate(onUnitUpdate);
+      connection.db.unit.removeOnDelete(onUnitDelete);
+      connection.db.vote.removeOnInsert(onVoteInsert);
+    };
+  });
 
   const setUnitVoteColor = async (unitId: number, color: string) => {
-    const client = db() as SpacetimeDBGameClient;
-    if (!client || !connected()) {
+    const connection = conn();
+    if (!connection || !connected()) {
       throw new SpacetimeDBError(
         "Not connected to SpacetimeDB",
         SpacetimeDBErrorCodes.CONNECTION_ERROR
       );
     }
 
-    await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.set_unit_vote_color(unitId, color));
-    }, "Failed to set unit vote color");
+    try {
+      connection.reducers.setUnitVoteColor(unitId, color);
+    } catch (error) {
+      throw new SpacetimeDBError(
+        "Failed to set unit vote color",
+        SpacetimeDBErrorCodes.REDUCER_ERROR
+      );
+    }
   };
 
   const tradeUnitVote = async (unitId: number, buyerId: string, price: number) => {
-    const client = db() as SpacetimeDBGameClient;
-    if (!client || !connected()) {
+    const connection = conn();
+    if (!connection || !connected()) {
       throw new SpacetimeDBError(
         "Not connected to SpacetimeDB",
         SpacetimeDBErrorCodes.CONNECTION_ERROR
       );
     }
 
-    await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.trade_unit_vote(unitId, buyerId, price));
-    }, "Failed to trade unit vote");
+    try {
+      connection.reducers.tradeUnitVote(unitId, buyerId, price);
+    } catch (error) {
+      throw new SpacetimeDBError(
+        "Failed to trade unit vote",
+        SpacetimeDBErrorCodes.REDUCER_ERROR
+      );
+    }
   };
 
   const processRoundVotes = async (roomId: number, roundNumber: number) => {
-    const client = db() as SpacetimeDBGameClient;
-    if (!client || !connected()) {
+    const connection = conn();
+    if (!connection || !connected()) {
       throw new SpacetimeDBError(
         "Not connected to SpacetimeDB",
         SpacetimeDBErrorCodes.CONNECTION_ERROR
       );
     }
 
-    await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.process_round_votes(roomId, roundNumber));
-    }, "Failed to process round votes");
+    try {
+      connection.reducers.processRoundVotes(roomId, roundNumber);
+    } catch (error) {
+      throw new SpacetimeDBError(
+        "Failed to process round votes",
+        SpacetimeDBErrorCodes.REDUCER_ERROR
+      );
+    }
   };
 
   return {
     voteState,
-    subscribeToVotes,
     setUnitVoteColor,
     tradeUnitVote,
     processRoundVotes,

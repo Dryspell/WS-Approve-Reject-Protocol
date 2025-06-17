@@ -1,69 +1,68 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
-import { DbConnection, Identity } from "@clockworklabs/spacetimedb-sdk";
-import type { SpacetimeDBGameClient } from "~/types/spacetime-client";
-
-// Types matching our Rust server
-export interface ChatRoom {
-  id: string;
-  name: string;
-  created_by: Identity;
-  created_at: number;
-}
-
-export interface ChatMessage {
-  id: string;
-  room_id: string;
-  sender_id: Identity;
-  message: string;
-  timestamp: number;
-  round_number?: number;
-}
-
-export interface ChatPermission {
-  room_id: string;
-  user_id: Identity;
-  permission: string;
-}
-
-export interface SpacetimeDBClient {
-  subscribe: <T>(subscription: string, params: string, callback: (data: T) => void) => void;
-  reducers: {
-    create_room: (name: string) => Promise<string>;
-    send_message: (room_id: string, message: string, round_number?: number) => Promise<string>;
-    set_permission: (room_id: string, user_id: Identity, permission: string) => Promise<void>;
-  };
-  disconnect: () => void;
-}
+import { Identity, type DbConnectionImpl, type ErrorContextInterface } from "@clockworklabs/spacetimedb-sdk";
+import { DbConnection } from "../module_bindings/index";
 
 export const useSpacetimeDB = () => {
-  const [db, setDb] = createSignal<SpacetimeDBGameClient | null>(null);
+  const [conn, setConn] = createSignal<DbConnection | null>(null);
+  const [identity, setIdentity] = createSignal<Identity | null>(null);
   const [connected, setConnected] = createSignal(false);
 
   onMount(() => {
-    const client = DbConnection.builder()
+    // const subscribeToQueries = (connection: DbConnection, queries: string[]) => {
+    //   connection
+    //     .subscriptionBuilder()
+    //     .onApplied(() => {
+    //       console.log('SDK client cache initialized.');
+    //     })
+    //     .subscribe(queries);
+    // };
+
+    const onConnect = (connection: DbConnection, clientIdentity: Identity, token: string) => {
+      setConn(connection);
+      setIdentity(clientIdentity);
+      setConnected(true);
+      localStorage.setItem('auth_token', token);
+      console.log('Connected to SpacetimeDB with identity:', clientIdentity.toHexString());
+
+      // // Subscribe to relevant tables - add your queries here
+      // subscribeToQueries(connection, [
+      //   'SELECT * FROM message',
+      //   'SELECT * FROM user',
+      //   'SELECT * FROM chat_message',
+      //   'SELECT * FROM chat_room'
+      // ]);
+    };
+
+    const onDisconnect = () => {
+      console.log('Disconnected from SpacetimeDB');
+      setConnected(false);
+    };
+
+    const onConnectError = (ctx: ErrorContextInterface, error: Error) => {
+      console.error("Failed to connect to SpacetimeDB:", error);
+      setConnected(false);
+    };
+
+    // Create the connection
+    DbConnection.builder()
       .withUri(import.meta.env.VITE_SPACETIME_HOST || "http://localhost:3000")
       .withModuleName(import.meta.env.VITE_SPACETIME_DATABASE || "game")
-      .onConnect((connection, identity, token) => {
-        setDb(connection as unknown as SpacetimeDBGameClient);
-        setConnected(true);
-      })
-      .onConnectError((ctx, error) => {
-        console.error("Failed to connect to SpacetimeDB:", error);
-      })
-      .build() as unknown as SpacetimeDBGameClient;
-
-    const handleConnect = () => setConnected(true);
-    const handleDisconnect = () => setConnected(false);
-
-    client.on("connect", handleConnect);
-    client.on("disconnect", handleDisconnect);
+      .withToken(localStorage.getItem('auth_token') || '')
+      .onConnect(onConnect)
+      .onDisconnect(onDisconnect)
+      .onConnectError(onConnectError)
+      .build();
 
     onCleanup(() => {
-      client.off("connect", handleConnect);
-      client.off("disconnect", handleDisconnect);
-      client.disconnect();
+      const connection = conn();
+      if (connection) {
+        // Instead of close(), we can just set our local state
+        setConn(null);
+        setConnected(false);
+        setIdentity(null);
+      }
     });
   });
 
-  return { db, connected };
+  return { conn, identity, connected };
 }; 

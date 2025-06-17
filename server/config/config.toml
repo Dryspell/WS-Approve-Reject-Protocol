@@ -1,0 +1,3 @@
+[auth]
+jwt_pub_key_path = "/stdb/config/jwt.pub"
+jwt_priv_key_path = "/stdb/config/jwt.key" 
