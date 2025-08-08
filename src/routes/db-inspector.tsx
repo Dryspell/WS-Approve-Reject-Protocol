@@ -4,7 +4,6 @@ import { Button } from '~/components/ui/button';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Badge } from '~/components/ui/badge';
 import { useSpacetimeDB } from '~/hooks/useSpacetimeDB';
-import type { SpacetimeDBGameClient } from '~/types/spacetime-client';
 
 interface QueryResult {
   columns?: string[];

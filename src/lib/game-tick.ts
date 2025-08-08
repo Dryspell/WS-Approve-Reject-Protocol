@@ -1,7 +1,8 @@
-import type { Unit, GameEvent, Resource } from "~/module_bindings";
-import type { UnitTaskQueue, SpacetimeDBGameClient, UnitInventory } from "~/types/spacetime-client";
+import type { Unit, GameEvent, Resource, UnitTaskQueue, UnitInventory } from "~/module_bindings";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { CRAFTING_RECIPES, canCraftRecipe, type CraftingRecipe } from "./crafting";
+import { RemoteReducers } from "~/module_bindings/index";
+
 
 // Constants
 const MOVEMENT_SPEED = 0.1;
@@ -134,29 +135,29 @@ function clearSelection(state: GameState): GameState {
 }
 
 // Task management functions
-function queueUnitTask(state: GameState, client: SpacetimeDBGameClient, unitId: number, taskType: string, targetId: string): GameState {
-  client.queue_unit_task(unitId, taskType, targetId);
+function queueUnitTask(state: GameState, client: RemoteReducers, unitId: number, taskType: string, targetId: string): GameState {
+  client.queueUnitTask(unitId, taskType, targetId);
   return state;
 }
 
-function queueGroupTask(state: GameState, client: SpacetimeDBGameClient, taskType: string, targetId: string): GameState {
+function queueGroupTask(state: GameState, client: RemoteReducers, taskType: string, targetId: string): GameState {
   state.selectedUnits.forEach(unitId => {
     queueUnitTask(state, client, unitId, taskType, targetId);
   });
   return state;
 }
 
-function cancelUnitTask(state: GameState, client: SpacetimeDBGameClient, taskId: number): GameState {
-  client.cancel_unit_task(taskId);
+function cancelUnitTask(state: GameState, client: RemoteReducers, taskId: number): GameState {
+  client.cancelUnitTask(taskId);
   return state;
 }
 
 // Movement functions
-function moveUnit(state: GameState, client: SpacetimeDBGameClient, unitId: number, targetPosition: { x: number; y: number }): GameState {
+function moveUnit(state: GameState, client: RemoteReducers, unitId: number, targetPosition: { x: number; y: number }): GameState {
   return queueUnitTask(state, client, unitId, "move", JSON.stringify(targetPosition));
 }
 
-function moveGroup(state: GameState, client: SpacetimeDBGameClient, targetPosition: { x: number; y: number }): GameState {
+function moveGroup(state: GameState, client: RemoteReducers, targetPosition: { x: number; y: number }): GameState {
   state.selectedUnits.forEach(unitId => {
     moveUnit(state, client, unitId, targetPosition);
   });
@@ -164,7 +165,7 @@ function moveGroup(state: GameState, client: SpacetimeDBGameClient, targetPositi
 }
 
 // Combat functions
-function processCombat(state: GameState, client: SpacetimeDBGameClient, unit: Unit, target: Unit): GameState {
+function processCombat(state: GameState, client: RemoteReducers, unit: Unit, target: Unit): GameState {
   const dist = distance(unit.position, target.position);
   
   if (dist <= COMBAT_RANGE) {
@@ -174,7 +175,7 @@ function processCombat(state: GameState, client: SpacetimeDBGameClient, unit: Un
       startTime: Date.now()
     });
     
-    client.create_game_event(
+    client.createGameEvent(
       unit.roomId.toString(),
       "combat",
       unit.id.toString(),
@@ -190,7 +191,7 @@ function processCombat(state: GameState, client: SpacetimeDBGameClient, unit: Un
 }
 
 // Resource gathering functions
-function processGathering(state: GameState, client: SpacetimeDBGameClient, unit: Unit, resource: Resource): GameState {
+function processGathering(state: GameState, client: RemoteReducers, unit: Unit, resource: Resource): GameState {
   const dist = distance(unit.position, resource.position);
   
   if (dist <= RESOURCE_GATHER_RANGE) {
@@ -200,7 +201,7 @@ function processGathering(state: GameState, client: SpacetimeDBGameClient, unit:
       startTime: Date.now()
     });
     
-    client.create_game_event(
+    client.createGameEvent(
       unit.roomId.toString(),
       "resource",
       unit.id.toString(),
@@ -216,7 +217,7 @@ function processGathering(state: GameState, client: SpacetimeDBGameClient, unit:
 }
 
 // Crafting functions
-function processCrafting(state: GameState, client: SpacetimeDBGameClient, unit: Unit, task: UnitTaskQueue): GameState {
+function processCrafting(state: GameState, client: RemoteReducers, unit: Unit, task: UnitTaskQueue): GameState {
   const recipe = CRAFTING_RECIPES[task.targetId as keyof typeof CRAFTING_RECIPES] as CraftingRecipe;
   if (!recipe) {
     cancelUnitTask(state, client, task.id);
@@ -248,13 +249,13 @@ function processCrafting(state: GameState, client: SpacetimeDBGameClient, unit: 
     if (recipe.requirements.stone) {
       updatedInventory.stone -= recipe.requirements.stone;
     }
-    if (recipe.requirements.metal_ore) {
-      updatedInventory.metal_ore -= recipe.requirements.metal_ore;
+    if (recipe.requirements.metalOre) {
+      updatedInventory.metalOre -= recipe.requirements.metalOre;
     }
     state.inventories.set(unit.id, updatedInventory);
 
     // Create crafting event
-    client.create_game_event(
+    client.createGameEvent(
       unit.roomId.toString(),
       "craft",
       unit.id.toString(),
@@ -271,59 +272,56 @@ function processCrafting(state: GameState, client: SpacetimeDBGameClient, unit: 
 }
 
 // Game tick function
-function tick(state: GameState, client: SpacetimeDBGameClient): GameState {
+function tick(state: GameState, client: RemoteReducers): GameState {
   let newState = { ...state };
   
-  state.taskQueues.forEach((tasks, unitId) => {
-    const unit = state.units.get(unitId);
-    if (!unit) return;
+  // Update unit positions based on tasks
+  newState.units.forEach(unit => {
+    const tasks = newState.taskQueues.get(unit.id);
+    if (!tasks || tasks.length === 0) return;
 
-    const currentTask = tasks.find(t => t.status === "in_progress");
-    if (!currentTask) return;
-
+    const currentTask = tasks[0]; // Assume one task at a time for now
+    
     switch (currentTask.taskType) {
       case "move": {
-        const targetPos = JSON.parse(currentTask.targetId);
-        const dist = distance(unit.position, targetPos);
-        
-        if (dist <= MOVEMENT_THRESHOLD) {
-          tasks.shift();
-        } else {
-          const newPos = moveTowards(unit.position, targetPos, MOVEMENT_SPEED);
-          newState = queueUnitTask(newState, client, unitId, "move", JSON.stringify(newPos));
+        try {
+          const targetPosition = JSON.parse(currentTask.targetId);
+          const currentPosition = unit.position;
+          
+          if (distance(currentPosition, targetPosition) > MOVEMENT_THRESHOLD) {
+            const newPosition = moveTowards(currentPosition, targetPosition, MOVEMENT_SPEED);
+            const updatedUnit = { ...unit, position: newPosition };
+            newState.units.set(unit.id, updatedUnit);
+          } else {
+            // Reached destination, server will remove task
+          }
+        } catch (error) {
+          console.error("Failed to parse move target:", error);
+          cancelUnitTask(newState, client, currentTask.id);
         }
         break;
       }
-      
+      case "combat": {
+        const target = newState.units.get(Number(currentTask.targetId));
+        if (target) {
+          newState = processCombat(newState, client, unit, target);
+        }
+        break;
+      }
       case "gather": {
-        const resource = state.resources.get(Number(currentTask.targetId));
-        if (!resource) {
-          tasks.shift();
-          return;
+        const resource = newState.resources.get(Number(currentTask.targetId));
+        if (resource) {
+          newState = processGathering(newState, client, unit, resource);
         }
-        
-        newState = processGathering(newState, client, unit, resource);
         break;
       }
-      
-      case "attack": {
-        const target = state.units.get(Number(currentTask.targetId));
-        if (!target) {
-          tasks.shift();
-          return;
-        }
-        
-        newState = processCombat(newState, client, unit, target);
-        break;
-      }
-      
       case "craft": {
         newState = processCrafting(newState, client, unit, currentTask);
         break;
       }
     }
   });
-  
+
   return newState;
 }
 
@@ -340,83 +338,63 @@ export function updateGameState(newState: GameState) {
 }
 
 export function getGameTickSystem(client: () => ReturnType<typeof useSpacetimeDB>) {
-  return {
-    updateUnits: (units: Record<number, Unit>) => {
-      gameState = updateUnits(gameState, units);
+  const connection = client().conn();
+  if (connection) {
+    connection.db.unit.onInsert((_, unit) => updateGameState(updateUnits(gameState, { ...Object.fromEntries(gameState.units), [unit.id]: unit })));
+    connection.db.unit.onUpdate((_, __, unit) => updateGameState(updateUnits(gameState, { ...Object.fromEntries(gameState.units), [unit.id]: unit })));
+    connection.db.resource.onInsert((_, resource) => updateGameState(updateResources(gameState, { ...Object.fromEntries(gameState.resources), [resource.id]: resource })));
+    connection.db.unitTaskQueue.onInsert((_, task) => updateGameState(updateTaskQueues(gameState, [...Object.values(gameState.taskQueues).flat(), task])));
+    connection.db.unitTaskQueue.onDelete((_, task) => {
+      const tasks = gameState.taskQueues.get(task.unitId) || [];
+      const updatedTasks = tasks.filter(t => t.id !== task.id);
+      const newTaskQueues = new Map(gameState.taskQueues);
+      newTaskQueues.set(task.unitId, updatedTasks);
+      updateGameState({ ...gameState, taskQueues: newTaskQueues });
+    });
+    // Add other subscriptions...
+  }
+
+  const system = {
+    tick: () => {
+      const connection = client().conn();
+      if (!connection) return;
+      const newState = tick(gameState, connection.reducers);
+      updateGameState(newState);
     },
-    updateResources: (resources: Record<string, Resource>) => {
-      gameState = updateResources(gameState, resources);
+    getCombatEffect: (unitId: number) => gameState.combatEffects.get(unitId),
+    getGatherEffect: (unitId: number) => gameState.gatherEffects.get(unitId),
+    isUnitSelected: (unitId: number) => gameState.selectedUnits.has(unitId),
+    selectUnit: (unitId: number) => updateGameState(selectUnit(gameState, unitId)),
+    deselectUnit: (unitId: number) => updateGameState(deselectUnit(gameState, unitId)),
+    clearSelection: () => updateGameState(clearSelection(gameState)),
+    moveGroup: (targetPosition: { x: number; y: number }) => {
+      const connection = client().conn();
+      if (!connection) return;
+      updateGameState(moveGroup(gameState, connection.reducers, targetPosition));
     },
-    updateTaskQueues: (tasks: UnitTaskQueue[]) => {
-      gameState = updateTaskQueues(gameState, tasks);
+    gatherResource: (unitId: number, resourceId: number) => {
+      const connection = client().conn();
+      if (!connection) return;
+      updateGameState(queueUnitTask(gameState, connection.reducers, unitId, "gather", resourceId.toString()));
     },
-    selectUnit: (unitId: number) => {
-      gameState = selectUnit(gameState, unitId);
-    },
-    deselectUnit: (unitId: number) => {
-      gameState = deselectUnit(gameState, unitId);
-    },
-    clearSelection: () => {
-      gameState = clearSelection(gameState);
-    },
-    isUnitSelected: (unitId: number) => {
-      return gameState.selectedUnits.has(unitId);
-    },
-    queueUnitTask: (unitId: number, taskType: string, targetId: string) => {
-      const db = client().db();
-      if (db) {
-        gameState = queueUnitTask(gameState, db, unitId, taskType, targetId);
-      }
-    },
-    queueGroupTask: (taskType: string, targetId: string) => {
-      const db = client().db();
-      if (db) {
-        gameState = queueGroupTask(gameState, db, taskType, targetId);
-      }
+    gatherGroupResource: (resourceId: number) => {
+      const connection = client().conn();
+      if (!connection) return;
+      updateGameState(queueGroupTask(gameState, connection.reducers, "gather", resourceId.toString()));
     },
     cancelUnitTask: (taskId: number) => {
-      const db = client().db();
-      if (db) {
-        gameState = cancelUnitTask(gameState, db, taskId);
-      }
+      const connection = client().conn();
+      if (!connection) return;
+      updateGameState(cancelUnitTask(gameState, connection.reducers, taskId));
     },
-    moveUnit: (unitId: number, targetPosition: { x: number; y: number }) => {
-      const db = client().db();
-      if (db) {
-        gameState = moveUnit(gameState, db, unitId, targetPosition);
-      }
-    },
-    moveGroup: (targetPosition: { x: number; y: number }) => {
-      const db = client().db();
-      if (db) {
-        gameState = moveGroup(gameState, db, targetPosition);
-      }
-    },
-    gatherResource: (unitId: number, resourceId: string) => {
-      const db = client().db();
-      if (db) {
-        gameState = queueUnitTask(gameState, db, unitId, "gather", resourceId);
-      }
-    },
-    gatherGroupResource: (resourceId: string) => {
-      const db = client().db();
-      if (db) {
-        gameState.selectedUnits.forEach(unitId => {
-          gameState = queueUnitTask(gameState, db, unitId, "gather", resourceId);
-        });
-      }
-    },
-    getCombatEffect: (unitId: number) => {
-      return gameState.combatEffects.get(unitId);
-    },
-    getGatherEffect: (unitId: number) => {
-      return gameState.gatherEffects.get(unitId);
-    },
-    tick: () => {
-      const db = client().db();
-      if (db) {
-        gameState = tick(gameState, db);
-      }
-    }
+    updateUnits: (units: Record<number, Unit>) => updateGameState(updateUnits(gameState, units)),
+    updateResources: (resources: Record<string, Resource>) => updateGameState(updateResources(gameState, resources)),
+    updateTaskQueues: (tasks: UnitTaskQueue[]) => updateGameState(updateTaskQueues(gameState, tasks)),
+    getGameState: () => gameState,
   };
+
+  // Set up interval for ticking
+  setInterval(system.tick, 50); // Tick every 50ms (20 FPS)
+
+  return system;
 } 

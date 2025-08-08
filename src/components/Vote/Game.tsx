@@ -75,6 +75,8 @@ const Game: Component<Props> = (props) => {
   const [inventories, setInventories] = createSignal<Record<number, UnitInventory>>({});
   const [selectedRecipe, setSelectedRecipe] = createSignal<string | null>(null);
   const [craftingProgress, setCraftingProgress] = createSignal<number>(0);
+  const [transferResourceType, setTransferResourceType] = createSignal("wood");
+  const [transferAmount, setTransferAmount] = createSignal<number>(1);
 
   onMount(() => {
     const connection = conn();
@@ -694,7 +696,7 @@ const Game: Component<Props> = (props) => {
                     <div class="mt-4">
                       <h4 class="font-semibold">Transfer Resources</h4>
                       <div class="space-y-2">
-                        <select class="w-full rounded border p-1">
+                        <select class="w-full rounded border p-1" value={transferResourceType()} onChange={(e) => setTransferResourceType(e.currentTarget.value)}>
                           <option value="wood">Wood</option>
                           <option value="stone">Stone</option>
                           <option value="gold">Gold</option>
@@ -705,16 +707,26 @@ const Game: Component<Props> = (props) => {
                           max={inventories()[hoveredUnit()!.id]?.maxCapacity || 0}
                           class="w-full rounded border p-1"
                           placeholder="Amount"
+                          value={transferAmount()}
+                          onInput={(e) => setTransferAmount(parseInt(e.currentTarget.value, 10))}
                         />
                         <button
                           onClick={() => {
                             const targetStorage = Object.values(units()).find(u => u.isStorage);
-                            if (targetStorage) {
+                            if (!targetStorage) {
+                              showToast({
+                                title: "Error",
+                                description: "No storage building found to transfer resources to.",
+                                duration: DEFAULT_TOAST_DURATION,
+                              });
+                              return;
+                            }
+                            if (transferAmount() > 0) {
                               handleTransferResources(
                                 hoveredUnit()!.id,
                                 targetStorage.id,
-                                "wood", // Get from select
-                                10 // Get from input
+                                transferResourceType(),
+                                transferAmount()
                               );
                             }
                           }}

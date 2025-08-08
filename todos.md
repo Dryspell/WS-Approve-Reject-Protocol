@@ -1,123 +1,131 @@
-# Colony Builder and Voting System Integration - TODOs
+# SpacetimeDB Game - TODOs
 
-## UI/UX Tasks
-- [ ] Update frontend to show vote-related UI elements for units (color, price, owner, etc.)
-- [ ] Add vote trading interface (buy/sell, price setting, ownership transfer)
-- [ ] Implement round timer and voting phase indicator
-- [ ] Add visual indicators for eliminated units and trade events
-
-## Game Mechanics
-- [ ] Implement deathmatch system for eliminated units (optional)
-- [ ] Add resource management for eliminated units (resources lost or transferred)
-- [ ] Integrate market with unit and vote trading
-
-## Resource System
-### Resource Gathering
-- [ ] Add resource depletion mechanics
-  - Implement resource regeneration over time
-  - Add resource respawn system
-  - Show resource depletion effects
-- [ ] Enhance gathering animations
-  - Add particle effects during gathering
-  - Show resource collection animations
-  - Add gathering progress indicators
-- [ ] Implement gathering efficiency
-  - Add gathering speed modifiers
-  - Show gathering rate indicators
-  - Add gathering tool upgrades
-
-### Resource Storage
-- [ ] Add inventory system
-  - Implement unit inventory limits
-  - Add storage buildings
-  - Show inventory UI
-- [ ] Add resource transfer
-  - Allow units to transfer resources
-  - Implement resource sharing
-  - Add resource trading
-
-### Crafting System
-- [ ] Implement crafting recipes
-  - Add recipe definitions
-  - Create recipe UI
-  - Show crafting requirements
-- [ ] Add crafting buildings
-  - Implement workshop placement
-  - Add crafting queue
-  - Show crafting progress
-- [ ] Add crafting upgrades
-  - Implement crafting efficiency
-  - Add recipe unlocks
-  - Show upgrade paths
-
-## Market System
-- [ ] Create market interface for bulk vote trading
-- [ ] Add market history and analytics
-
-## Technical Debt
-- [x] Remove old socket.io implementations
-- [x] Clean up socket.io dependencies
-- [x] Fix type definitions for SpacetimeDB integration
-  - [x] Generate proper types from Rust schema using `spacetime generate`
-  - [x] Remove manual uuid/rand/getrandom usage in reducers (use `ctx.rng()` instead)
-  - [x] Remove manual types and use types from `client/src/module_bindings`
-  - [x] Ensure frontend code imports types from generated bindings
-- [x] Implement proper error handling for SpacetimeDB operations
-- [x] Implement vote state management
-- [ ] Implement vote trading state
-- [ ] Add unit tests for vote-related functionality
-
-## Testing Infrastructure
-- [ ] Set up Vitest for frontend testing
-- [ ] Set up SpacetimeDB test database
-- [ ] Create seed data for game rooms, units, and votes
-- [ ] Write test suites for reducers, stores, and UI
-
-## Future Enhancements
-- [ ] Add scaling vote power (e.g., based on resources or upgrades)
-- [ ] Implement alliances or team voting
-
-## SpacetimeDB Deployment
-### Development Setup
-- [x] Configure Docker Compose for local SpacetimeDB
-- [x] Add development scripts for database management
-- [x] Set up environment variables for development
-
-### Production Deployment
-- [x] Set up Nginx reverse proxy
-  - [x] Configure basic routing for HTTP and WebSocket
-  - [x] Configure SSL/TLS with Let's Encrypt
-  - [x] Configure security headers
-- [x] Configure systemd service
-  - [x] Create service file for SpacetimeDB
-  - [x] Set up automatic startup
-  - [x] Configure logging
-- [x] Set up monitoring and logging
-  - [x] Configure basic logging
-  - [x] Set up monitoring alerts
-  - [x] Add health checks
-- [x] Implement backup strategy
-  - [x] Set up regular database backups
-  - [x] Configure backup retention
-  - [ ] Test backup restoration
-
-### Security
-- [ ] Configure row-level security
-  - [ ] Set up proper access controls
-  - [ ] Implement user permissions
-  - [ ] Add audit logging
-- [ ] Set up authentication
-  - [ ] Configure identity management
-  - [ ] Implement session handling
-  - [ ] Add rate limiting
+This document tracks the development progress of the colony builder and voting game.
 
 ---
 
+## 🚨 CRITICAL - Testing Infrastructure Setup
+
+### Immediate Blockers (Must Fix First)
+- [ ] **Start Docker Desktop** and verify SpacetimeDB can start via `docker-compose up -d spacetimedb`
+  - Alternative: Run SpacetimeDB locally using `./scripts/start-spacetimedb.sh`
+- [ ] **Verify SpacetimeDB Connection**: Test HTTP endpoint `curl http://localhost:3000/v1/ping`
+- [ ] **Build Server Module**: Ensure WASM module is built with `cd server && cargo build --target wasm32-unknown-unknown --release`
+- [ ] **Run Test Suite**: Execute `npm test` to verify all 35 tests pass
+- [ ] **Fix any test failures** related to database schema or reducer calls
+
+### Testing Infrastructure Tasks
+- [ ] Create simplified test startup script that handles Docker/local SpacetimeDB automatically
+- [ ] Add test database seeding with realistic game data
+- [ ] Set up test coverage reporting and CI/CD integration
+- [ ] Create integration tests for the full game flow (room creation → unit movement → voting → resource gathering)
+
+---
+
+## 🎯 High Priority
+- [ ] Implement full unit movement controls (right-click to move selected units).
+- [ ] Complete the resource transfer UI to use form inputs instead of hardcoded values.
+- [ ] Break down `Game.tsx` into smaller, more manageable components (e.g., `UnitDetailsPanel`, `InventoryPanel`, `CraftingPanel`).
+- [ ] Add unit tests for vote-related functionality and game mechanics.
+- [ ] Refine `README.md` to simplify setup instructions for new developers.
+
+---
+
+## 🚀 Game Systems
+
+### Core Gameplay & Controls
+- [x] Implement unit selection with click/drag.
+- [ ] Add unit grouping functionality.
+- [ ] Implement unit formations.
+- [ ] Implement deathmatch system for eliminated units (optional).
+- [ ] Add resource management for eliminated units (resources lost or transferred).
+
+### Resource System
+#### Gathering
+- [x] Implement basic resource gathering with visual feedback.
+- [x] Add resource depletion mechanics (depletion, regeneration, respawn).
+- [ ] Enhance gathering animations (e.g., particle effects).
+- [ ] Implement gathering efficiency (speed modifiers, tool upgrades).
+
+#### Storage & Inventory
+- [x] Add basic inventory system for units.
+- [x] Implement storage buildings.
+- [x] Allow units to transfer resources between each other and to storage.
+- [ ] Show inventory UI.
+
+#### Crafting
+- [x] Implement crafting recipes and resource requirements.
+- [x] Implement a crafting queue and show progress.
+- [ ] Add dedicated crafting buildings (e.g., workshops).
+- [ ] Add crafting skill progression and recipe unlocks.
+
+### Market & Voting System
+- [x] Implement vote state management.
+- [x] Implement vote trading state and actions.
+- [x] Update frontend to show vote-related UI elements for units (color, price, owner).
+- [x] Add vote trading interface (buy/sell, set price).
+- [ ] Create market interface for bulk vote trading.
+- [ ] Add market history and analytics.
+- [ ] Add vote guarantees.
+- [ ] Add scaling vote power (e.g., based on resources or upgrades).
+- [ ] Implement alliances or team voting.
+
+---
+
+## 🖥️ UI/UX
+
+- [x] Implement round history visualization.
+- [ ] Implement round timer and voting phase indicator.
+- [ ] Add visual indicators for eliminated units and trade events.
+- [ ] Add visual effects for vote changes and trades.
+- [ ] Improve round history visualization (e.g., timeline view).
+- [ ] Refactor canvas utilities into organized, reusable modules.
+
+---
+
+## 🛠️ Technical Debt & Refactoring
+
+- [x] Remove old socket.io implementations and dependencies.
+- [x] Generate proper types from Rust schema using `spacetime generate`.
+- [x] Remove manual types and use types from `client/src/module_bindings`.
+- [ ] Implement proper error handling for all SpacetimeDB operations.
+- [ ] Optimize canvas rendering for a large number of units.
+- [ ] Improve state management performance and data structures.
+
+---
+
+## 🧪 Testing Infrastructure
+
+- [ ] Set up Vitest for frontend testing.
+- [ ] Set up a SpacetimeDB test database.
+- [ ] Create seed data for game rooms, units, and votes.
+- [ ] Write test suites for reducers, stores, and UI components.
+
+---
+
+## 🌐 Infrastructure & Deployment
+
+### Security
+- [ ] Configure row-level security in SpacetimeDB.
+- [ ] Set up proper access controls and user permissions.
+- [ ] Implement session handling and rate limiting for authentication.
+- [ ] Add audit logging.
+
+### Production
+- [x] Set up Nginx reverse proxy with SSL.
+- [x] Configure a systemd service for SpacetimeDB.
+- [x] Implement a health check endpoint.
+- [x] Set up basic monitoring and logging.
+- [x] Implement a database backup and restoration strategy.
+  - [x] Set up regular database backups.
+  - [x] Configure backup retention.
+  - [ ] Test backup restoration.
+
+---
 **Progress update:**
 - SpacetimeDB type generation and schema sync is now complete! Types are generated in `client/src/module_bindings` and should be used throughout the frontend.
 - WASM/uuid/rand issues were resolved by removing direct usage and switching to `ctx.rng()` in reducers.
-- Manual type definitions are no longer needed for SpacetimeDB tables.
-- Basic resource gathering system implemented with visual feedback and task queuing.
+- Basic resource gathering, inventory, and crafting systems are implemented with visual feedback and task queuing.
 
 # Voting System TODOs
 
