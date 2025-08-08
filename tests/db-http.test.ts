@@ -1,9 +1,21 @@
-import { describe, it, beforeAll, afterAll, expect } from 'vitest';
+import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest';
 import { execSync } from 'child_process';
 import axios from 'axios';
 import { join } from 'path';
 
-describe('SpacetimeDB HTTP API Tests', () => {
+// Determine if Docker is available and the daemon is running
+const isDockerAvailable = () => {
+  try {
+    execSync('docker info', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const suite = isDockerAvailable() ? describe : describe.skip;
+
+suite('SpacetimeDB HTTP API Tests', () => {
   let identity: string;
   let token: string;
   let containerName: string;

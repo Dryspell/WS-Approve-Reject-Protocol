@@ -126,6 +126,11 @@ This document tracks the development progress of the colony builder and voting g
 - SpacetimeDB type generation and schema sync is now complete! Types are generated in `client/src/module_bindings` and should be used throughout the frontend.
 - WASM/uuid/rand issues were resolved by removing direct usage and switching to `ctx.rng()` in reducers.
 - Basic resource gathering, inventory, and crafting systems are implemented with visual feedback and task queuing.
+- Normalized HTTP client argument handling and WebSocket URL construction in `src/lib/spacetimedb.ts` to improve reliability across environments.
+- Fixed `src/routes/db-inspector.tsx` to use `useSpacetimeDB`'s `conn` correctly and guard when not connected.
+- Updated `src/lib/game.ts` to reference types from `src/module_bindings/*` instead of legacy paths.
+- Deprecated `src/lib/Client/socket.ts` socket.io client (now a no-op) in favor of SpacetimeDB subscriptions.
+- Tests will now skip gracefully when Docker or SpacetimeDB is not available locally to avoid false negatives during development.
 
 # Voting System TODOs
 

@@ -1,5 +1,8 @@
 import { createSpacetimeDBClient } from "./spacetimedb";
-import type { GameRoom, Unit, GameEvent, ReadyState } from "../spacetime/game.sd";
+import type { GameRoom } from "~/module_bindings/game_room_type";
+import type { Unit } from "~/module_bindings/unit_type";
+import type { GameEvent } from "~/module_bindings/game_event_type";
+import type { ReadyState } from "~/module_bindings/ready_state_type";
 
 export interface GameState {
   room: GameRoom | null;

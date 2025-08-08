@@ -11,9 +11,11 @@ export class SpacetimeDBClient {
 
   async call(reducer: string, ...args: any[]): Promise<any> {
     try {
-      const response = await axios.post(`${this.baseUrl}/reducer/${this.database}/${reducer}`, {
-        args,
-      });
+      // Allow both call("x", 1, 2) and call("x", [1,2]) styles
+      const normalizedArgs = args.length === 1 && Array.isArray(args[0]) ? args[0] : args;
+      const response = await axios.post(`${this.baseUrl}/reducer/${this.database}/${reducer}`,
+        { args: normalizedArgs }
+      );
       return response.data;
     } catch (error) {
       console.error(`Failed to call reducer ${reducer}:`, error);
@@ -23,9 +25,11 @@ export class SpacetimeDBClient {
 
   async query(query: string, ...args: any[]): Promise<any> {
     try {
-      const response = await axios.post(`${this.baseUrl}/query/${this.database}/${query}`, {
-        args,
-      });
+      // Allow both query("sql ...", a, b) and query("sql ...", [a,b]) styles
+      const normalizedArgs = args.length === 1 && Array.isArray(args[0]) ? args[0] : args;
+      const response = await axios.post(`${this.baseUrl}/query/${this.database}/${query}`,
+        { args: normalizedArgs }
+      );
       return response.data;
     } catch (error) {
       console.error(`Failed to execute query ${query}:`, error);
@@ -34,7 +38,9 @@ export class SpacetimeDBClient {
   }
 
   subscribe(table: string, callback: (data: any) => void): () => void {
-    const ws = new WebSocket(`ws://${this.baseUrl}/subscribe/${this.database}/${table}`);
+    // Convert http(s)://host -> ws(s)://host for websockets
+    const wsBase = this.baseUrl.replace(/^http(s?):\/\//, "ws$1://");
+    const ws = new WebSocket(`${wsBase}/subscribe/${this.database}/${table}`);
     
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);

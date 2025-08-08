@@ -3,7 +3,23 @@ import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { setupTestDatabase, cleanupTestDatabase, testData } from "./setup";
 import { createSpacetimeDBClient } from "../src/lib/spacetimedb";
 
-describe("Unit Tests", () => {
+// Skip if SpacetimeDB is not reachable (helps local dev without Docker)
+const canReachSpacetime = async () => {
+  try {
+    await fetch("http://localhost:3000/v1/ping");
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+let reachable = false;
+
+beforeAll(async () => {
+  reachable = await canReachSpacetime();
+});
+
+(reachable ? describe : describe.skip)("Unit Tests", () => {
   let spacetime: ReturnType<typeof createSpacetimeDBClient>;
 
   beforeAll(async () => {

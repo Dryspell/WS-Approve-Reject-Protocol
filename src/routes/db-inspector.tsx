@@ -12,19 +12,20 @@ interface QueryResult {
 }
 
 const DbInspector: Component = () => {
-  const [query, setQuery] = createSignal('SELECT name FROM sqlite_master WHERE type=\'table\';');
+  const [query, setQuery] = createSignal("SELECT name FROM sqlite_master WHERE type='table';");
   const [queryResult, setQueryResult] = createSignal<QueryResult>({});
-  const { db, connected } = useSpacetimeDB();
+  // useSpacetimeDB exposes { conn, connected }
+  const { conn, connected } = useSpacetimeDB();
 
   // Execute SQL query
   const executeQuery = async (sql: string): Promise<QueryResult> => {
-    const client = db();
-    if (!client || !connected()) {
+    const connection = conn();
+    if (!connection || !connected()) {
       return { error: 'SpacetimeDB client not initialized or not connected' };
     }
 
     try {
-      // Use the client's query method if it exists, otherwise fall back to a direct SQL query
+      // Hit HTTP SQL endpoint directly for ad-hoc queries
       const data = await fetch(
         `http://${import.meta.env.VITE_SPACETIME_HOST || 'localhost:3000'}/query/${import.meta.env.VITE_SPACETIME_DATABASE || 'game'}/${encodeURIComponent(sql)}`
       ).then(r => r.json());
