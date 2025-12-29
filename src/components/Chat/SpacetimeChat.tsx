@@ -129,6 +129,20 @@ const SpacetimeChat: Component = () => {
     return allPermissions().filter(perm => perm.roomId === currentRoomId);
   });
 
+  // Check if current user has write permission in current room
+  const canSendMessages = createMemo(() => {
+    const currentRoomId = currentRoom();
+    const userIdentity = identity();
+    if (!currentRoomId || !userIdentity) return false;
+
+    const userPermission = allPermissions().find(
+      perm => perm.roomId === currentRoomId && perm.userId.isEqual(userIdentity)
+    );
+
+    // User needs "write" permission to send messages
+    return userPermission?.permission === "write";
+  });
+
   const users = createMemo(() => {
     const connection = conn();
     if (!connection) return new Map<string, User>();
@@ -146,6 +160,17 @@ const SpacetimeChat: Component = () => {
       showToast({
         title: "Error",
         description: "Not connected to SpacetimeDB",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
+
+    // Check permissions before sending
+    if (!canSendMessages()) {
+      showToast({
+        title: "Permission Denied",
+        description: "You don't have permission to send messages in this room",
         variant: "error",
         duration: DEFAULT_TOAST_DURATION,
       });
@@ -313,17 +338,34 @@ const SpacetimeChat: Component = () => {
               <h3 class="text-md mb-2 font-semibold">Available Rooms ({rooms().length})</h3>
               <div class="space-y-2">
                 <For each={rooms()}>
-                  {room => (
-                    <div
-                      class="cursor-pointer rounded border p-2 hover:bg-accent"
-                      onClick={() => setCurrentRoom(room.id)}
-                    >
-                      <div class="font-medium">{room.name}</div>
-                      <div class="text-xs text-muted-foreground">
-                        Created: {new Date(Number(room.createdAt)).toLocaleString()}
+                  {room => {
+                    const userIdentity = identity();
+                    const userPerm = userIdentity
+                      ? allPermissions().find(
+                          p => p.roomId === room.id && p.userId.isEqual(userIdentity)
+                        )
+                      : null;
+                    const hasWriteAccess = userPerm?.permission === "write";
+
+                    return (
+                      <div
+                        class="cursor-pointer rounded border p-2 hover:bg-accent"
+                        onClick={() => setCurrentRoom(room.id)}
+                      >
+                        <div class="flex items-center justify-between">
+                          <div class="font-medium">{room.name}</div>
+                          <Show when={!hasWriteAccess}>
+                            <Badge variant="outline" class="text-xs">
+                              Read-Only
+                            </Badge>
+                          </Show>
+                        </div>
+                        <div class="text-xs text-muted-foreground">
+                          Created: {new Date(Number(room.createdAt)).toLocaleString()}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  }}
                 </For>
               </div>
             </div>
@@ -352,6 +394,20 @@ const SpacetimeChat: Component = () => {
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel initialSize={0.85} class="flex flex-col p-2">
+                  {/* Permission indicator */}
+                  <Show when={!canSendMessages()}>
+                    <div class="mb-2 rounded-lg border border-warning bg-warning/10 p-3">
+                      <div class="flex items-center gap-2">
+                        <Badge variant="outline" class="border-warning text-warning">
+                          Read-Only
+                        </Badge>
+                        <span class="text-sm text-muted-foreground">
+                          You don't have permission to send messages in this room
+                        </span>
+                      </div>
+                    </div>
+                  </Show>
+
                   <div class="mb-4 flex-1 overflow-y-auto">
                     <For each={messages()}>
                       {message => {
@@ -376,17 +432,21 @@ const SpacetimeChat: Component = () => {
                     <TextField class="flex-1">
                       <TextFieldInput
                         type="text"
-                        placeholder="Type a message..."
+                        placeholder={
+                          !canSendMessages()
+                            ? "You don't have permission to send messages"
+                            : "Type a message..."
+                        }
                         value={chatInput()}
                         onInput={e => {
                           setChatInput(e.currentTarget.value);
                         }}
                         onKeyDown={e => {
-                          if (e.key === "Enter" && chatInput().trim()) {
+                          if (e.key === "Enter" && chatInput().trim() && canSendMessages()) {
                             sendMessage(room.id, chatInput().trim());
                           }
                         }}
-                        disabled={!connected()}
+                        disabled={!connected() || !canSendMessages()}
                       />
                     </TextField>
                     <Button
@@ -396,7 +456,7 @@ const SpacetimeChat: Component = () => {
                           sendMessage(room.id, chatInput().trim());
                         }
                       }}
-                      disabled={!connected() || !chatInput().trim()}
+                      disabled={!connected() || !chatInput().trim() || !canSendMessages()}
                     >
                       Send
                     </Button>
