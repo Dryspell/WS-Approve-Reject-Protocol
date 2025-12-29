@@ -1,96 +1,74 @@
-import { Component, createSignal, For, onMount } from "solid-js";
+import { Component, createSignal, For, onMount, createMemo } from "solid-js";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Button } from "~/components/ui/button";
 import { Resizable, ResizableHandle, ResizablePanel } from "~/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { createId } from "@paralleldrive/cuid2";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import ChatMessage from "./ChatMessage";
 import UserAvatarCard from "./UserAvatarCard";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
-import { useSpacetimeDB, type SpacetimeDBClient } from "~/hooks/useSpacetimeDB";
-
-// Local state types
-type LocalChatRoom = {
-  id: string;
-  name: string;
-  messages: Array<{
-    room_id: string;
-    sender_id: string;
-    message: string;
-    timestamp: number;
-    round_number?: number;
-  }>;
-  permissions: Array<{
-    room_id: string;
-    user_id: string;
-    permission: string;
-  }>;
-};
+import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import type { ChatRoom } from "~/module_bindings/chat_room_type";
+import type { ChatMessage as ChatMessageType } from "~/module_bindings/chat_message_type";
+import type { ChatPermission } from "~/module_bindings/chat_permission_type";
+import type { User } from "~/module_bindings/user_type";
 
 const SpacetimeChat: Component = () => {
-  const [chatInput, setChatInput] = createLocalStorageSignal("chat-input", "");
-  const [rooms, setRooms] = createSignal<Record<string, LocalChatRoom>>({});
-  const [currentRoom, setCurrentRoom] = createSignal("");
-  const [user] = createLocalStorageSignal("user", { id: "", username: "" });
+  const [chatInput, setChatInput] = createSignal("");
+  const [currentRoom, setCurrentRoom] = createSignal<string>("");
+  const [newRoomName, setNewRoomName] = createSignal<string>("");
 
-  // Initialize SpacetimeDB connection
-  const { db, connected } = useSpacetimeDB();
+  // Get SpacetimeDB connection
+  const { conn, connected, identity } = useSpacetimeDB();
 
-  // Subscribe to room updates
-  onMount(() => {
-    const client = db();
-    if (!client || !connected()) return;
+  // Reactive memos to get data from SpacetimeDB client cache
+  const rooms = createMemo(() => {
+    const connection = conn();
+    if (!connection) return [];
+    return Array.from(connection.db.chatRoom.iter());
+  });
 
-    // Subscribe to all rooms
-    client.subscribe("chat_room", "*", (room: any) => {
-      if (!room) return;
+  const messages = createMemo(() => {
+    const connection = conn();
+    if (!connection) return [];
+    const currentRoomId = currentRoom();
+    if (!currentRoomId) return [];
+    
+    return Array.from(connection.db.chatMessage.iter())
+      .filter(msg => msg.roomId === currentRoomId)
+      .sort((a, b) => {
+        // Compare timestamps by converting to numbers
+        const aTime = a.timestamp.toDate().getTime();
+        const bTime = b.timestamp.toDate().getTime();
+        return aTime - bTime;
+      });
+  });
 
-      setRooms(prev => ({
-        ...prev,
-        [room.id]: {
-          ...prev[room.id],
-          id: room.id,
-          name: room.name,
-          messages: prev[room.id]?.messages || [],
-          permissions: prev[room.id]?.permissions || [],
-        },
-      }));
-    });
+  const permissions = createMemo(() => {
+    const connection = conn();
+    if (!connection) return [];
+    const currentRoomId = currentRoom();
+    if (!currentRoomId) return [];
+    
+    return Array.from(connection.db.chatPermission.iter())
+      .filter(perm => perm.roomId === currentRoomId);
+  });
 
-    // Subscribe to messages for each room
-    client.subscribe("chat_message", "*", (messages: any[]) => {
-      if (!messages?.length) return;
-
-      const roomId = messages[0].room_id;
-      setRooms(prev => ({
-        ...prev,
-        [roomId]: {
-          ...prev[roomId],
-          messages: [...(prev[roomId]?.messages || []), ...messages],
-        },
-      }));
-    });
-
-    // Subscribe to permission updates
-    client.subscribe("chat_permission", "*", (permissions: any[]) => {
-      if (!permissions?.length) return;
-
-      const roomId = permissions[0].room_id;
-      setRooms(prev => ({
-        ...prev,
-        [roomId]: {
-          ...prev[roomId],
-          permissions,
-        },
-      }));
-    });
+  const users = createMemo(() => {
+    const connection = conn();
+    if (!connection) return new Map<string, User>();
+    
+    const userMap = new Map<string, User>();
+    for (const user of connection.db.user.iter()) {
+      userMap.set(user.identity.toHexString(), user);
+    }
+    return userMap;
   });
 
   const sendMessage = async (roomId: string, message: string) => {
-    const client = db();
-    if (!client || !connected()) {
+    const connection = conn();
+    if (!connection || !connected()) {
       showToast({
         title: "Error",
         description: "Not connected to SpacetimeDB",
@@ -101,7 +79,8 @@ const SpacetimeChat: Component = () => {
     }
 
     try {
-      await client.send_chat_message(roomId, message);
+      // Call the reducer via connection.reducers
+      connection.reducers.sendChatMessage(roomId, message, undefined);
       setChatInput("");
     } catch (error) {
       showToast({
@@ -113,9 +92,11 @@ const SpacetimeChat: Component = () => {
     }
   };
 
-  const createNewRoom = async (name: string) => {
-    const client = db();
-    if (!client || !connected()) {
+  const createNewRoom = async () => {
+    const connection = conn();
+    const name = newRoomName().trim();
+    
+    if (!connection || !connected()) {
       showToast({
         title: "Error",
         description: "Not connected to SpacetimeDB",
@@ -125,8 +106,20 @@ const SpacetimeChat: Component = () => {
       return;
     }
 
+    if (!name) {
+      showToast({
+        title: "Error",
+        description: "Room name cannot be empty",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
+
     try {
-      const roomId = await client.create_chat_room(name);
+      // Call the reducer via connection.reducers
+      connection.reducers.createChatRoom(name);
+      setNewRoomName("");
       showToast({
         title: "Success",
         description: "Room created successfully",
@@ -146,51 +139,102 @@ const SpacetimeChat: Component = () => {
     <div class="flex h-full flex-col">
       <Tabs value={currentRoom()} onChange={v => setCurrentRoom(v as string)} class="flex-1">
         <TabsList>
-          <TabsTrigger value="">Global</TabsTrigger>
-          <For each={Object.entries(rooms())}>
-            {([roomId, room]) => <TabsTrigger value={roomId}>{room.name}</TabsTrigger>}
+          <TabsTrigger value="">Lobby</TabsTrigger>
+          <For each={rooms()}>
+            {room => <TabsTrigger value={room.id}>{room.name}</TabsTrigger>}
           </For>
         </TabsList>
 
         <TabsContent value="">
-          <div class="p-4">
-            <h2 class="text-lg font-semibold">Welcome to the Global Chat</h2>
-            <p class="text-sm text-muted-foreground">Join a room to start chatting!</p>
+          <div class="p-4 space-y-4">
+            <div>
+              <h2 class="text-lg font-semibold">Welcome to SpacetimeDB Chat</h2>
+              <p class="text-sm text-muted-foreground">Select a room or create a new one to start chatting!</p>
+            </div>
+            
+            <div class="flex gap-2">
+              <TextField class="flex-1">
+                <TextFieldInput
+                  type="text"
+                  placeholder="New room name..."
+                  value={newRoomName()}
+                  onInput={e => setNewRoomName(e.currentTarget.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && newRoomName().trim()) {
+                      createNewRoom();
+                    }
+                  }}
+                />
+              </TextField>
+              <Button
+                variant="default"
+                onClick={createNewRoom}
+                disabled={!newRoomName().trim() || !connected()}
+              >
+                Create Room
+              </Button>
+            </div>
+
+            <div class="mt-4">
+              <h3 class="text-md font-semibold mb-2">Available Rooms ({rooms().length})</h3>
+              <div class="space-y-2">
+                <For each={rooms()}>
+                  {room => (
+                    <div 
+                      class="p-2 border rounded cursor-pointer hover:bg-accent"
+                      onClick={() => setCurrentRoom(room.id)}
+                    >
+                      <div class="font-medium">{room.name}</div>
+                      <div class="text-xs text-muted-foreground">
+                        Created: {new Date(Number(room.createdAt)).toLocaleString()}
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
-        <For each={Object.entries(rooms())}>
-          {([roomId, room]) => (
-            <TabsContent value={roomId}>
+        <For each={rooms()}>
+          {room => (
+            <TabsContent value={room.id}>
               <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
                 <ResizablePanel initialSize={0.15} class="p-2">
-                  <For each={room.permissions}>
-                    {permission => (
-                      <UserAvatarCard
-                        user={{
-                          id: permission.user_id,
-                          username: permission.user_id, // You might want to fetch usernames separately
-                        }}
-                      />
-                    )}
+                  <h3 class="text-sm font-semibold mb-2">Members</h3>
+                  <For each={permissions()}>
+                    {permission => {
+                      const user = users().get(permission.userId.toHexString());
+                      return (
+                        <UserAvatarCard
+                          user={{
+                            id: permission.userId.toHexString(),
+                            username: user?.name || permission.userId.toHexString().slice(0, 8),
+                          }}
+                        />
+                      );
+                    }}
                   </For>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
-                <ResizablePanel initialSize={0.85} class="p-2">
-                  <div>
-                    <For each={room.messages}>
-                      {message => (
-                        <ChatMessage
-                          senderId={message.sender_id}
-                          roomId={message.room_id}
-                          timestamp={message.timestamp}
-                          message={message.message}
-                          members={room.permissions.map(p => ({
-                            id: p.user_id,
-                            username: p.user_id, // You might want to fetch usernames separately
-                          }))}
-                        />
-                      )}
+                <ResizablePanel initialSize={0.85} class="p-2 flex flex-col">
+                  <div class="flex-1 overflow-y-auto mb-4">
+                    <For each={messages()}>
+                      {message => {
+                        const sender = users().get(message.sender.toHexString());
+                        return (
+                          <ChatMessage
+                            senderId={message.sender.toHexString()}
+                            roomId={message.roomId}
+                            timestamp={message.timestamp.toDate().getTime()}
+                            message={message.text}
+                            members={Array.from(users().values()).map(u => ({
+                              id: u.identity.toHexString(),
+                              username: u.name || u.identity.toHexString().slice(0, 8),
+                            }))}
+                          />
+                        );
+                      }}
                     </For>
                   </div>
 
@@ -201,22 +245,24 @@ const SpacetimeChat: Component = () => {
                         placeholder="Type a message..."
                         value={chatInput()}
                         onInput={e => {
-                          setChatInput(e.currentTarget.value as string);
+                          setChatInput(e.currentTarget.value);
                         }}
                         onKeyDown={e => {
                           if (e.key === "Enter" && chatInput().trim()) {
-                            sendMessage(roomId, chatInput().trim());
+                            sendMessage(room.id, chatInput().trim());
                           }
                         }}
+                        disabled={!connected()}
                       />
                     </TextField>
                     <Button
                       variant="outline"
                       onClick={() => {
                         if (chatInput().trim()) {
-                          sendMessage(roomId, chatInput().trim());
+                          sendMessage(room.id, chatInput().trim());
                         }
                       }}
+                      disabled={!connected() || !chatInput().trim()}
                     >
                       Send
                     </Button>
