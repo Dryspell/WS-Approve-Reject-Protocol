@@ -62,15 +62,31 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
     
     console.log(`Connecting to SpacetimeDB at ${host} with module ${moduleName}`);
 
+    // For local development, don't use stored tokens as they may be invalid
+    // SpacetimeDB local instances don't require authentication
+    const isLocalHost = host.includes('localhost') || host.includes('127.0.0.1');
+    const authToken = isLocalHost ? undefined : (localStorage.getItem('auth_token') || undefined);
+    
+    if (isLocalHost) {
+      console.log('Connecting to local SpacetimeDB (no auth token required)');
+    } else {
+      console.log('Connecting to remote SpacetimeDB with auth token');
+    }
+
     // Create the connection
-    DbConnection.builder()
+    const builder = DbConnection.builder()
       .withUri(host)
       .withModuleName(moduleName)
-      .withToken(localStorage.getItem('auth_token') || undefined)
       .onConnect(onConnect)
       .onDisconnect(onDisconnect)
-      .onConnectError(onConnectError)
-      .build();
+      .onConnectError(onConnectError);
+    
+    // Only add token for remote connections
+    if (authToken) {
+      builder.withToken(authToken);
+    }
+    
+    builder.build();
 
     onCleanup(() => {
       const connection = conn();

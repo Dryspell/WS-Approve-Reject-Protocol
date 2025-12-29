@@ -27,7 +27,7 @@ spacetime publish --project-path . socket-signals
 ```
 
 ### 3. Test Your App
-- Open `http://localhost:3000` (already running!)
+- Open `http://localhost:3001` (dev server runs on 3001 to avoid conflict with SpacetimeDB on 3000)
 - Check console: "Connected to SpacetimeDB..."
 - Open multiple browser windows to see real-time sync
 
@@ -49,10 +49,11 @@ spacetime publish --project-path . socket-signals
 
 ## ✅ What's Working
 
-- ✅ Dev server running on `http://localhost:3000`
+- ✅ Dev server running on `http://localhost:3001`
+- ✅ SpacetimeDB running on `http://localhost:3000`
 - ✅ Rust module with tables and reducers
 - ✅ TypeScript bindings generated
-- ✅ Connection hook using official SDK
+- ✅ Connection hook using official SDK (with local auth fix)
 - ✅ No import conflicts
 
 ## 🎯 Next Steps
