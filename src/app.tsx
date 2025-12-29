@@ -1,27 +1,12 @@
 import { Router } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
-import { createContext, Suspense } from "solid-js";
+import { Suspense } from "solid-js";
 import Nav from "~/components/Nav";
 import "./app.css";
 import "@fontsource/inter";
 import { Toaster } from "./components/ui/toast";
 import { MetaProvider, Title } from "@solidjs/meta";
-import { SpacetimeDBClient, createSpacetimeDBClient } from "~/lib/spacetimedb";
-
-export const SpacetimeDBContext = createContext<SpacetimeDBClient | null>(null);
-
-export const SpacetimeDBProvider = (props: { children: any }) => {
-	const client = createSpacetimeDBClient({
-		host: import.meta.env.VITE_SPACETIME_HOST || "localhost:3000",
-		database: import.meta.env.VITE_SPACETIME_DATABASE || "game",
-	});
-
-	return (
-		<SpacetimeDBContext.Provider value={client}>
-			{props.children}
-		</SpacetimeDBContext.Provider>
-	);
-};
+import { SpacetimeDBProvider } from "~/hooks/useSpacetimeDB";
 
 export default function App() {
 	return (

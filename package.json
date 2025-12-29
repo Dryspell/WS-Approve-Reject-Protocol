@@ -2,16 +2,20 @@
   "name": "Socket Signals",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"pnpm run dev:db\" \"vinxi dev\"",
-    "dev:db": "docker-compose up spacetimedb",
-    "dev:db:stop": "docker-compose down",
-    "test:setup": "bash scripts/test-setup.sh",
+    "dev": "vinxi dev",
+    "dev:client": "vinxi dev",
+    "dev:db:local": "spacetime start",
+    "publish:local": "cd server && spacetime publish --server local --project-path . game",
+    "publish:cloud": "cd server && spacetime publish --project-path . socket-signals",
     "build": "vinxi build",
     "start": "vinxi start",
     "test": "vitest --config vitest.config.ts",
     "test:coverage": "vitest run --coverage",
-    "test:db": "tsx scripts/test-db.ts",
-    "generate": "spacetime generate --lang typescript --out-dir src/module_bindings --project-path server"
+    "generate": "spacetime generate --lang typescript --out-dir src/module_bindings --project-path server",
+    "logs:local": "spacetime logs --server local game",
+    "logs:cloud": "spacetime logs socket-signals",
+    "sql:local": "spacetime sql --server local game",
+    "sql:cloud": "spacetime sql socket-signals"
   },
   "dependencies": {
     "@clockworklabs/spacetimedb-sdk": "^1.1.0",

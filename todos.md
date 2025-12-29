@@ -7,6 +7,7 @@ This document tracks the development progress of the colony builder and voting g
 ## 🚨 CRITICAL - Testing Infrastructure Setup
 
 ### Immediate Blockers (Must Fix First)
+
 - [ ] **Start Docker Desktop** and verify SpacetimeDB can start via `docker-compose up -d spacetimedb`
   - Alternative: Run SpacetimeDB locally using `./scripts/start-spacetimedb.sh`
 - [ ] **Verify SpacetimeDB Connection**: Test HTTP endpoint `curl http://localhost:3000/v1/ping`
@@ -15,6 +16,7 @@ This document tracks the development progress of the colony builder and voting g
 - [ ] **Fix any test failures** related to database schema or reducer calls
 
 ### Testing Infrastructure Tasks
+
 - [ ] Create simplified test startup script that handles Docker/local SpacetimeDB automatically
 - [ ] Add test database seeding with realistic game data
 - [ ] Set up test coverage reporting and CI/CD integration
@@ -23,6 +25,7 @@ This document tracks the development progress of the colony builder and voting g
 ---
 
 ## 🎯 High Priority
+
 - [ ] Implement full unit movement controls (right-click to move selected units).
 - [ ] Complete the resource transfer UI to use form inputs instead of hardcoded values.
 - [ ] Break down `Game.tsx` into smaller, more manageable components (e.g., `UnitDetailsPanel`, `InventoryPanel`, `CraftingPanel`).
@@ -34,6 +37,7 @@ This document tracks the development progress of the colony builder and voting g
 ## 🚀 Game Systems
 
 ### Core Gameplay & Controls
+
 - [x] Implement unit selection with click/drag.
 - [ ] Add unit grouping functionality.
 - [ ] Implement unit formations.
@@ -41,25 +45,30 @@ This document tracks the development progress of the colony builder and voting g
 - [ ] Add resource management for eliminated units (resources lost or transferred).
 
 ### Resource System
+
 #### Gathering
+
 - [x] Implement basic resource gathering with visual feedback.
 - [x] Add resource depletion mechanics (depletion, regeneration, respawn).
 - [ ] Enhance gathering animations (e.g., particle effects).
 - [ ] Implement gathering efficiency (speed modifiers, tool upgrades).
 
 #### Storage & Inventory
+
 - [x] Add basic inventory system for units.
 - [x] Implement storage buildings.
 - [x] Allow units to transfer resources between each other and to storage.
 - [ ] Show inventory UI.
 
 #### Crafting
+
 - [x] Implement crafting recipes and resource requirements.
 - [x] Implement a crafting queue and show progress.
 - [ ] Add dedicated crafting buildings (e.g., workshops).
 - [ ] Add crafting skill progression and recipe unlocks.
 
 ### Market & Voting System
+
 - [x] Implement vote state management.
 - [x] Implement vote trading state and actions.
 - [x] Update frontend to show vote-related UI elements for units (color, price, owner).
@@ -106,12 +115,14 @@ This document tracks the development progress of the colony builder and voting g
 ## 🌐 Infrastructure & Deployment
 
 ### Security
+
 - [ ] Configure row-level security in SpacetimeDB.
 - [ ] Set up proper access controls and user permissions.
 - [ ] Implement session handling and rate limiting for authentication.
 - [ ] Add audit logging.
 
 ### Production
+
 - [x] Set up Nginx reverse proxy with SSL.
 - [x] Configure a systemd service for SpacetimeDB.
 - [x] Implement a health check endpoint.
@@ -123,6 +134,7 @@ This document tracks the development progress of the colony builder and voting g
 
 ---
 **Progress update:**
+
 - SpacetimeDB type generation and schema sync is now complete! Types are generated in `client/src/module_bindings` and should be used throughout the frontend.
 - WASM/uuid/rand issues were resolved by removing direct usage and switching to `ctx.rng()` in reducers.
 - Basic resource gathering, inventory, and crafting systems are implemented with visual feedback and task queuing.
@@ -137,12 +149,14 @@ This document tracks the development progress of the colony builder and voting g
 ## UI/UX Improvements
 
 ### Canvas Visualization
+
 - [ ] Add unit movement/dragging functionality
   - Allow users to drag units to new positions
   - Implement smooth animations for unit movement
   - Add visual feedback during drag operations
 
 ### Unit Selection
+
 - [ ] Implement unit selection with click/drag
   - Single click to select a unit
   - Click and drag to select multiple units
@@ -150,6 +164,7 @@ This document tracks the development progress of the colony builder and voting g
   - Implement selection box visualization
 
 ### Visual Effects
+
 - [ ] Add visual effects for vote changes
   - Animate color transitions
   - Add particle effects for vote changes
@@ -160,6 +175,7 @@ This document tracks the development progress of the colony builder and voting g
   - Add trade confirmation animations
 
 ### Round History
+
 - [ ] Improve round history visualization
   - Add timeline view for round history
   - Show vote distribution over time
@@ -169,6 +185,7 @@ This document tracks the development progress of the colony builder and voting g
 ## Game Mechanics
 
 ### Unit Management
+
 - [ ] Add unit grouping functionality
   - Allow users to group units
   - Implement group selection
@@ -179,6 +196,7 @@ This document tracks the development progress of the colony builder and voting g
   - Add formation-based voting
 
 ### Voting System
+
 - [ ] Add vote guarantees
   - Implement vote guarantee mechanics
   - Add visual indicators for guaranteed votes
@@ -189,6 +207,7 @@ This document tracks the development progress of the colony builder and voting g
   - Add trade notifications
 
 ### Game Flow
+
 - [ ] Add round management
   - Implement round timer
   - Add round transition effects
@@ -201,6 +220,7 @@ This document tracks the development progress of the colony builder and voting g
 ## Technical Improvements
 
 ### Performance
+
 - [ ] Optimize canvas rendering
   - Implement efficient redraw strategies
   - Add frame rate control
@@ -211,6 +231,7 @@ This document tracks the development progress of the colony builder and voting g
   - Add state caching
 
 ### Code Organization
+
 - [ ] Refactor canvas utilities
   - Organize canvas-related code
   - Add proper TypeScript types
@@ -221,6 +242,7 @@ This document tracks the development progress of the colony builder and voting g
   - Add error logging
 
 ### Testing
+
 - [ ] Add unit tests
   - Test canvas utilities
   - Test game mechanics
@@ -231,6 +253,7 @@ This document tracks the development progress of the colony builder and voting g
   - Test persistence
 
 ## Documentation
+
 - [ ] Add user documentation
   - Document game mechanics
   - Add tutorial
@@ -238,4 +261,4 @@ This document tracks the development progress of the colony builder and voting g
 - [ ] Add developer documentation
   - Document code structure
   - Add API documentation
-  - Create contribution guide 
+  - Create contribution guide
