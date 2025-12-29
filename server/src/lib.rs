@@ -607,13 +607,17 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
 // Chat-related reducers
 #[reducer]
 pub fn create_chat_room(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    log::info!("🎯 create_chat_room CALLED! Name: {}, Sender: {:?}", name, ctx.sender);
+    
     let room_id = format!("room_{}", ctx.timestamp.to_micros_since_unix_epoch());
+    log::info!("📦 Generated room_id: {}", room_id);
     
     ctx.db.chat_room().insert(ChatRoom {
         id: room_id.clone(),
-        name,
+        name: name.clone(),
         created_at: ctx.timestamp.to_micros_since_unix_epoch(),
     });
+    log::info!("✅ Inserted chat_room: {} ({})", name, room_id);
 
     // Give creator full permissions
     ctx.db.chat_permission().insert(ChatPermission {
@@ -621,7 +625,9 @@ pub fn create_chat_room(ctx: &ReducerContext, name: String) -> Result<(), String
         user_id: ctx.sender,
         permission: "write".to_string(),
     });
+    log::info!("🔐 Inserted chat_permission for user {:?}", ctx.sender);
 
+    log::info!("🎉 create_chat_room COMPLETED successfully!");
     Ok(())
 }
 
