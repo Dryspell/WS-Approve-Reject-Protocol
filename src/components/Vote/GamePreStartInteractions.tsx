@@ -1,6 +1,7 @@
 import { Accessor } from "solid-js";
 import { SetStoreFunction } from "solid-js/store";
-import type { GameRoom, ReadyState } from "~/module_bindings";
+import type { GameRoom } from "~/module_bindings/game_room_type";
+import type { ReadyState } from "~/module_bindings/ready_state_type";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { showToast } from "../ui/toast";
 import { Button } from "../ui/button";
@@ -8,48 +9,7 @@ import { userIsReady } from "~/lib/game-utils";
 import { For } from "solid-js";
 import { Badge } from "../ui/badge";
 import UserAvatarCard from "../Chat/UserAvatarCard";
-import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
-
-const readyGameStart = async (
-  client: any,
-  roomId: string,
-  user: { name: string; id: string },
-  roomsReadyState: Record<string, ReadyState>,
-  setRoomsReadyState: SetStoreFunction<Record<string, ReadyState>>,
-) => {
-  try {
-    await client.reducers.toggle_ready(roomId, user.id);
-    
-    const currentState = roomsReadyState[roomId];
-    if (!currentState) return;
-
-    setRoomsReadyState({
-      [roomId]: {
-        roomId,
-        round: 0,
-        readyUserIds: currentState.readyUserIds.includes(user.id)
-          ? currentState.readyUserIds.filter(id => id !== user.id)
-          : [...currentState.readyUserIds, user.id],
-      },
-    });
-
-    showToast({
-      title: currentState.readyUserIds.includes(user.id) ? "Unreadied" : "Readied Up",
-      description: currentState.readyUserIds.includes(user.id)
-        ? "You are not ready."
-        : "You are ready to start the game!",
-      variant: "success",
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  } catch (error) {
-    showToast({
-      title: "Error",
-      description: error instanceof Error ? error.message : "Failed to toggle ready state",
-      variant: "error",
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  }
-};
+import type { DbConnection } from "~/module_bindings/index";
 
 export default function GamePreStartInteractions(props: {
   roomId: string;
@@ -57,12 +17,52 @@ export default function GamePreStartInteractions(props: {
   user: Accessor<{ name: string; id: string }>;
   roomsPreStart: Record<string, ReadyState>;
   setRoomsPreStart: SetStoreFunction<Record<string, ReadyState>>;
+  conn: Accessor<DbConnection | null>;
+  connected: Accessor<boolean>;
 }) {
-  const { db } = useSpacetimeDB();
   const room = props.rooms[props.roomId];
   if (!room) return null;
   
   const { memberIds } = room;
+
+  const handleToggleReady = () => {
+    const connection = props.conn();
+    const user = props.user();
+
+    if (!connection || !props.connected()) {
+      showToast({
+        title: "Error",
+        description: "Not connected to SpacetimeDB",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
+
+    try {
+      const currentState = props.roomsPreStart[props.roomId];
+      const wasReady = currentState?.readyUserIds.includes(user.id) || false;
+
+      // Call the reducer - it's fire-and-forget, the onUpdate callback in parent will update state
+      connection.reducers.toggleReady(room.id, user.id);
+
+      showToast({
+        title: wasReady ? "Unreadied" : "Readied Up",
+        description: wasReady
+          ? "You are not ready."
+          : "You are ready to start the game!",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    } catch (error) {
+      console.error("Failed to toggle ready state:", error);
+      showToast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to toggle ready state",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    }
+  };
 
   return (
     <>
@@ -85,15 +85,8 @@ export default function GamePreStartInteractions(props: {
         <Button
           variant="outline"
           class="m-1.5 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium"
-          onClick={() =>
-            readyGameStart(
-              db(),
-              props.roomId,
-              props.user(),
-              props.roomsPreStart,
-              props.setRoomsPreStart,
-            )
-          }
+          onClick={handleToggleReady}
+          disabled={!props.connected()}
         >
           {userIsReady(props.roomId, props.user().id, props.roomsPreStart) ? `Unready` : `Ready?`}
         </Button>

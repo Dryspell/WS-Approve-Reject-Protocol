@@ -1,4 +1,4 @@
-import { Component, createSignal, onMount, For } from "solid-js";
+import { Component, createSignal, For, createEffect, Show } from "solid-js";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import { randAnimal } from "@ngneat/falso";
 import { createId } from "@paralleldrive/cuid2";
@@ -11,9 +11,9 @@ import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "../ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { createStore } from "solid-js/store";
-import type { GameRoom, ReadyState } from "~/module_bindings";
-import { withSpacetimeDBErrorHandling, withRetry, SpacetimeDBErrorCodes, SpacetimeDBError } from "~/lib/spacetime-errors";
-import type { SpacetimeDBGameClient } from "~/types/spacetime-client";
+import type { GameRoom } from "~/module_bindings/game_room_type";
+import type { ReadyState } from "~/module_bindings/ready_state_type";
+import { Badge } from "../ui/badge";
 
 const VoteBox: Component = () => {
   const [rooms, setRooms] = createSignal<Record<string, GameRoom>>({});
@@ -21,121 +21,243 @@ const VoteBox: Component = () => {
   const [currentRoom, setCurrentRoom] = createSignal<string | undefined>(undefined);
   const [newRoomName, setNewRoomName] = createSignal("");
   const [showCreateRoom, setShowCreateRoom] = createSignal(false);
+  const [subscriptionsSet, setSubscriptionsSet] = createSignal(false);
   const [user, setUser] = createLocalStorageSignal("chat-user", {
     name: randAnimal(),
     id: createId(),
   });
 
   // Initialize SpacetimeDB connection
-  const { db, connected } = useSpacetimeDB();
+  const { conn, connected, identity } = useSpacetimeDB();
 
-  // Subscribe to room updates
-  onMount(() => {
-    const client = db();
-    if (!client || !connected()) {
-      throw new SpacetimeDBError(
-        "Not connected to SpacetimeDB",
-        SpacetimeDBErrorCodes.CONNECTION_ERROR
-      );
+  // Wait for connection to be established, then load data and subscribe
+  createEffect(() => {
+    const connection = conn();
+
+    // Only proceed if we have both connection and it's connected
+    if (!connection || !connected()) {
+      console.log("Waiting for connection... connected:", connected(), "conn:", !!connection);
+      return;
     }
 
-    // Subscribe to all rooms with error handling
-    try {
-      client.subscribe("game_room", "*", (room: GameRoom) => {
-        if (!room) return;
-        setRooms(prev => ({
-          ...prev,
-          [room.id]: room
-        }));
+    // Only set up subscriptions once
+    if (subscriptionsSet()) {
+      console.log("Subscriptions already set up, skipping...");
+      return;
+    }
+
+    console.log("✅ SpacetimeDB connection ready for VoteBox!");
+    console.log("Connected:", connected());
+    console.log("Identity:", identity()?.toHexString());
+
+    // Initial load of game rooms from cache
+    const initialRooms = Array.from(connection.db.gameRoom.iter());
+    console.log("🎮 Initial game rooms loaded:", initialRooms.length, initialRooms);
+    const roomsObj: Record<string, GameRoom> = {};
+    initialRooms.forEach(room => {
+      roomsObj[room.id] = room;
+    });
+    setRooms(roomsObj);
+
+    // Initial load of ready states
+    const initialReadyStates = Array.from(connection.db.readyState.iter());
+    console.log("✅ Initial ready states loaded:", initialReadyStates.length);
+    const readyStatesObj: Record<string, ReadyState> = {};
+    initialReadyStates.forEach(state => {
+      readyStatesObj[state.roomId] = state;
+    });
+    setRoomsReadyState(readyStatesObj);
+
+    // Listen for new game rooms being inserted
+    connection.db.gameRoom.onInsert((ctx, room) => {
+      console.log("🎉 New game room inserted:", room);
+      setRooms(prev => ({
+        ...prev,
+        [room.id]: room
+      }));
+    });
+
+    // Listen for game room updates
+    connection.db.gameRoom.onUpdate((ctx, oldRoom, newRoom) => {
+      console.log("🔄 Game room updated:", newRoom);
+      setRooms(prev => ({
+        ...prev,
+        [newRoom.id]: newRoom
+      }));
+    });
+
+    // Listen for ready state insertions
+    connection.db.readyState.onInsert((ctx, readyState) => {
+      console.log("✅ New ready state inserted:", readyState);
+      setRoomsReadyState({
+        [readyState.roomId]: readyState
       });
-    } catch (error) {
-      throw new SpacetimeDBError(
-        "Failed to subscribe to game rooms",
-        SpacetimeDBErrorCodes.SUBSCRIPTION_ERROR,
-        error
-      );
-    }
+    });
 
-    // Subscribe to ready state updates with error handling
-    try {
-      client.subscribe("ready_state", "*", (readyState: ReadyState) => {
-        if (!readyState) return;
-        setRoomsReadyState({
-          [readyState.roomId]: readyState
-        });
+    // Listen for ready state updates
+    connection.db.readyState.onUpdate((ctx, oldState, newState) => {
+      console.log("🔄 Ready state updated:", newState);
+      setRoomsReadyState({
+        [newState.roomId]: newState
       });
-    } catch (error) {
-      throw new SpacetimeDBError(
-        "Failed to subscribe to ready states",
-        SpacetimeDBErrorCodes.SUBSCRIPTION_ERROR,
-        error
-      );
-    }
+    });
+
+    // Mark subscriptions as set up
+    setSubscriptionsSet(true);
+    console.log("✅ All VoteBox subscriptions set up!");
   });
 
-  const handleCreateRoom = async () => {
-    const client = db();
-    if (!client || !connected()) {
-      throw new SpacetimeDBError(
-        "Not connected to SpacetimeDB",
-        SpacetimeDBErrorCodes.CONNECTION_ERROR
-      );
-    }
+  const handleCreateRoom = () => {
+    const connection = conn();
+    const roomName = newRoomName() || `Game Room ${Object.keys(rooms()).length + 1}`;
 
-    await withSpacetimeDBErrorHandling(async () => {
-      const roomName = newRoomName() || `Game Room ${Object.keys(rooms()).length + 1}`;
-      await withRetry(() => client.create_chat_room(roomName));
-      
+    if (!connection || !connected()) {
       showToast({
-        title: "Success",
-        description: "Room created successfully",
+        title: "Error",
+        description: "Not connected to SpacetimeDB",
+        variant: "error",
         duration: DEFAULT_TOAST_DURATION,
       });
-
-      setNewRoomName("");
-      setShowCreateRoom(false);
-    }, "Failed to create room");
-  };
-
-  const handleJoinRoom = async (roomId: string) => {
-    const client = db();
-    if (!client || !connected()) {
-      throw new SpacetimeDBError(
-        "Not connected to SpacetimeDB",
-        SpacetimeDBErrorCodes.CONNECTION_ERROR
-      );
+      return;
     }
 
-    await withSpacetimeDBErrorHandling(async () => {
-      await withRetry(() => client.create_chat_room(roomId));
+    if (!roomName.trim()) {
+      showToast({
+        title: "Error",
+        description: "Room name cannot be empty",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
+
+    try {
+      console.log("Calling createRoom with name:", roomName);
+      
+      // Generate a unique room ID
+      const roomId = createId();
+      const creatorId = identity()?.toHexString() || "anonymous";
+      
+      // Call the reducer - it's fire-and-forget, the onInsert callback will update the list
+      connection.reducers.createRoom(roomId, roomName, creatorId);
+      
+      // Clear input and hide form immediately
+      setNewRoomName("");
+      setShowCreateRoom(false);
+      
+      // Show feedback - the room will appear in the list when created
+      showToast({
+        title: "Room Created",
+        description: `"${roomName}" will appear in the list shortly`,
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      
+      console.log("createRoom called, waiting for room to appear in list");
+    } catch (error) {
+      console.error("Failed to create room:", error);
+      showToast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create room",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    }
+  };
+
+  const handleJoinRoom = (roomId: string) => {
+    const connection = conn();
+
+    if (!connection || !connected()) {
+      showToast({
+        title: "Error",
+        description: "Not connected to SpacetimeDB",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
+
+    try {
+      // Just set the current room - the user should already have access
       setCurrentRoom(roomId);
-    }, "Failed to join room");
+      
+      showToast({
+        title: "Joined Room",
+        description: "Successfully joined the room",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    } catch (error) {
+      console.error("Failed to join room:", error);
+      showToast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to join room",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    }
   };
 
   return (
     <div class="flex h-full flex-col gap-4">
-      <div class="flex items-center justify-between">
+      {/* Connection Status Indicator */}
+      <div class="border-b bg-background p-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <Show
+              when={connected()}
+              fallback={
+                <>
+                  <Badge variant="destructive">
+                    <span class="mr-1">●</span> Disconnected
+                  </Badge>
+                  <span class="text-sm text-muted-foreground">Connecting to SpacetimeDB...</span>
+                </>
+              }
+            >
+              <Badge variant="default">
+                <span class="mr-1">●</span> Connected
+              </Badge>
+              <span class="text-sm text-muted-foreground">
+                Identity: {identity()?.toHexString().slice(0, 12)}...
+              </span>
+            </Show>
+          </div>
+          <div class="text-xs text-muted-foreground">
+            {Object.keys(rooms()).length} room{Object.keys(rooms()).length !== 1 ? "s" : ""} available
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between px-4">
         <h2 class="text-xl font-bold">Game Rooms</h2>
         <button
           onClick={() => setShowCreateRoom(true)}
-          class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+          disabled={!connected()}
+          class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Create Room
         </button>
       </div>
 
       {showCreateRoom() && (
-        <div class="flex gap-2">
+        <div class="flex gap-2 px-4">
           <input
             type="text"
             value={newRoomName()}
             onInput={e => setNewRoomName(e.currentTarget.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" && newRoomName().trim() && connected()) {
+                handleCreateRoom();
+              }
+            }}
             placeholder="Room name"
-            class="flex-1 rounded border p-2"
+            disabled={!connected()}
+            class="flex-1 rounded border p-2 disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <button
             onClick={handleCreateRoom}
-            class="rounded bg-green-500 px-4 py-2 text-white hover:bg-green-600"
+            disabled={!connected() || !newRoomName().trim()}
+            class="rounded bg-green-500 px-4 py-2 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Create
           </button>
@@ -147,6 +269,25 @@ const VoteBox: Component = () => {
           </button>
         </div>
       )}
+
+      <Show when={!connected()}>
+        <div class="mx-4 rounded-lg border border-destructive bg-destructive/10 p-4">
+          <h2 class="mb-2 text-lg font-semibold text-destructive">
+            Not Connected to SpacetimeDB
+          </h2>
+          <p class="mb-3 text-sm">
+            The application cannot connect to SpacetimeDB. Please ensure:
+          </p>
+          <ul class="ml-6 list-disc space-y-1 text-sm text-muted-foreground">
+            <li>SpacetimeDB is running (check terminal for errors)</li>
+            <li>The correct host is configured in your .env file</li>
+            <li>No firewall is blocking the connection</li>
+          </ul>
+          <div class="mt-3 rounded bg-muted p-2 font-mono text-xs">
+            Expected: {import.meta.env.VITE_SPACETIME_HOST || "ws://localhost:3000"}
+          </div>
+        </div>
+      </Show>
 
       <Tabs value={currentRoom()} onChange={setCurrentRoom}>
         <TabsList>
@@ -179,13 +320,12 @@ const VoteBox: Component = () => {
                           user={user}
                           roomsPreStart={roomsReadyState}
                           setRoomsPreStart={setRoomsReadyState}
+                          conn={conn}
+                          connected={connected}
                         />
                       ) : (
                         <Game
-                          room={{
-                            ...room,
-                            startTime: room.startTime ? Number(room.startTime) : null
-                          }}
+                          room={room}
                           user={user()}
                         />
                       )}

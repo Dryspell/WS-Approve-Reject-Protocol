@@ -1,4 +1,4 @@
-import type { ReadyState } from "~/module_bindings";
+import type { ReadyState } from "~/module_bindings/ready_state_type";
 
 export const userIsReady = (
   roomId: string,

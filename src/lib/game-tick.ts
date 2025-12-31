@@ -1,7 +1,11 @@
-import type { Unit, GameEvent, Resource, UnitTaskQueue, UnitInventory } from "~/module_bindings";
+import type { Unit } from "~/module_bindings/unit_type";
+import type { GameEvent } from "~/module_bindings/game_event_type";
+import type { Resource } from "~/module_bindings/resource_type";
+import type { UnitTaskQueue } from "~/module_bindings/unit_task_queue_type";
+import type { UnitInventory } from "~/module_bindings/unit_inventory_type";
+import type { RemoteReducers } from "~/module_bindings/index";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { CRAFTING_RECIPES, canCraftRecipe, type CraftingRecipe } from "./crafting";
-import { RemoteReducers } from "~/module_bindings/index";
 
 
 // Constants
