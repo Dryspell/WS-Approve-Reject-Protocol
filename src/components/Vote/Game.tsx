@@ -43,10 +43,6 @@ export const RESOURCE_TYPES = {
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 
-// Add combat-related constants
-const COMBAT_EFFECT_DURATION = 500; // ms
-const COMBAT_EFFECT_COLOR = "#ff0000";
-
 // Resource colors
 const RESOURCE_COLORS: Record<string, string> = {
   wood: "#8B4513",
@@ -95,15 +91,11 @@ const Game: Component<Props> = (props) => {
   const [offsetX, setOffsetX] = createSignal(0);
   const [offsetY, setOffsetY] = createSignal(0);
   const [inventories, setInventories] = createSignal<Record<number, UnitInventory>>({});
-  const [selectedRecipe, setSelectedRecipe] = createSignal<string | null>(null);
-  const [craftingProgress, setCraftingProgress] = createSignal<number>(0);
   const [transferResourceType, setTransferResourceType] = createSignal("wood");
   const [transferAmount, setTransferAmount] = createSignal<number>(1);
   
   // Client-side UI state (not game state - server is source of truth)
   const [selectedUnits, setSelectedUnits] = createSignal<Set<number>>(new Set());
-  const [combatEffects, setCombatEffects] = createSignal<Map<number, { targetId: number; startTime: number }>>(new Map());
-  const [gatherEffects, setGatherEffects] = createSignal<Map<number, { resourceId: number; startTime: number }>>(new Map());
 
   onMount(() => {
     const connection = conn();
@@ -116,7 +108,22 @@ const Game: Component<Props> = (props) => {
         ...prev,
         [unit.id]: unit
       }));
-      // Server is the source of truth - no client-side updates needed
+    });
+
+    connection.db.unit.onUpdate((_ctx, _oldUnit: Unit, newUnit: Unit) => {
+      if (!newUnit) return;
+      setUnits(prev => ({
+        ...prev,
+        [newUnit.id]: newUnit
+      }));
+    });
+
+    connection.db.unit.onDelete((_ctx, unit: Unit) => {
+      if (!unit) return;
+      setUnits(prev => {
+        const { [unit.id]: _, ...rest } = prev;
+        return rest;
+      });
     });
 
     // Subscribe to resource updates
@@ -128,11 +135,27 @@ const Game: Component<Props> = (props) => {
       }));
     });
 
+    connection.db.resource.onUpdate((_ctx, _oldResource: Resource, newResource: Resource) => {
+      if (!newResource) return;
+      setResources(prev => ({
+        ...prev,
+        [newResource.id]: newResource
+      }));
+    });
+
+    connection.db.resource.onDelete((_ctx, resource: Resource) => {
+      if (!resource) return;
+      setResources(prev => {
+        const { [resource.id]: _, ...rest } = prev;
+        return rest;
+      });
+    });
+
     // Subscribe to task queue updates
     connection.db.unitTaskQueue.onInsert((_ctx, task: UnitTaskQueue) => {
       if (!task) return;
       setTaskQueues(prev => {
-        const unitTasks = prev[task.unitId] || [];
+        const unitTasks = [...(prev[task.unitId] || [])];
         const existingIndex = unitTasks.findIndex(t => t.id === task.id);
         
         if (existingIndex >= 0) {
@@ -146,7 +169,36 @@ const Game: Component<Props> = (props) => {
           [task.unitId]: unitTasks
         };
       });
-      // Server is the source of truth - no client-side updates needed
+    });
+
+    connection.db.unitTaskQueue.onUpdate((_ctx, _oldTask: UnitTaskQueue, newTask: UnitTaskQueue) => {
+      if (!newTask) return;
+      setTaskQueues(prev => {
+        const unitTasks = [...(prev[newTask.unitId] || [])];
+        const existingIndex = unitTasks.findIndex(t => t.id === newTask.id);
+        
+        if (existingIndex >= 0) {
+          unitTasks[existingIndex] = newTask;
+        } else {
+          unitTasks.push(newTask);
+        }
+        
+        return {
+          ...prev,
+          [newTask.unitId]: unitTasks
+        };
+      });
+    });
+
+    connection.db.unitTaskQueue.onDelete((_ctx, task: UnitTaskQueue) => {
+      if (!task) return;
+      setTaskQueues(prev => {
+        const unitTasks = (prev[task.unitId] || []).filter(t => t.id !== task.id);
+        return {
+          ...prev,
+          [task.unitId]: unitTasks
+        };
+      });
     });
 
     // Subscribe to inventory updates
@@ -156,6 +208,22 @@ const Game: Component<Props> = (props) => {
         ...prev,
         [inventory.unitId]: inventory
       }));
+    });
+
+    connection.db.unitInventory.onUpdate((_ctx, _oldInventory: UnitInventory, newInventory: UnitInventory) => {
+      if (!newInventory) return;
+      setInventories(prev => ({
+        ...prev,
+        [newInventory.unitId]: newInventory
+      }));
+    });
+
+    connection.db.unitInventory.onDelete((_ctx, inventory: UnitInventory) => {
+      if (!inventory) return;
+      setInventories(prev => {
+        const { [inventory.unitId]: _, ...rest } = prev;
+        return rest;
+      });
     });
 
     // Initialize canvas
@@ -315,39 +383,20 @@ const Game: Component<Props> = (props) => {
           ctx.setLineDash([]);
         }
 
-        // Draw combat effects
-        const combatEffect = combatEffects().get(unit.id);
-        if (combatEffect) {
-          const elapsed = Date.now() - combatEffect.startTime;
-          if (elapsed < COMBAT_EFFECT_DURATION) {
-            ctx.strokeStyle = COMBAT_EFFECT_COLOR;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(unit.position.x, unit.position.y, 30, 0, Math.PI * 2);
-            ctx.stroke();
-
-            const target = units()[combatEffect.targetId];
-            if (target) {
-              ctx.beginPath();
-              ctx.moveTo(unit.position.x, unit.position.y);
-              ctx.lineTo(target.position.x, target.position.y);
-              ctx.stroke();
-            }
-          }
-        }
-
-        // Draw gathering effects
-        const gatherEffect = gatherEffects().get(unit.id);
-        if (gatherEffect) {
-          const elapsed = Date.now() - gatherEffect.startTime;
-          if (elapsed < 500) {
-            ctx.strokeStyle = "#00ff00";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(unit.position.x, unit.position.y, 30, 0, Math.PI * 2);
-            ctx.stroke();
-
-            const resource = resources()[gatherEffect.resourceId];
+        // Visual effects are driven by task queue status
+        // Draw task indicator if unit has active tasks
+        const activeTasks = taskQueues()[unit.id] || [];
+        const activeTask = activeTasks.find(t => t.status === "in_progress");
+        if (activeTask) {
+          ctx.strokeStyle = activeTask.taskType === "gather" ? "#00ff00" : "#ffaa00";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(unit.position.x, unit.position.y, 30, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          // Draw line to target if available
+          if (activeTask.taskType === "gather") {
+            const resource = resources()[activeTask.targetId];
             if (resource) {
               ctx.beginPath();
               ctx.moveTo(unit.position.x, unit.position.y);
@@ -459,45 +508,75 @@ const Game: Component<Props> = (props) => {
   };
 
   // Add storage-related functions
-  const handleCreateStorage = async (position: { x: number; y: number }) => {
+  const handleCreateStorage = (position: { x: number; y: number }) => {
     const connection = conn();
-    if (!connection || !connected()) return;
+    if (!connection || !connected()) {
+      showToast({
+        title: "Error",
+        description: "Not connected to SpacetimeDB",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
 
     try {
-      await connection.reducers.createStorageBuilding(props.room.id, position, DEFAULT_STORAGE_CAPACITY);
+      // Fire-and-forget reducer call
+      connection.reducers.createStorageBuilding(props.room.id, position, DEFAULT_STORAGE_CAPACITY);
       showToast({
         title: "Success",
-        description: "Storage building created",
+        description: "Storage building will be created",
         duration: DEFAULT_TOAST_DURATION,
       });
     } catch (error) {
-      // Error is already handled by withSpacetimeDBErrorHandling
+      console.error("Failed to create storage:", error);
+      showToast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create storage",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
     }
   };
 
-  const handleTransferResources = async (
+  const handleTransferResources = (
     sourceId: number,
     targetId: number,
     resourceType: string,
     amount: number
   ) => {
     const connection = conn();
-    if (!connection || !connected()) return;
+    if (!connection || !connected()) {
+      showToast({
+        title: "Error",
+        description: "Not connected to SpacetimeDB",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
 
     try {
-      await connection.reducers.transferResources(sourceId, targetId, resourceType, amount);
+      // Fire-and-forget reducer call
+      connection.reducers.transferResources(sourceId, targetId, resourceType, amount);
       showToast({
         title: "Success",
-        description: "Resources transferred",
+        description: "Resources will be transferred",
         duration: DEFAULT_TOAST_DURATION,
       });
     } catch (error) {
-      // Error is already handled by withSpacetimeDBErrorHandling
+      console.error("Failed to transfer resources:", error);
+      showToast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to transfer resources",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
     }
   };
 
   // Add crafting functions
-  const handleStartCrafting = async (recipeId: string) => {
+  const handleStartCrafting = (recipeId: string) => {
     const connection = conn();
     if (!connection || !connected() || !hoveredUnit()) return;
 
@@ -509,40 +588,29 @@ const Game: Component<Props> = (props) => {
       showToast({
         title: "Error",
         description: "Not enough resources to craft this item",
+        variant: "error",
         duration: DEFAULT_TOAST_DURATION,
       });
       return;
     }
 
     try {
-      // Queue crafting task
-      await connection.reducers.queueUnitTask(hoveredUnit()!.id, "craft", recipeId);
-      setSelectedRecipe(recipeId);
+      // Fire-and-forget reducer call - server will handle crafting progress
+      connection.reducers.queueUnitTask(hoveredUnit()!.id, "craft", recipeId);
       
-      // Start progress animation
-      const craftTime = getCraftingTime(recipe, { craftRate: 1 } as UnitStats); // TODO: Get actual craft rate from unit stats
-      const startTime = Date.now();
-      const updateProgress = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(100, (elapsed / craftTime) * 100);
-        setCraftingProgress(progress);
-        
-        if (progress < 100) {
-          requestAnimationFrame(updateProgress);
-        } else {
-          setCraftingProgress(0);
-          setSelectedRecipe(null);
-        }
-      };
-      requestAnimationFrame(updateProgress);
-
       showToast({
         title: "Success",
-        description: `Started crafting ${recipe.name}`,
+        description: `Crafting ${recipe.name} - check task queue for progress`,
         duration: DEFAULT_TOAST_DURATION,
       });
     } catch (error) {
-      // Error is already handled by withSpacetimeDBErrorHandling
+      console.error("Failed to start crafting:", error);
+      showToast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to start crafting",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
     }
   };
 
@@ -784,17 +852,10 @@ const Game: Component<Props> = (props) => {
                       </div>
                       <button
                         onClick={() => handleStartCrafting(recipe.id)}
-                        disabled={!canCraftRecipe(inventories()[hoveredUnit()!.id] as any, recipe) || selectedRecipe() !== null}
+                        disabled={!canCraftRecipe(inventories()[hoveredUnit()!.id] as any, recipe)}
                         class="w-full rounded bg-blue-500 px-2 py-1 text-white hover:bg-blue-600 disabled:bg-gray-400"
                       >
-                        {selectedRecipe() === recipe.id ? (
-                          <div class="flex items-center justify-center">
-                            <div class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                            Crafting... {Math.round(craftingProgress())}%
-                          </div>
-                        ) : (
-                          "Craft"
-                        )}
+                        Craft
                       </button>
                     </div>
                   ))}
