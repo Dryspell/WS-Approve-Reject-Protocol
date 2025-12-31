@@ -13,8 +13,32 @@ import { Resizable, ResizableHandle, ResizablePanel } from "~/components/ui/resi
 import { circle, rect } from "~/lib/canvas/shapes";
 import { getMousePosition } from "~/lib/canvas/utils";
 import { withinCircle } from "../../lib/canvas/spatial";
-import { getGameTickSystem, RESOURCE_TYPES } from "~/lib/game-tick";
 import { CRAFTING_RECIPES, canCraftRecipe, getCraftingCost, getCraftingTime, type CraftingRecipe } from "~/lib/crafting";
+
+// Resource types (moved from game-tick.ts)
+export const RESOURCE_TYPES = {
+  PRIMARY: {
+    WOOD: "wood",
+    STONE: "stone",
+    METAL_ORE: "metal_ore",
+    COAL: "coal",
+    GEMS: "gems",
+    FIBER: "fiber",
+    HIDE: "hide",
+    SAND: "sand",
+    FOOD: "food"
+  },
+  SECONDARY: {
+    WOODEN_POLE: "wooden_pole",
+    LUMBER: "lumber",
+    CUT_STONE: "cut_stone",
+    METAL_INGOT: "metal_ingot",
+    CLOTH: "cloth",
+    ROPE: "rope",
+    LEATHER: "leather",
+    GLASS: "glass"
+  }
+} as const;
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -66,9 +90,7 @@ const Game: Component<Props> = (props) => {
   const [isDragging, setIsDragging] = createSignal(false);
   const [dragStart, setDragStart] = createSignal<[number, number]>([0, 0]);
   const [dragEnd, setDragEnd] = createSignal<[number, number]>([0, 0]);
-  const [tickInterval, setTickInterval] = createSignal<NodeJS.Timeout | undefined>();
   const [taskQueues, setTaskQueues] = createSignal<Record<number, UnitTaskQueue[]>>({});
-  const gameTickSystem = getGameTickSystem(() => ({ conn, identity, connected }));
   const [scale, setScale] = createSignal(1);
   const [offsetX, setOffsetX] = createSignal(0);
   const [offsetY, setOffsetY] = createSignal(0);
@@ -77,6 +99,11 @@ const Game: Component<Props> = (props) => {
   const [craftingProgress, setCraftingProgress] = createSignal<number>(0);
   const [transferResourceType, setTransferResourceType] = createSignal("wood");
   const [transferAmount, setTransferAmount] = createSignal<number>(1);
+  
+  // Client-side UI state (not game state - server is source of truth)
+  const [selectedUnits, setSelectedUnits] = createSignal<Set<number>>(new Set());
+  const [combatEffects, setCombatEffects] = createSignal<Map<number, { targetId: number; startTime: number }>>(new Map());
+  const [gatherEffects, setGatherEffects] = createSignal<Map<number, { resourceId: number; startTime: number }>>(new Map());
 
   onMount(() => {
     const connection = conn();
@@ -89,23 +116,7 @@ const Game: Component<Props> = (props) => {
         ...prev,
         [unit.id]: unit
       }));
-      // Convert Unit type to match module_bindings.Unit
-      const convertedUnits = Object.fromEntries(
-        Object.entries(units()).map(([id, unit]) => [
-          id,
-          {
-            ...unit,
-            taskType: unit.taskType || null,
-            targetId: unit.targetId || null,
-            voteColor: unit.voteColor || null,
-            voteGuarantee: unit.voteGuarantee || null,
-            votePrice: unit.votePrice || null,
-            voteOwner: unit.voteOwner || null,
-            storageCapacity: unit.storageCapacity || null
-          }
-        ])
-      );
-      gameTickSystem.updateUnits(convertedUnits);
+      // Server is the source of truth - no client-side updates needed
     });
 
     // Subscribe to resource updates
@@ -115,7 +126,6 @@ const Game: Component<Props> = (props) => {
         ...prev,
         [resource.id]: resource
       }));
-      gameTickSystem.updateResources(resources());
     });
 
     // Subscribe to task queue updates
@@ -136,7 +146,7 @@ const Game: Component<Props> = (props) => {
           [task.unitId]: unitTasks
         };
       });
-      gameTickSystem.updateTaskQueues(Object.values(taskQueues()).flat());
+      // Server is the source of truth - no client-side updates needed
     });
 
     // Subscribe to inventory updates
@@ -185,11 +195,10 @@ const Game: Component<Props> = (props) => {
       if (clickedUnit) {
         if (e.shiftKey) {
           // Add to selection
-          gameTickSystem.selectUnit(clickedUnit.id);
+          setSelectedUnits(prev => new Set([...prev, clickedUnit.id]));
         } else {
           // New selection
-          gameTickSystem.clearSelection();
-          gameTickSystem.selectUnit(clickedUnit.id);
+          setSelectedUnits(new Set([clickedUnit.id]));
         }
       } else {
         // Start box selection
@@ -206,20 +215,24 @@ const Game: Component<Props> = (props) => {
         const [endX, endY] = dragEnd();
         
         // Select units in box
-        Object.values(units()).forEach(unit => {
-          if (unit.position.x >= Math.min(startX, endX) &&
-              unit.position.x <= Math.max(startX, endX) &&
-              unit.position.y >= Math.min(startY, endY) &&
-              unit.position.y <= Math.max(startY, endY)) {
-            gameTickSystem.selectUnit(unit.id);
-          }
-        });
+        const unitsInBox = Object.values(units()).filter(unit =>
+          unit.position.x >= Math.min(startX, endX) &&
+          unit.position.x <= Math.max(startX, endX) &&
+          unit.position.y >= Math.min(startY, endY) &&
+          unit.position.y <= Math.max(startY, endY)
+        );
+        setSelectedUnits(new Set(unitsInBox.map(u => u.id)));
         
         setIsDragging(false);
       } else if (e.button === 2) { // Right click
         // Move selected units
         const [mouseX, mouseY] = getMousePosition(canvas, e);
-        gameTickSystem.moveGroup({ x: mouseX, y: mouseY });
+        const connection = conn();
+        if (connection && selectedUnits().size > 0) {
+          selectedUnits().forEach(unitId => {
+            connection.reducers.queueUnitTask(unitId, "move", JSON.stringify({ x: mouseX, y: mouseY }));
+          });
+        }
       }
     });
 
@@ -292,7 +305,7 @@ const Game: Component<Props> = (props) => {
         });
 
         // Draw selection indicator
-        if (gameTickSystem.isUnitSelected(unit.id)) {
+        if (selectedUnits().has(unit.id)) {
           ctx.strokeStyle = "#00ff00";
           ctx.lineWidth = 2;
           ctx.setLineDash([5, 5]);
@@ -303,7 +316,7 @@ const Game: Component<Props> = (props) => {
         }
 
         // Draw combat effects
-        const combatEffect = gameTickSystem.getCombatEffect(unit.id);
+        const combatEffect = combatEffects().get(unit.id);
         if (combatEffect) {
           const elapsed = Date.now() - combatEffect.startTime;
           if (elapsed < COMBAT_EFFECT_DURATION) {
@@ -324,7 +337,7 @@ const Game: Component<Props> = (props) => {
         }
 
         // Draw gathering effects
-        const gatherEffect = gameTickSystem.getGatherEffect(unit.id);
+        const gatherEffect = gatherEffects().get(unit.id);
         if (gatherEffect) {
           const elapsed = Date.now() - gatherEffect.startTime;
           if (elapsed < 500) {
@@ -430,11 +443,19 @@ const Game: Component<Props> = (props) => {
   // Add resource gathering functions
   const handleGather = (resource: Resource) => {
     if (!hoveredUnit()) return;
-    gameTickSystem.gatherResource(hoveredUnit()!.id, resource.id);
+    const connection = conn();
+    if (connection) {
+      connection.reducers.queueUnitTask(hoveredUnit()!.id, "gather", resource.id);
+    }
   };
 
   const handleGroupGather = (resource: Resource) => {
-    gameTickSystem.gatherGroupResource(resource.id);
+    const connection = conn();
+    if (connection && selectedUnits().size > 0) {
+      selectedUnits().forEach(unitId => {
+        connection.reducers.queueUnitTask(unitId, "gather", resource.id);
+      });
+    }
   };
 
   // Add storage-related functions
@@ -638,7 +659,12 @@ const Game: Component<Props> = (props) => {
                           </div>
                           {task.status === "pending" && (
                             <button
-                              onClick={() => gameTickSystem.cancelUnitTask(task.id)}
+                              onClick={() => {
+                                const connection = conn();
+                                if (connection) {
+                                  connection.reducers.cancelUnitTask(task.id);
+                                }
+                              }}
                               class="rounded bg-red-500 px-2 py-1 text-white hover:bg-red-600"
                             >
                               Cancel
