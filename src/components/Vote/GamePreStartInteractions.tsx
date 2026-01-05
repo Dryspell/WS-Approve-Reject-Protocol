@@ -43,6 +43,14 @@ export default function GamePreStartInteractions(props: {
       const currentState = props.roomsPreStart[props.roomId];
       const wasReady = currentState?.readyUserIds.includes(user.id) || false;
 
+      console.log("Toggle ready:", {
+        roomId: room.id,
+        userId: user.id,
+        currentState,
+        wasReady,
+        allReadyStates: props.roomsPreStart
+      });
+
       // Call the reducer - it's fire-and-forget, the onUpdate callback in parent will update state
       connection.reducers.toggleReady(room.id, user.id);
 

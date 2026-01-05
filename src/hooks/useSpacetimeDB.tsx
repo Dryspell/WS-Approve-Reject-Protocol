@@ -16,11 +16,29 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
   const [connected, setConnected] = createSignal(false);
 
   onMount(() => {
+    // Get the host URL - for cloud it will be like "wss://testnet.spacetimedb.com"
+    const host = import.meta.env.VITE_SPACETIME_HOST || "ws://localhost:3000";
+    const moduleName = import.meta.env.VITE_SPACETIME_MODULE_NAME || import.meta.env.VITE_SPACETIME_DATABASE || "game";
+    const isLocalHost = host.includes('localhost') || host.includes('127.0.0.1');
+    
+    // For local development: clear any stored tokens to ensure fresh identity per window
+    // For production: persist tokens for session continuity
+    if (isLocalHost) {
+      localStorage.removeItem('auth_token');
+      console.log('Local development: Cleared stored auth token for fresh identity');
+    }
+    
     const onConnect = (connection: DbConnection, clientIdentity: Identity, token: string) => {
       setConn(connection);
       setIdentity(clientIdentity);
       setConnected(true);
-      localStorage.setItem('auth_token', token);
+      
+      // Only persist auth tokens for remote/production instances
+      if (!isLocalHost) {
+        localStorage.setItem('auth_token', token);
+        console.log('Saved auth token for production environment');
+      }
+      
       console.log('Connected to SpacetimeDB with identity:', clientIdentity.toHexString());
 
       // Subscribe to all tables
@@ -55,22 +73,16 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
       console.error("Failed to connect to SpacetimeDB:", error);
       setConnected(false);
     };
-
-    // Get the host URL - for cloud it will be like "wss://testnet.spacetimedb.com"
-    const host = import.meta.env.VITE_SPACETIME_HOST || "ws://localhost:3000";
-    const moduleName = import.meta.env.VITE_SPACETIME_MODULE_NAME || import.meta.env.VITE_SPACETIME_DATABASE || "game";
     
     console.log(`Connecting to SpacetimeDB at ${host} with module ${moduleName}`);
 
-    // For local development, don't use stored tokens as they may be invalid
-    // SpacetimeDB local instances don't require authentication
-    const isLocalHost = host.includes('localhost') || host.includes('127.0.0.1');
+    // Load auth token only for remote connections
     const authToken = isLocalHost ? undefined : (localStorage.getItem('auth_token') || undefined);
     
     if (isLocalHost) {
-      console.log('Connecting to local SpacetimeDB (no auth token required)');
+      console.log('🔓 Local development mode: Each window gets a unique identity');
     } else {
-      console.log('Connecting to remote SpacetimeDB with auth token');
+      console.log('🔒 Production mode: Using persisted auth token');
     }
 
     // Create the connection

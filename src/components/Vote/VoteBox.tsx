@@ -293,14 +293,14 @@ const VoteBox: Component = () => {
         <TabsList>
           <For each={Object.entries(rooms())}>
             {([roomId, room]) => (
-              <TabsTrigger value={roomId.toString()}>{room.name}</TabsTrigger>
+              <TabsTrigger value={roomId}>{room.name}</TabsTrigger>
             )}
           </For>
         </TabsList>
 
         <For each={Object.entries(rooms())}>
           {([roomId, room]) => (
-            <TabsContent value={roomId.toString()}>
+            <TabsContent value={roomId}>
               <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
                 <ResizablePanel initialSize={0.15} class="p-2">
                   <For each={room.memberIds}>
@@ -315,7 +315,7 @@ const VoteBox: Component = () => {
                     <div class="flex-1">
                       {!room.startTime ? (
                         <GamePreStartInteractions
-                          roomId={roomId.toString()}
+                          roomId={roomId}
                           rooms={rooms()}
                           user={user}
                           roomsPreStart={roomsReadyState}

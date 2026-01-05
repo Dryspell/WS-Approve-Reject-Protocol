@@ -202,12 +202,12 @@ pub fn send_message(ctx: &ReducerContext, text: String) -> Result<(), String> {
 #[reducer]
 pub fn create_room(
     ctx: &ReducerContext,
-    room_id: String,
+    _room_id: String, // Unused - we use auto-generated ID instead
     name: String,
     creator_id: String,
 ) -> Result<(), String> {
     let room = GameRoom {
-        id: 0,
+        id: 0, // Will be auto-incremented
         name,
         member_ids: vec![creator_id],
         ticket_ids: vec![],
@@ -215,10 +215,13 @@ pub fn create_room(
         start_time: None,
         current_round: 0,
     };
-    ctx.db.game_room().insert(room);
+    
+    // Insert returns the row with the auto-generated ID
+    let inserted_room = ctx.db.game_room().insert(room);
 
+    // Use the actual room ID (as string) for ReadyState
     let ready_state = ReadyState {
-        room_id,
+        room_id: inserted_room.id.to_string(),
         ready_user_ids: vec![],
         round: 0,
     };
