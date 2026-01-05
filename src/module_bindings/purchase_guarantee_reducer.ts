@@ -31,36 +31,30 @@ import {
   deepEqual,
 } from "@clockworklabs/spacetimedb-sdk";
 
-export type CreateRoom = {
-  roomId: string,
-  name: string,
-  creatorId: string,
-  buyinAmount: number,
+export type PurchaseGuarantee = {
+  guaranteeId: number,
 };
 
 /**
  * A namespace for generated helper functions.
  */
-export namespace CreateRoom {
+export namespace PurchaseGuarantee {
   /**
   * A function which returns this type represented as an AlgebraicType.
   * This function is derived from the AlgebraicType used to generate this type.
   */
   export function getTypeScriptAlgebraicType(): AlgebraicType {
     return AlgebraicType.createProductType([
-      new ProductTypeElement("roomId", AlgebraicType.createStringType()),
-      new ProductTypeElement("name", AlgebraicType.createStringType()),
-      new ProductTypeElement("creatorId", AlgebraicType.createStringType()),
-      new ProductTypeElement("buyinAmount", AlgebraicType.createF64Type()),
+      new ProductTypeElement("guaranteeId", AlgebraicType.createI32Type()),
     ]);
   }
 
-  export function serialize(writer: BinaryWriter, value: CreateRoom): void {
-    CreateRoom.getTypeScriptAlgebraicType().serialize(writer, value);
+  export function serialize(writer: BinaryWriter, value: PurchaseGuarantee): void {
+    PurchaseGuarantee.getTypeScriptAlgebraicType().serialize(writer, value);
   }
 
-  export function deserialize(reader: BinaryReader): CreateRoom {
-    return CreateRoom.getTypeScriptAlgebraicType().deserialize(reader);
+  export function deserialize(reader: BinaryReader): PurchaseGuarantee {
+    return PurchaseGuarantee.getTypeScriptAlgebraicType().deserialize(reader);
   }
 
 }

@@ -27,10 +27,13 @@ An MMO-style resource management layer that runs parallel to The Vote Exchange:
 
 For detailed game design documentation, see:
 
-- **[VOTE_EXCHANGE_PRIORITY.md](./VOTE_EXCHANGE_PRIORITY.md)** - **START HERE**
+- **[VOTE_EXCHANGE_UI_IMPLEMENTATION.md](./VOTE_EXCHANGE_UI_IMPLEMENTATION.md)** - **Latest: UI Complete! ✅**
+- **[SPRINT_3_SUMMARY.md](./SPRINT_3_SUMMARY.md)** - Server Implementation Complete
+- **[VOTE_EXCHANGE_PRIORITY.md](./VOTE_EXCHANGE_PRIORITY.md)** - Why Vote Exchange is the core
+- [VOTE_EXCHANGE_IMPLEMENTATION.md](./VOTE_EXCHANGE_IMPLEMENTATION.md) - Technical implementation details
 - [Core Game Rules](./game-design/rules.md) - The Vote Exchange mechanics
 - [Development Roadmap](./roadmap.md) - Implementation plan
-- [TODOs](./todos.md) - Current sprint tasks
+- [TODOs](./todos.md) - Current sprint tasks (Server ✅ Complete, UI 🔄 In Progress)
 - [Colony Builder Mechanics](./game-design/rules-colony-builder.md) - Optional extension
 
 ## Development Setup

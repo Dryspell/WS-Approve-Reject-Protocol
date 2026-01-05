@@ -30,22 +30,22 @@ import {
   Timestamp,
   deepEqual,
 } from "@clockworklabs/spacetimedb-sdk";
-export type Vote = {
+export type Transaction = {
   id: number,
   roomId: number,
-  roundNumber: number,
-  playerId: string,
-  originalOwner: string,
-  color: string | undefined,
-  isForSale: boolean,
-  salePrice: number | undefined,
+  fromPlayer: string,
+  toPlayer: string,
+  transactionType: string,
+  amount: number,
+  voteId: number | undefined,
+  guaranteeId: number | undefined,
   timestamp: Timestamp,
 };
 
 /**
  * A namespace for generated helper functions.
  */
-export namespace Vote {
+export namespace Transaction {
   /**
   * A function which returns this type represented as an AlgebraicType.
   * This function is derived from the AlgebraicType used to generate this type.
@@ -54,22 +54,22 @@ export namespace Vote {
     return AlgebraicType.createProductType([
       new ProductTypeElement("id", AlgebraicType.createI32Type()),
       new ProductTypeElement("roomId", AlgebraicType.createI32Type()),
-      new ProductTypeElement("roundNumber", AlgebraicType.createI32Type()),
-      new ProductTypeElement("playerId", AlgebraicType.createStringType()),
-      new ProductTypeElement("originalOwner", AlgebraicType.createStringType()),
-      new ProductTypeElement("color", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
-      new ProductTypeElement("isForSale", AlgebraicType.createBoolType()),
-      new ProductTypeElement("salePrice", AlgebraicType.createOptionType(AlgebraicType.createF64Type())),
+      new ProductTypeElement("fromPlayer", AlgebraicType.createStringType()),
+      new ProductTypeElement("toPlayer", AlgebraicType.createStringType()),
+      new ProductTypeElement("transactionType", AlgebraicType.createStringType()),
+      new ProductTypeElement("amount", AlgebraicType.createF64Type()),
+      new ProductTypeElement("voteId", AlgebraicType.createOptionType(AlgebraicType.createI32Type())),
+      new ProductTypeElement("guaranteeId", AlgebraicType.createOptionType(AlgebraicType.createI32Type())),
       new ProductTypeElement("timestamp", AlgebraicType.createTimestampType()),
     ]);
   }
 
-  export function serialize(writer: BinaryWriter, value: Vote): void {
-    Vote.getTypeScriptAlgebraicType().serialize(writer, value);
+  export function serialize(writer: BinaryWriter, value: Transaction): void {
+    Transaction.getTypeScriptAlgebraicType().serialize(writer, value);
   }
 
-  export function deserialize(reader: BinaryReader): Vote {
-    return Vote.getTypeScriptAlgebraicType().deserialize(reader);
+  export function deserialize(reader: BinaryReader): Transaction {
+    return Transaction.getTypeScriptAlgebraicType().deserialize(reader);
   }
 
 }

@@ -34,6 +34,9 @@ export type User = {
   identity: Identity,
   name: string | undefined,
   online: boolean,
+  walletBalance: number,
+  bankAccount: number,
+  totalProfitLoss: number,
 };
 
 /**
@@ -49,6 +52,9 @@ export namespace User {
       new ProductTypeElement("identity", AlgebraicType.createIdentityType()),
       new ProductTypeElement("name", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
       new ProductTypeElement("online", AlgebraicType.createBoolType()),
+      new ProductTypeElement("walletBalance", AlgebraicType.createF64Type()),
+      new ProductTypeElement("bankAccount", AlgebraicType.createF64Type()),
+      new ProductTypeElement("totalProfitLoss", AlgebraicType.createF64Type()),
     ]);
   }
 

@@ -314,6 +314,8 @@ pub fn start_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
                     player_id: member_id.clone(),
                     original_owner: member_id.clone(),
                     color: None, // Not set yet
+                    is_for_sale: false,
+                    sale_price: None,
                     timestamp: ctx.timestamp,
                 });
             }
@@ -754,6 +756,8 @@ pub struct Vote {
     player_id: String,        // Current owner of this vote
     original_owner: String,   // Who started with this vote
     color: Option<String>,    // "red" | "blue" | null (not yet set)
+    is_for_sale: bool,        // Whether this vote is listed for sale
+    sale_price: Option<f64>,  // Price if listed for sale
     timestamp: Timestamp,
 }
 
@@ -890,8 +894,10 @@ pub fn transfer_vote_ownership(
         updated_seller.wallet_balance += price;
         ctx.db.user().identity().update(updated_seller);
         
-        // Transfer vote ownership
+        // Transfer vote ownership and remove from sale
         vote.player_id = buyer_id.clone();
+        vote.is_for_sale = false;
+        vote.sale_price = None;
         ctx.db.vote().id().update(vote);
         
         // Record transaction
@@ -906,6 +912,57 @@ pub fn transfer_vote_ownership(
             guarantee_id: None,
             timestamp: ctx.timestamp,
         });
+        
+        Ok(())
+    } else {
+        Err("Vote not found".to_string())
+    }
+}
+
+// Vote Exchange: Set a vote for sale
+#[reducer]
+pub fn set_vote_for_sale(
+    ctx: &ReducerContext,
+    vote_id: i32,
+    price: f64,
+) -> Result<(), String> {
+    if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
+        // Verify caller owns the vote
+        let caller_id = ctx.sender.to_string();
+        if vote.player_id != caller_id {
+            return Err("You don't own this vote".to_string());
+        }
+        
+        if price <= 0.0 {
+            return Err("Price must be greater than 0".to_string());
+        }
+        
+        vote.is_for_sale = true;
+        vote.sale_price = Some(price);
+        ctx.db.vote().id().update(vote);
+        
+        Ok(())
+    } else {
+        Err("Vote not found".to_string())
+    }
+}
+
+// Vote Exchange: Remove a vote from sale
+#[reducer]
+pub fn remove_vote_from_sale(
+    ctx: &ReducerContext,
+    vote_id: i32,
+) -> Result<(), String> {
+    if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
+        // Verify caller owns the vote
+        let caller_id = ctx.sender.to_string();
+        if vote.player_id != caller_id {
+            return Err("You don't own this vote".to_string());
+        }
+        
+        vote.is_for_sale = false;
+        vote.sale_price = None;
+        ctx.db.vote().id().update(vote);
         
         Ok(())
     } else {

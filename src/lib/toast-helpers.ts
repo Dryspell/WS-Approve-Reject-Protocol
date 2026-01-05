@@ -1,268 +1,134 @@
-// Enhanced toast notification helpers for contextual feedback
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 
-export const ToastHelper = {
-  // ===== Resource Management =====
-  resourceGathered: (resourceType: string, amount: number) => {
-    const emoji = getResourceEmoji(resourceType);
+export class ToastHelper {
+  static success(title: string, description?: string) {
     showToast({
-      title: "Resource Gathered",
-      description: `${emoji} +${amount} ${resourceType}`,
+      title,
+      description,
+      variant: "default",
       duration: DEFAULT_TOAST_DURATION,
     });
-  },
+  }
 
-  inventoryFull: (unitId: number) => {
+  static error(description: string, title: string = "Error") {
     showToast({
-      title: "Inventory Full",
-      description: `Unit #${unitId} inventory is at capacity. Transfer resources to storage.`,
+      title,
+      description,
       variant: "error",
       duration: DEFAULT_TOAST_DURATION,
     });
-  },
+  }
 
-  resourceTransferred: (resourceType: string, amount: number, target: string = "storage") => {
-    const emoji = getResourceEmoji(resourceType);
+  static warning(title: string, description: string) {
     showToast({
-      title: "Transfer Complete",
-      description: `${emoji} Transferred ${amount} ${resourceType} to ${target}`,
+      title,
+      description,
+      variant: "warning",
       duration: DEFAULT_TOAST_DURATION,
     });
-  },
+  }
 
-  resourceDepleted: (resourceType: string) => {
-    const emoji = getResourceEmoji(resourceType);
+  static info(title: string, description: string) {
     showToast({
-      title: "Resource Depleted",
-      description: `${emoji} ${resourceType} node is depleted and regenerating`,
-      variant: "error",
+      title,
+      description,
+      variant: "default",
+      duration: DEFAULT_TOAST_DURATION,
+    });
+  }
+
+  // Vote-specific toasts
+  static voteColorChanged(voteId: number, color: string) {
+    const emoji = color === "red" ? "🔴" : "🔵";
+    showToast({
+      title: `${emoji} Vote Color Set`,
+      description: `Vote #${voteId} is now ${color}`,
+      duration: DEFAULT_TOAST_DURATION,
+    });
+  }
+
+  static votePurchased(voteId: number, price: number) {
+    showToast({
+      title: "🎫 Vote Purchased",
+      description: `You bought vote #${voteId} for $${price.toFixed(2)}`,
+      duration: DEFAULT_TOAST_DURATION,
+    });
+  }
+
+  static voteSold(voteId: number, price: number) {
+    showToast({
+      title: "💰 Vote Sold",
+      description: `Your vote #${voteId} was sold for $${price.toFixed(2)}`,
+      duration: DEFAULT_TOAST_DURATION,
+    });
+  }
+
+  static guaranteeCreated(color: string, price: number) {
+    const emoji = color === "red" ? "🔴" : "🔵";
+    showToast({
+      title: "🤝 Guarantee Created",
+      description: `${emoji} guarantee created for $${price.toFixed(2)}`,
+      duration: DEFAULT_TOAST_DURATION,
+    });
+  }
+
+  static guaranteePurchased(price: number) {
+    showToast({
+      title: "✅ Guarantee Purchased",
+      description: `You paid $${price.toFixed(2)} for this guarantee`,
+      duration: DEFAULT_TOAST_DURATION,
+    });
+  }
+
+  static roundStarted(roundNumber: number) {
+    showToast({
+      title: "🎮 Round Started",
+      description: `Round ${roundNumber} has begun. Set your vote colors!`,
       duration: DEFAULT_TOAST_DURATION * 1.5,
     });
-  },
+  }
 
-  // ===== Crafting =====
-  craftingStarted: (recipeName: string, time: number) => {
+  static roundEnded(winner: string, eliminated: string[]) {
     showToast({
-      title: "Crafting Started",
-      description: `🔨 ${recipeName} (${time}s)`,
-      duration: DEFAULT_TOAST_DURATION,
+      title: "⏰ Round Ended",
+      description: `${eliminated.length} player(s) eliminated`,
+      duration: DEFAULT_TOAST_DURATION * 2,
     });
-  },
+  }
 
-  craftingComplete: (recipeName: string) => {
+  static playerEliminated() {
     showToast({
-      title: "Crafting Complete",
-      description: `✨ ${recipeName} has been crafted!`,
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  craftingFailed: (reason: string) => {
-    showToast({
-      title: "Crafting Failed",
-      description: `❌ ${reason}`,
-      variant: "error",
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  // ===== Units & Tasks =====
-  taskQueued: (taskType: string, unitId: number) => {
-    const emoji = getTaskEmoji(taskType);
-    showToast({
-      title: "Task Queued",
-      description: `${emoji} Unit #${unitId}: ${taskType}`,
-      duration: DEFAULT_TOAST_DURATION * 0.8,
-    });
-  },
-
-  taskCompleted: (taskType: string, unitId: number) => {
-    const emoji = getTaskEmoji(taskType);
-    showToast({
-      title: "Task Complete",
-      description: `${emoji} Unit #${unitId} finished ${taskType}`,
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  unitIdle: (unitId: number) => {
-    showToast({
-      title: "Unit Idle",
-      description: `😴 Unit #${unitId} has no tasks. Assign a new task!`,
-      variant: "error",
-      duration: DEFAULT_TOAST_DURATION * 1.2,
-    });
-  },
-
-  // ===== Voting & Market =====
-  voteColorChanged: (unitId: number, color: string) => {
-    showToast({
-      title: "Vote Color Set",
-      description: `🎨 Unit #${unitId} → ${color}`,
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  voteSold: (unitId: number, price: number) => {
-    showToast({
-      title: "Vote Listed",
-      description: `💰 Unit #${unitId} listed for $${price}`,
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  votePurchased: (unitId: number, price: number) => {
-    showToast({
-      title: "Vote Purchased",
-      description: `🎟️ Unit #${unitId} bought for $${price}`,
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  tradeCancelled: (unitId: number) => {
-    showToast({
-      title: "Listing Removed",
-      description: `Unit #${unitId} removed from market`,
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  // ===== Game Events =====
-  roundStarting: (roundNumber: number, timeRemaining: number) => {
-    showToast({
-      title: "Round Starting",
-      description: `🎮 Round ${roundNumber} begins in ${timeRemaining}s`,
-      duration: DEFAULT_TOAST_DURATION * 1.5,
-    });
-  },
-
-  roundEnding: (roundNumber: number) => {
-    showToast({
-      title: "Round Ending Soon",
-      description: `⏰ Round ${roundNumber} - Less than 30 seconds remaining!`,
+      title: "☠️ You Were Eliminated",
+      description: "You voted with the majority",
       variant: "error",
       duration: DEFAULT_TOAST_DURATION * 2,
     });
-  },
+  }
 
-  roundComplete: (roundNumber: number, survived: boolean) => {
+  static playerSurvived() {
     showToast({
-      title: survived ? "Round Survived!" : "Units Eliminated",
-      description: survived 
-        ? `🎉 Your units survived Round ${roundNumber}!` 
-        : `💀 Some units were eliminated in Round ${roundNumber}`,
-      variant: survived ? "default" : "error",
+      title: "✅ You Survived",
+      description: "You were in the minority!",
+      variant: "default",
       duration: DEFAULT_TOAST_DURATION * 1.5,
     });
-  },
+  }
 
-  // ===== Buildings =====
-  buildingCreated: (buildingType: string) => {
+  static gameWon(amount: number) {
     showToast({
-      title: "Building Created",
-      description: `🏗️ ${buildingType} has been constructed`,
+      title: "🎉 You Won!",
+      description: `You won $${amount.toFixed(2)}!`,
+      duration: DEFAULT_TOAST_DURATION * 3,
+    });
+  }
+
+  static insufficientFunds(required: number, available: number) {
+    showToast({
+      title: "💸 Insufficient Funds",
+      description: `You need $${required.toFixed(2)} but only have $${available.toFixed(2)}`,
+      variant: "warning",
       duration: DEFAULT_TOAST_DURATION,
     });
-  },
-
-  buildingUpgraded: (buildingType: string, level: number) => {
-    showToast({
-      title: "Building Upgraded",
-      description: `⬆️ ${buildingType} upgraded to level ${level}`,
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  // ===== Connection & Errors =====
-  connected: () => {
-    showToast({
-      title: "Connected",
-      description: "✅ Connected to SpacetimeDB",
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  disconnected: () => {
-    showToast({
-      title: "Connection Lost",
-      description: "🔌 Attempting to reconnect...",
-      variant: "error",
-      duration: DEFAULT_TOAST_DURATION * 2,
-    });
-  },
-
-  reconnected: () => {
-    showToast({
-      title: "Reconnected",
-      description: "✅ Connection restored",
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  error: (message: string) => {
-    showToast({
-      title: "Error",
-      description: `❌ ${message}`,
-      variant: "error",
-      duration: DEFAULT_TOAST_DURATION * 1.5,
-    });
-  },
-
-  // ===== Generic =====
-  success: (title: string, description: string) => {
-    showToast({
-      title,
-      description: `✅ ${description}`,
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  warning: (title: string, description: string) => {
-    showToast({
-      title,
-      description: `⚠️ ${description}`,
-      variant: "error",
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-
-  info: (title: string, description: string) => {
-    showToast({
-      title,
-      description: `ℹ️ ${description}`,
-      duration: DEFAULT_TOAST_DURATION,
-    });
-  },
-};
-
-// Helper functions for emojis
-function getResourceEmoji(resourceType: string): string {
-  const emojiMap: Record<string, string> = {
-    wood: "🪵",
-    stone: "🪨",
-    metalOre: "⛏️",
-    metal_ore: "⛏️",
-    coal: "⚫",
-    gems: "💎",
-    fiber: "🌾",
-    hide: "🦌",
-    sand: "🏖️",
-    food: "🍎",
-    gold: "💰",
-  };
-  return emojiMap[resourceType] || "📦";
+  }
 }
-
-function getTaskEmoji(taskType: string): string {
-  const emojiMap: Record<string, string> = {
-    gather: "⛏️",
-    move: "🚶",
-    craft: "🔨",
-    build: "🏗️",
-    trade: "💱",
-    transfer: "📦",
-  };
-  return emojiMap[taskType] || "⚙️";
-}
-

@@ -30,38 +30,40 @@ import {
   Timestamp,
   deepEqual,
 } from "@clockworklabs/spacetimedb-sdk";
-
-export type CreateRoom = {
-  roomId: string,
-  name: string,
-  creatorId: string,
-  buyinAmount: number,
+export type GuaranteePurchase = {
+  id: number,
+  guaranteeId: number,
+  buyerId: string,
+  pricePaid: number,
+  timestamp: Timestamp,
 };
 
 /**
  * A namespace for generated helper functions.
  */
-export namespace CreateRoom {
+export namespace GuaranteePurchase {
   /**
   * A function which returns this type represented as an AlgebraicType.
   * This function is derived from the AlgebraicType used to generate this type.
   */
   export function getTypeScriptAlgebraicType(): AlgebraicType {
     return AlgebraicType.createProductType([
-      new ProductTypeElement("roomId", AlgebraicType.createStringType()),
-      new ProductTypeElement("name", AlgebraicType.createStringType()),
-      new ProductTypeElement("creatorId", AlgebraicType.createStringType()),
-      new ProductTypeElement("buyinAmount", AlgebraicType.createF64Type()),
+      new ProductTypeElement("id", AlgebraicType.createI32Type()),
+      new ProductTypeElement("guaranteeId", AlgebraicType.createI32Type()),
+      new ProductTypeElement("buyerId", AlgebraicType.createStringType()),
+      new ProductTypeElement("pricePaid", AlgebraicType.createF64Type()),
+      new ProductTypeElement("timestamp", AlgebraicType.createTimestampType()),
     ]);
   }
 
-  export function serialize(writer: BinaryWriter, value: CreateRoom): void {
-    CreateRoom.getTypeScriptAlgebraicType().serialize(writer, value);
+  export function serialize(writer: BinaryWriter, value: GuaranteePurchase): void {
+    GuaranteePurchase.getTypeScriptAlgebraicType().serialize(writer, value);
   }
 
-  export function deserialize(reader: BinaryReader): CreateRoom {
-    return CreateRoom.getTypeScriptAlgebraicType().deserialize(reader);
+  export function deserialize(reader: BinaryReader): GuaranteePurchase {
+    return GuaranteePurchase.getTypeScriptAlgebraicType().deserialize(reader);
   }
 
 }
+
 

@@ -30,22 +30,22 @@ import {
   Timestamp,
   deepEqual,
 } from "@clockworklabs/spacetimedb-sdk";
-export type Vote = {
+export type Guarantee = {
   id: number,
   roomId: number,
   roundNumber: number,
-  playerId: string,
-  originalOwner: string,
-  color: string | undefined,
-  isForSale: boolean,
-  salePrice: number | undefined,
-  timestamp: Timestamp,
+  sellerId: string,
+  color: string,
+  price: number,
+  guaranteeType: string,
+  isActive: boolean,
+  createdAt: Timestamp,
 };
 
 /**
  * A namespace for generated helper functions.
  */
-export namespace Vote {
+export namespace Guarantee {
   /**
   * A function which returns this type represented as an AlgebraicType.
   * This function is derived from the AlgebraicType used to generate this type.
@@ -55,21 +55,21 @@ export namespace Vote {
       new ProductTypeElement("id", AlgebraicType.createI32Type()),
       new ProductTypeElement("roomId", AlgebraicType.createI32Type()),
       new ProductTypeElement("roundNumber", AlgebraicType.createI32Type()),
-      new ProductTypeElement("playerId", AlgebraicType.createStringType()),
-      new ProductTypeElement("originalOwner", AlgebraicType.createStringType()),
-      new ProductTypeElement("color", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
-      new ProductTypeElement("isForSale", AlgebraicType.createBoolType()),
-      new ProductTypeElement("salePrice", AlgebraicType.createOptionType(AlgebraicType.createF64Type())),
-      new ProductTypeElement("timestamp", AlgebraicType.createTimestampType()),
+      new ProductTypeElement("sellerId", AlgebraicType.createStringType()),
+      new ProductTypeElement("color", AlgebraicType.createStringType()),
+      new ProductTypeElement("price", AlgebraicType.createF64Type()),
+      new ProductTypeElement("guaranteeType", AlgebraicType.createStringType()),
+      new ProductTypeElement("isActive", AlgebraicType.createBoolType()),
+      new ProductTypeElement("createdAt", AlgebraicType.createTimestampType()),
     ]);
   }
 
-  export function serialize(writer: BinaryWriter, value: Vote): void {
-    Vote.getTypeScriptAlgebraicType().serialize(writer, value);
+  export function serialize(writer: BinaryWriter, value: Guarantee): void {
+    Guarantee.getTypeScriptAlgebraicType().serialize(writer, value);
   }
 
-  export function deserialize(reader: BinaryReader): Vote {
-    return Vote.getTypeScriptAlgebraicType().deserialize(reader);
+  export function deserialize(reader: BinaryReader): Guarantee {
+    return Guarantee.getTypeScriptAlgebraicType().deserialize(reader);
   }
 
 }

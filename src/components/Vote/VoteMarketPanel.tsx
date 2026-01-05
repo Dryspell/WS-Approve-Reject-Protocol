@@ -1,46 +1,53 @@
 import { Component, createSignal, For, Show } from "solid-js";
-import type { Unit } from "~/module_bindings/unit_type";
+import type { Vote } from "~/module_bindings/vote_type";
+import type { Transaction } from "~/module_bindings/transaction_type";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { TextField, TextFieldLabel, TextFieldInput } from "~/components/ui/text-field";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import GuaranteeMarket from "./GuaranteeMarket";
+import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { ToastHelper } from "~/lib/toast-helpers";
 
 interface VoteMarketPanelProps {
-  units: Unit[];
+  votes: Vote[];
+  transactions: Transaction[];
+  roomId: number;
+  roundNumber: number;
   currentUserId: string;
-  onBuyVote: (unitId: number, price: number) => void;
-  onSetPrice: (unitId: number, price: number | null) => void;
+  userWalletBalance: number;
 }
 
 type SortOption = "price-asc" | "price-desc" | "color" | "recent";
 
 const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
+  const { conn } = useSpacetimeDB();
   const [sortBy, setSortBy] = createSignal<SortOption>("price-asc");
   const [filterColor, setFilterColor] = createSignal<string | null>(null);
   const [priceInputs, setPriceInputs] = createSignal<Record<number, number>>({});
 
-  // Get units for sale (not owned by current user)
+  // Get votes for sale (not owned by current user)
   const marketListings = () => {
-    let listings = props.units.filter(
-      (u) => u.votePrice !== null && u.voteOwner !== props.currentUserId
+    let listings = props.votes.filter(
+      (v) => v.isForSale && v.playerId !== props.currentUserId && v.roomId === props.roomId
     );
 
     // Filter by color if selected
     if (filterColor()) {
-      listings = listings.filter((u) => u.voteColor === filterColor());
+      listings = listings.filter((v) => v.color === filterColor());
     }
 
     // Sort
     const sorted = [...listings].sort((a, b) => {
       switch (sortBy()) {
         case "price-asc":
-          return (a.votePrice || 0) - (b.votePrice || 0);
+          return (a.salePrice || 0) - (b.salePrice || 0);
         case "price-desc":
-          return (b.votePrice || 0) - (a.votePrice || 0);
+          return (b.salePrice || 0) - (a.salePrice || 0);
         case "color":
-          return (a.voteColor || "").localeCompare(b.voteColor || "");
+          return (a.color || "").localeCompare(b.color || "");
         case "recent":
           return b.id - a.id; // Assuming higher IDs are more recent
         default:
@@ -51,62 +58,94 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
     return sorted;
   };
 
-  // Get user's units
-  const myUnits = () => {
-    return props.units.filter((u) => u.voteOwner === props.currentUserId);
+  // Get user's votes
+  const myVotes = () => {
+    return props.votes.filter((v) => v.playerId === props.currentUserId && v.roomId === props.roomId);
   };
 
-  // Get trade history (simplified - would need actual trade records)
+  // Get trade history
   const recentTrades = () => {
-    // Mock data - in real app, this would come from trade history table
-    return props.units
-      .filter((u) => u.votePrice !== null)
-      .slice(0, 10)
-      .map((u) => ({
-        unitId: u.id,
-        price: u.votePrice!,
-        color: u.voteColor || "unknown",
-        timestamp: Date.now() - Math.random() * 3600000, // Mock timestamp
-      }));
+    return props.transactions
+      .filter((t) => t.roomId === props.roomId && t.transactionType === "vote_sale")
+      .sort((a, b) => Number(b.timestamp) - Number(a.timestamp))
+      .slice(0, 20);
   };
 
-  const handleSetPrice = (unitId: number) => {
-    const price = priceInputs()[unitId];
-    if (price && price > 0) {
-      props.onSetPrice(unitId, price);
+  const handleBuyVote = async (voteId: number, price: number) => {
+    const connection = conn();
+    if (!connection) return;
+
+    if (props.userWalletBalance < price) {
+      ToastHelper.warning("Insufficient Funds", `You need $${price} but have $${props.userWalletBalance.toFixed(2)}`);
+      return;
+    }
+
+    try {
+      connection.reducers.transferVoteOwnership(voteId, props.currentUserId, price);
+      ToastHelper.success("Vote Purchased", `You bought vote #${voteId} for $${price}`);
+    } catch (error) {
+      ToastHelper.error("Failed to purchase vote");
     }
   };
 
-  const handleRemoveFromMarket = (unitId: number) => {
-    props.onSetPrice(unitId, null);
+  const handleSetPrice = async (voteId: number) => {
+    const connection = conn();
+    if (!connection) return;
+
+    const price = priceInputs()[voteId];
+    if (price && price > 0) {
+      try {
+        connection.reducers.setVoteForSale(voteId, price);
+        ToastHelper.success("Vote Listed", `Vote #${voteId} is now listed for $${price}`);
+      } catch (error) {
+        ToastHelper.error("Failed to list vote");
+      }
+    }
   };
 
-  const setPriceInput = (unitId: number, value: number) => {
-    setPriceInputs((prev) => ({ ...prev, [unitId]: value }));
+  const handleRemoveFromMarket = async (voteId: number) => {
+    const connection = conn();
+    if (!connection) return;
+
+    try {
+      connection.reducers.removeVoteFromSale(voteId);
+      ToastHelper.success("Vote Unlisted", `Vote #${voteId} removed from market`);
+    } catch (error) {
+      ToastHelper.error("Failed to remove vote");
+    }
   };
 
-  const getColorDot = (color: string | null) => {
-    return (
-      <div
-        class="h-3 w-3 rounded-full border border-gray-300"
-        style={{ "background-color": color || "#ccc" }}
-      />
-    );
+  const setPriceInput = (voteId: number, value: number) => {
+    setPriceInputs((prev) => ({ ...prev, [voteId]: value }));
+  };
+
+  const getColorIcon = (color: string | null) => {
+    switch (color) {
+      case "red":
+        return "🔴";
+      case "blue":
+        return "🔵";
+      default:
+        return "⚪";
+    }
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Vote Market</CardTitle>
+        <CardTitle>Market</CardTitle>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="market">
-          <TabsList class="grid w-full grid-cols-3">
+          <TabsList class="grid w-full grid-cols-4">
             <TabsTrigger value="market">
-              Market ({marketListings().length})
+              Votes ({marketListings().length})
             </TabsTrigger>
-            <TabsTrigger value="my-units">
-              My Units ({myUnits().length})
+            <TabsTrigger value="my-votes">
+              Mine ({myVotes().length})
+            </TabsTrigger>
+            <TabsTrigger value="guarantees">
+              Guarantees
             </TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
@@ -134,10 +173,8 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                 }
               >
                 <option value="all">All Colors</option>
-                <option value="red">Red</option>
-                <option value="blue">Blue</option>
-                <option value="green">Green</option>
-                <option value="yellow">Yellow</option>
+                <option value="red">🔴 Red</option>
+                <option value="blue">🔵 Blue</option>
               </select>
             </div>
 
@@ -148,29 +185,30 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                   each={marketListings()}
                   fallback={
                     <div class="rounded border border-dashed p-8 text-center text-sm text-gray-500">
-                      No units for sale matching your filters
+                      No votes for sale matching your filters
                     </div>
                   }
                 >
-                  {(unit) => (
+                  {(vote) => (
                     <div class="rounded-lg border p-3 transition-all hover:border-blue-300 hover:shadow-sm">
                       <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                          {getColorDot(unit.voteColor)}
+                          <span class="text-2xl">{getColorIcon(vote.color)}</span>
                           <div>
-                            <div class="font-medium">Unit #{unit.id}</div>
+                            <div class="font-medium">Vote #{vote.id}</div>
                             <div class="text-xs text-gray-500">
-                              Color: {unit.voteColor || "None"}
+                              From: {vote.playerId.slice(0, 8)}...
                             </div>
                           </div>
                         </div>
                         <div class="flex items-center gap-2">
-                          <Badge variant="outline" class="text-lg font-bold">
-                            ${unit.votePrice}
+                          <Badge variant="outline" class="text-base font-bold">
+                            ${vote.salePrice}
                           </Badge>
                           <Button
                             size="sm"
-                            onClick={() => props.onBuyVote(unit.id, unit.votePrice!)}
+                            onClick={() => handleBuyVote(vote.id, vote.salePrice!)}
+                            disabled={props.userWalletBalance < (vote.salePrice || 0)}
                           >
                             Buy
                           </Button>
@@ -183,66 +221,67 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
             </ScrollArea>
           </TabsContent>
 
-          {/* My Units Tab */}
-          <TabsContent value="my-units" class="space-y-3">
+          {/* My Votes Tab */}
+          <TabsContent value="my-votes" class="space-y-3">
             <ScrollArea class="h-96">
               <div class="space-y-2 pr-4">
                 <For
-                  each={myUnits()}
+                  each={myVotes()}
                   fallback={
                     <div class="rounded border border-dashed p-8 text-center text-sm text-gray-500">
-                      You don't own any units yet
+                      You don't own any votes yet
                     </div>
                   }
                 >
-                  {(unit) => (
+                  {(vote) => (
                     <div class="rounded-lg border p-3">
                       <div class="mb-2 flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                          {getColorDot(unit.voteColor)}
+                          <span class="text-2xl">{getColorIcon(vote.color)}</span>
                           <div>
-                            <div class="font-medium">Unit #{unit.id}</div>
+                            <div class="font-medium">Vote #{vote.id}</div>
                             <div class="text-xs text-gray-500">
-                              Color: {unit.voteColor || "None"}
+                              {vote.playerId === vote.originalOwner ? "Original" : "Purchased"}
                             </div>
                           </div>
                         </div>
-                        <Show when={unit.votePrice !== null}>
-                          <Badge variant="secondary">Listed: ${unit.votePrice}</Badge>
+                        <Show when={vote.isForSale}>
+                          <Badge variant="secondary">Listed: ${vote.salePrice}</Badge>
                         </Show>
                       </div>
 
-                      <Show when={unit.votePrice === null}>
+                      <Show when={!vote.isForSale}>
                         {/* Not listed - show price input */}
                         <div class="flex gap-2">
                           <TextField class="flex-1">
                             <TextFieldInput
                               type="number"
-                              min="1"
+                              min="0.01"
+                              step="0.5"
                               placeholder="Set price..."
-                              value={priceInputs()[unit.id] || ""}
+                              value={priceInputs()[vote.id] || ""}
                               onInput={(e) =>
-                                setPriceInput(unit.id, parseInt(e.currentTarget.value, 10))
+                                setPriceInput(vote.id, parseFloat(e.currentTarget.value))
                               }
                             />
                           </TextField>
                           <Button
                             size="sm"
-                            onClick={() => handleSetPrice(unit.id)}
-                            disabled={!priceInputs()[unit.id] || priceInputs()[unit.id] <= 0}
+                            onClick={() => handleSetPrice(vote.id)}
+                            disabled={!priceInputs()[vote.id] || priceInputs()[vote.id] <= 0}
                           >
                             List for Sale
                           </Button>
                         </div>
                       </Show>
 
-                      <Show when={unit.votePrice !== null}>
+                      <Show when={vote.isForSale}>
                         {/* Listed - show remove button */}
                         <Button
                           size="sm"
                           variant="outline"
                           class="w-full"
-                          onClick={() => handleRemoveFromMarket(unit.id)}
+                          onClick={() => handleRemoveFromMarket(vote.id)}
                         >
                           Remove from Market
                         </Button>
@@ -252,6 +291,16 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                 </For>
               </div>
             </ScrollArea>
+          </TabsContent>
+
+          {/* Guarantees Tab */}
+          <TabsContent value="guarantees">
+            <GuaranteeMarket
+              roomId={props.roomId}
+              roundNumber={props.roundNumber}
+              currentUserId={props.currentUserId}
+              userWalletBalance={props.userWalletBalance}
+            />
           </TabsContent>
 
           {/* Trade History Tab */}
@@ -266,22 +315,35 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                     </div>
                   }
                 >
-                  {(trade) => (
-                    <div class="rounded-lg border p-3">
-                      <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                          {getColorDot(trade.color)}
-                          <div>
-                            <div class="text-sm font-medium">Unit #{trade.unitId}</div>
-                            <div class="text-xs text-gray-500">
-                              {new Date(trade.timestamp).toLocaleTimeString()}
+                  {(trade) => {
+                    const isBuyer = trade.toPlayer === props.currentUserId;
+                    const isSeller = trade.fromPlayer === props.currentUserId;
+                    
+                    return (
+                      <div class="rounded-lg border p-3">
+                        <div class="flex items-center justify-between">
+                          <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                              <span class="text-lg">🎫</span>
+                              <div>
+                                <div class="text-sm font-medium">
+                                  Vote Sale
+                                  {isBuyer && <Badge variant="default" class="ml-2 text-xs">You bought</Badge>}
+                                  {isSeller && <Badge variant="secondary" class="ml-2 text-xs">You sold</Badge>}
+                                </div>
+                                <div class="text-xs text-gray-500">
+                                  {new Date(Number(trade.timestamp) / 1000).toLocaleTimeString()}
+                                </div>
+                              </div>
                             </div>
                           </div>
+                          <Badge variant="outline" class="text-sm font-bold">
+                            ${trade.amount.toFixed(2)}
+                          </Badge>
                         </div>
-                        <Badge variant="outline">${trade.price}</Badge>
                       </div>
-                    </div>
-                  )}
+                    );
+                  }}
                 </For>
               </div>
             </ScrollArea>

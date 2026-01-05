@@ -40,6 +40,8 @@ import { CreateChatRoom } from "./create_chat_room_reducer.ts";
 export { CreateChatRoom };
 import { CreateGameEvent } from "./create_game_event_reducer.ts";
 export { CreateGameEvent };
+import { CreateGuarantee } from "./create_guarantee_reducer.ts";
+export { CreateGuarantee };
 import { CreateRoom } from "./create_room_reducer.ts";
 export { CreateRoom };
 import { CreateStorageBuilding } from "./create_storage_building_reducer.ts";
@@ -56,8 +58,12 @@ import { MoveUnit } from "./move_unit_reducer.ts";
 export { MoveUnit };
 import { ProcessRoundVotes } from "./process_round_votes_reducer.ts";
 export { ProcessRoundVotes };
+import { PurchaseGuarantee } from "./purchase_guarantee_reducer.ts";
+export { PurchaseGuarantee };
 import { QueueUnitTask } from "./queue_unit_task_reducer.ts";
 export { QueueUnitTask };
+import { RemoveVoteFromSale } from "./remove_vote_from_sale_reducer.ts";
+export { RemoveVoteFromSale };
 import { SendChatMessage } from "./send_chat_message_reducer.ts";
 export { SendChatMessage };
 import { SendMessage } from "./send_message_reducer.ts";
@@ -70,6 +76,10 @@ import { SetUnitTask } from "./set_unit_task_reducer.ts";
 export { SetUnitTask };
 import { SetUnitVoteColor } from "./set_unit_vote_color_reducer.ts";
 export { SetUnitVoteColor };
+import { SetVoteColor } from "./set_vote_color_reducer.ts";
+export { SetVoteColor };
+import { SetVoteForSale } from "./set_vote_for_sale_reducer.ts";
+export { SetVoteForSale };
 import { StartGame } from "./start_game_reducer.ts";
 export { StartGame };
 import { ToggleReady } from "./toggle_ready_reducer.ts";
@@ -78,6 +88,8 @@ import { TradeUnitVote } from "./trade_unit_vote_reducer.ts";
 export { TradeUnitVote };
 import { TransferResources } from "./transfer_resources_reducer.ts";
 export { TransferResources };
+import { TransferVoteOwnership } from "./transfer_vote_ownership_reducer.ts";
+export { TransferVoteOwnership };
 import { UpgradeUnit } from "./upgrade_unit_reducer.ts";
 export { UpgradeUnit };
 
@@ -94,12 +106,18 @@ import { GameRoomTableHandle } from "./game_room_table.ts";
 export { GameRoomTableHandle };
 import { GameTickTimerTableHandle } from "./game_tick_timer_table.ts";
 export { GameTickTimerTableHandle };
+import { GuaranteeTableHandle } from "./guarantee_table.ts";
+export { GuaranteeTableHandle };
+import { GuaranteePurchaseTableHandle } from "./guarantee_purchase_table.ts";
+export { GuaranteePurchaseTableHandle };
 import { MessageTableHandle } from "./message_table.ts";
 export { MessageTableHandle };
 import { ReadyStateTableHandle } from "./ready_state_table.ts";
 export { ReadyStateTableHandle };
 import { ResourceTableHandle } from "./resource_table.ts";
 export { ResourceTableHandle };
+import { TransactionTableHandle } from "./transaction_table.ts";
+export { TransactionTableHandle };
 import { UnitTableHandle } from "./unit_table.ts";
 export { UnitTableHandle };
 import { UnitInventoryTableHandle } from "./unit_inventory_table.ts";
@@ -126,12 +144,18 @@ import { GameRoom } from "./game_room_type.ts";
 export { GameRoom };
 import { GameTickTimer } from "./game_tick_timer_type.ts";
 export { GameTickTimer };
+import { Guarantee } from "./guarantee_type.ts";
+export { Guarantee };
+import { GuaranteePurchase } from "./guarantee_purchase_type.ts";
+export { GuaranteePurchase };
 import { Message } from "./message_type.ts";
 export { Message };
 import { ReadyState } from "./ready_state_type.ts";
 export { ReadyState };
 import { Resource } from "./resource_type.ts";
 export { Resource };
+import { Transaction } from "./transaction_type.ts";
+export { Transaction };
 import { Unit } from "./unit_type.ts";
 export { Unit };
 import { UnitInventory } from "./unit_inventory_type.ts";
@@ -179,6 +203,16 @@ const REMOTE_MODULE = {
       rowType: GameTickTimer.getTypeScriptAlgebraicType(),
       primaryKey: "scheduledId",
     },
+    guarantee: {
+      tableName: "guarantee",
+      rowType: Guarantee.getTypeScriptAlgebraicType(),
+      primaryKey: "id",
+    },
+    guarantee_purchase: {
+      tableName: "guarantee_purchase",
+      rowType: GuaranteePurchase.getTypeScriptAlgebraicType(),
+      primaryKey: "id",
+    },
     message: {
       tableName: "message",
       rowType: Message.getTypeScriptAlgebraicType(),
@@ -191,6 +225,11 @@ const REMOTE_MODULE = {
     resource: {
       tableName: "resource",
       rowType: Resource.getTypeScriptAlgebraicType(),
+      primaryKey: "id",
+    },
+    transaction: {
+      tableName: "transaction",
+      rowType: Transaction.getTypeScriptAlgebraicType(),
       primaryKey: "id",
     },
     unit: {
@@ -241,6 +280,10 @@ const REMOTE_MODULE = {
       reducerName: "create_game_event",
       argsType: CreateGameEvent.getTypeScriptAlgebraicType(),
     },
+    create_guarantee: {
+      reducerName: "create_guarantee",
+      argsType: CreateGuarantee.getTypeScriptAlgebraicType(),
+    },
     create_room: {
       reducerName: "create_room",
       argsType: CreateRoom.getTypeScriptAlgebraicType(),
@@ -273,9 +316,17 @@ const REMOTE_MODULE = {
       reducerName: "process_round_votes",
       argsType: ProcessRoundVotes.getTypeScriptAlgebraicType(),
     },
+    purchase_guarantee: {
+      reducerName: "purchase_guarantee",
+      argsType: PurchaseGuarantee.getTypeScriptAlgebraicType(),
+    },
     queue_unit_task: {
       reducerName: "queue_unit_task",
       argsType: QueueUnitTask.getTypeScriptAlgebraicType(),
+    },
+    remove_vote_from_sale: {
+      reducerName: "remove_vote_from_sale",
+      argsType: RemoveVoteFromSale.getTypeScriptAlgebraicType(),
     },
     send_chat_message: {
       reducerName: "send_chat_message",
@@ -301,6 +352,14 @@ const REMOTE_MODULE = {
       reducerName: "set_unit_vote_color",
       argsType: SetUnitVoteColor.getTypeScriptAlgebraicType(),
     },
+    set_vote_color: {
+      reducerName: "set_vote_color",
+      argsType: SetVoteColor.getTypeScriptAlgebraicType(),
+    },
+    set_vote_for_sale: {
+      reducerName: "set_vote_for_sale",
+      argsType: SetVoteForSale.getTypeScriptAlgebraicType(),
+    },
     start_game: {
       reducerName: "start_game",
       argsType: StartGame.getTypeScriptAlgebraicType(),
@@ -316,6 +375,10 @@ const REMOTE_MODULE = {
     transfer_resources: {
       reducerName: "transfer_resources",
       argsType: TransferResources.getTypeScriptAlgebraicType(),
+    },
+    transfer_vote_ownership: {
+      reducerName: "transfer_vote_ownership",
+      argsType: TransferVoteOwnership.getTypeScriptAlgebraicType(),
     },
     upgrade_unit: {
       reducerName: "upgrade_unit",
@@ -352,6 +415,7 @@ export type Reducer = never
 | { name: "ClientConnected", args: ClientConnected }
 | { name: "CreateChatRoom", args: CreateChatRoom }
 | { name: "CreateGameEvent", args: CreateGameEvent }
+| { name: "CreateGuarantee", args: CreateGuarantee }
 | { name: "CreateRoom", args: CreateRoom }
 | { name: "CreateStorageBuilding", args: CreateStorageBuilding }
 | { name: "GameTick", args: GameTick }
@@ -360,17 +424,22 @@ export type Reducer = never
 | { name: "JoinRoom", args: JoinRoom }
 | { name: "MoveUnit", args: MoveUnit }
 | { name: "ProcessRoundVotes", args: ProcessRoundVotes }
+| { name: "PurchaseGuarantee", args: PurchaseGuarantee }
 | { name: "QueueUnitTask", args: QueueUnitTask }
+| { name: "RemoveVoteFromSale", args: RemoveVoteFromSale }
 | { name: "SendChatMessage", args: SendChatMessage }
 | { name: "SendMessage", args: SendMessage }
 | { name: "SetChatPermission", args: SetChatPermission }
 | { name: "SetName", args: SetName }
 | { name: "SetUnitTask", args: SetUnitTask }
 | { name: "SetUnitVoteColor", args: SetUnitVoteColor }
+| { name: "SetVoteColor", args: SetVoteColor }
+| { name: "SetVoteForSale", args: SetVoteForSale }
 | { name: "StartGame", args: StartGame }
 | { name: "ToggleReady", args: ToggleReady }
 | { name: "TradeUnitVote", args: TradeUnitVote }
 | { name: "TransferResources", args: TransferResources }
+| { name: "TransferVoteOwnership", args: TransferVoteOwnership }
 | { name: "UpgradeUnit", args: UpgradeUnit }
 ;
 
@@ -433,19 +502,35 @@ export class RemoteReducers {
     this.connection.offReducer("create_game_event", callback);
   }
 
-  createRoom(roomId: string, name: string, creatorId: string) {
-    const __args = { roomId, name, creatorId };
+  createGuarantee(roomId: number, roundNumber: number, color: string, price: number, guaranteeType: string) {
+    const __args = { roomId, roundNumber, color, price, guaranteeType };
+    let __writer = new BinaryWriter(1024);
+    CreateGuarantee.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("create_guarantee", __argsBuffer, this.setCallReducerFlags.createGuaranteeFlags);
+  }
+
+  onCreateGuarantee(callback: (ctx: ReducerEventContext, roomId: number, roundNumber: number, color: string, price: number, guaranteeType: string) => void) {
+    this.connection.onReducer("create_guarantee", callback);
+  }
+
+  removeOnCreateGuarantee(callback: (ctx: ReducerEventContext, roomId: number, roundNumber: number, color: string, price: number, guaranteeType: string) => void) {
+    this.connection.offReducer("create_guarantee", callback);
+  }
+
+  createRoom(roomId: string, name: string, creatorId: string, buyinAmount: number) {
+    const __args = { roomId, name, creatorId, buyinAmount };
     let __writer = new BinaryWriter(1024);
     CreateRoom.getTypeScriptAlgebraicType().serialize(__writer, __args);
     let __argsBuffer = __writer.getBuffer();
     this.connection.callReducer("create_room", __argsBuffer, this.setCallReducerFlags.createRoomFlags);
   }
 
-  onCreateRoom(callback: (ctx: ReducerEventContext, roomId: string, name: string, creatorId: string) => void) {
+  onCreateRoom(callback: (ctx: ReducerEventContext, roomId: string, name: string, creatorId: string, buyinAmount: number) => void) {
     this.connection.onReducer("create_room", callback);
   }
 
-  removeOnCreateRoom(callback: (ctx: ReducerEventContext, roomId: string, name: string, creatorId: string) => void) {
+  removeOnCreateRoom(callback: (ctx: ReducerEventContext, roomId: string, name: string, creatorId: string, buyinAmount: number) => void) {
     this.connection.offReducer("create_room", callback);
   }
 
@@ -553,6 +638,22 @@ export class RemoteReducers {
     this.connection.offReducer("process_round_votes", callback);
   }
 
+  purchaseGuarantee(guaranteeId: number) {
+    const __args = { guaranteeId };
+    let __writer = new BinaryWriter(1024);
+    PurchaseGuarantee.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("purchase_guarantee", __argsBuffer, this.setCallReducerFlags.purchaseGuaranteeFlags);
+  }
+
+  onPurchaseGuarantee(callback: (ctx: ReducerEventContext, guaranteeId: number) => void) {
+    this.connection.onReducer("purchase_guarantee", callback);
+  }
+
+  removeOnPurchaseGuarantee(callback: (ctx: ReducerEventContext, guaranteeId: number) => void) {
+    this.connection.offReducer("purchase_guarantee", callback);
+  }
+
   queueUnitTask(unitId: number, taskType: string, targetId: string) {
     const __args = { unitId, taskType, targetId };
     let __writer = new BinaryWriter(1024);
@@ -567,6 +668,22 @@ export class RemoteReducers {
 
   removeOnQueueUnitTask(callback: (ctx: ReducerEventContext, unitId: number, taskType: string, targetId: string) => void) {
     this.connection.offReducer("queue_unit_task", callback);
+  }
+
+  removeVoteFromSale(voteId: number) {
+    const __args = { voteId };
+    let __writer = new BinaryWriter(1024);
+    RemoveVoteFromSale.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("remove_vote_from_sale", __argsBuffer, this.setCallReducerFlags.removeVoteFromSaleFlags);
+  }
+
+  onRemoveVoteFromSale(callback: (ctx: ReducerEventContext, voteId: number) => void) {
+    this.connection.onReducer("remove_vote_from_sale", callback);
+  }
+
+  removeOnRemoveVoteFromSale(callback: (ctx: ReducerEventContext, voteId: number) => void) {
+    this.connection.offReducer("remove_vote_from_sale", callback);
   }
 
   sendChatMessage(roomId: string, text: string, roundNumber: number | undefined) {
@@ -665,6 +782,38 @@ export class RemoteReducers {
     this.connection.offReducer("set_unit_vote_color", callback);
   }
 
+  setVoteColor(voteId: number, color: string) {
+    const __args = { voteId, color };
+    let __writer = new BinaryWriter(1024);
+    SetVoteColor.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("set_vote_color", __argsBuffer, this.setCallReducerFlags.setVoteColorFlags);
+  }
+
+  onSetVoteColor(callback: (ctx: ReducerEventContext, voteId: number, color: string) => void) {
+    this.connection.onReducer("set_vote_color", callback);
+  }
+
+  removeOnSetVoteColor(callback: (ctx: ReducerEventContext, voteId: number, color: string) => void) {
+    this.connection.offReducer("set_vote_color", callback);
+  }
+
+  setVoteForSale(voteId: number, price: number) {
+    const __args = { voteId, price };
+    let __writer = new BinaryWriter(1024);
+    SetVoteForSale.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("set_vote_for_sale", __argsBuffer, this.setCallReducerFlags.setVoteForSaleFlags);
+  }
+
+  onSetVoteForSale(callback: (ctx: ReducerEventContext, voteId: number, price: number) => void) {
+    this.connection.onReducer("set_vote_for_sale", callback);
+  }
+
+  removeOnSetVoteForSale(callback: (ctx: ReducerEventContext, voteId: number, price: number) => void) {
+    this.connection.offReducer("set_vote_for_sale", callback);
+  }
+
   startGame(roomId: number) {
     const __args = { roomId };
     let __writer = new BinaryWriter(1024);
@@ -729,6 +878,22 @@ export class RemoteReducers {
     this.connection.offReducer("transfer_resources", callback);
   }
 
+  transferVoteOwnership(voteId: number, buyerId: string, price: number) {
+    const __args = { voteId, buyerId, price };
+    let __writer = new BinaryWriter(1024);
+    TransferVoteOwnership.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("transfer_vote_ownership", __argsBuffer, this.setCallReducerFlags.transferVoteOwnershipFlags);
+  }
+
+  onTransferVoteOwnership(callback: (ctx: ReducerEventContext, voteId: number, buyerId: string, price: number) => void) {
+    this.connection.onReducer("transfer_vote_ownership", callback);
+  }
+
+  removeOnTransferVoteOwnership(callback: (ctx: ReducerEventContext, voteId: number, buyerId: string, price: number) => void) {
+    this.connection.offReducer("transfer_vote_ownership", callback);
+  }
+
   upgradeUnit(unitId: number, upgradeType: string) {
     const __args = { unitId, upgradeType };
     let __writer = new BinaryWriter(1024);
@@ -761,6 +926,11 @@ export class SetReducerFlags {
   createGameEventFlags: CallReducerFlags = 'FullUpdate';
   createGameEvent(flags: CallReducerFlags) {
     this.createGameEventFlags = flags;
+  }
+
+  createGuaranteeFlags: CallReducerFlags = 'FullUpdate';
+  createGuarantee(flags: CallReducerFlags) {
+    this.createGuaranteeFlags = flags;
   }
 
   createRoomFlags: CallReducerFlags = 'FullUpdate';
@@ -798,9 +968,19 @@ export class SetReducerFlags {
     this.processRoundVotesFlags = flags;
   }
 
+  purchaseGuaranteeFlags: CallReducerFlags = 'FullUpdate';
+  purchaseGuarantee(flags: CallReducerFlags) {
+    this.purchaseGuaranteeFlags = flags;
+  }
+
   queueUnitTaskFlags: CallReducerFlags = 'FullUpdate';
   queueUnitTask(flags: CallReducerFlags) {
     this.queueUnitTaskFlags = flags;
+  }
+
+  removeVoteFromSaleFlags: CallReducerFlags = 'FullUpdate';
+  removeVoteFromSale(flags: CallReducerFlags) {
+    this.removeVoteFromSaleFlags = flags;
   }
 
   sendChatMessageFlags: CallReducerFlags = 'FullUpdate';
@@ -833,6 +1013,16 @@ export class SetReducerFlags {
     this.setUnitVoteColorFlags = flags;
   }
 
+  setVoteColorFlags: CallReducerFlags = 'FullUpdate';
+  setVoteColor(flags: CallReducerFlags) {
+    this.setVoteColorFlags = flags;
+  }
+
+  setVoteForSaleFlags: CallReducerFlags = 'FullUpdate';
+  setVoteForSale(flags: CallReducerFlags) {
+    this.setVoteForSaleFlags = flags;
+  }
+
   startGameFlags: CallReducerFlags = 'FullUpdate';
   startGame(flags: CallReducerFlags) {
     this.startGameFlags = flags;
@@ -851,6 +1041,11 @@ export class SetReducerFlags {
   transferResourcesFlags: CallReducerFlags = 'FullUpdate';
   transferResources(flags: CallReducerFlags) {
     this.transferResourcesFlags = flags;
+  }
+
+  transferVoteOwnershipFlags: CallReducerFlags = 'FullUpdate';
+  transferVoteOwnership(flags: CallReducerFlags) {
+    this.transferVoteOwnershipFlags = flags;
   }
 
   upgradeUnitFlags: CallReducerFlags = 'FullUpdate';
@@ -887,6 +1082,14 @@ export class RemoteTables {
     return new GameTickTimerTableHandle(this.connection.clientCache.getOrCreateTable<GameTickTimer>(REMOTE_MODULE.tables.game_tick_timer));
   }
 
+  get guarantee(): GuaranteeTableHandle {
+    return new GuaranteeTableHandle(this.connection.clientCache.getOrCreateTable<Guarantee>(REMOTE_MODULE.tables.guarantee));
+  }
+
+  get guaranteePurchase(): GuaranteePurchaseTableHandle {
+    return new GuaranteePurchaseTableHandle(this.connection.clientCache.getOrCreateTable<GuaranteePurchase>(REMOTE_MODULE.tables.guarantee_purchase));
+  }
+
   get message(): MessageTableHandle {
     return new MessageTableHandle(this.connection.clientCache.getOrCreateTable<Message>(REMOTE_MODULE.tables.message));
   }
@@ -897,6 +1100,10 @@ export class RemoteTables {
 
   get resource(): ResourceTableHandle {
     return new ResourceTableHandle(this.connection.clientCache.getOrCreateTable<Resource>(REMOTE_MODULE.tables.resource));
+  }
+
+  get transaction(): TransactionTableHandle {
+    return new TransactionTableHandle(this.connection.clientCache.getOrCreateTable<Transaction>(REMOTE_MODULE.tables.transaction));
   }
 
   get unit(): UnitTableHandle {

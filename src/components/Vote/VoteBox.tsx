@@ -5,7 +5,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Resizable, ResizableHandle, ResizablePanel } from "../ui/resizable";
 import UserAvatarCard from "../Chat/UserAvatarCard";
-import Game from "./Game";
+import VotingInterface from "./VotingInterface";
 import GamePreStartInteractions from "./GamePreStartInteractions";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "../ui/toast";
@@ -22,6 +22,7 @@ const VoteBox: Component = () => {
   const [newRoomName, setNewRoomName] = createSignal("");
   const [showCreateRoom, setShowCreateRoom] = createSignal(false);
   const [subscriptionsSet, setSubscriptionsSet] = createSignal(false);
+  const [currentUser, setCurrentUser] = createSignal<any>(null);
   const [user, setUser] = createLocalStorageSignal("chat-user", {
     name: randAnimal(),
     id: createId(),
@@ -29,6 +30,26 @@ const VoteBox: Component = () => {
 
   // Initialize SpacetimeDB connection
   const { conn, connected, identity } = useSpacetimeDB();
+
+  // Subscribe to current user data
+  createEffect(() => {
+    const connection = conn();
+    if (!connection || !connected() || !identity()) return;
+
+    // Load current user
+    const identityHex = identity()!.toHexString();
+    const userFromDb = connection.db.user.identity().find(identity()!);
+    if (userFromDb) {
+      setCurrentUser(userFromDb);
+    }
+
+    // Subscribe to user updates
+    connection.db.user.onUpdate((ctx, oldUser, newUser) => {
+      if (newUser.identity.toHexString() === identityHex) {
+        setCurrentUser(newUser);
+      }
+    });
+  });
 
   // Wait for connection to be established, then load data and subscribe
   createEffect(() => {
@@ -313,7 +334,7 @@ const VoteBox: Component = () => {
                 <ResizablePanel initialSize={0.85} class="p-2">
                   <div class="flex h-full flex-col gap-4">
                     <div class="flex-1">
-                      {!room.startTime ? (
+                      <Show when={!room.startTime}>
                         <GamePreStartInteractions
                           roomId={roomId}
                           rooms={rooms()}
@@ -323,12 +344,20 @@ const VoteBox: Component = () => {
                           conn={conn}
                           connected={connected}
                         />
-                      ) : (
-                        <Game
+                      </Show>
+                      <Show when={room.startTime && currentUser()}>
+                        <VotingInterface
                           room={room}
-                          user={user()}
+                          currentUser={currentUser()!}
                         />
-                      )}
+                      </Show>
+                      <Show when={room.startTime && !currentUser()}>
+                        <div class="flex h-full items-center justify-center">
+                          <div class="text-center">
+                            <p class="text-lg text-gray-500">Loading user data...</p>
+                          </div>
+                        </div>
+                      </Show>
                     </div>
                   </div>
                 </ResizablePanel>

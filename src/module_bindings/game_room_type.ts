@@ -38,6 +38,11 @@ export type GameRoom = {
   offerIds: string[],
   startTime: bigint | undefined,
   currentRound: number,
+  buyinAmount: number,
+  potSize: number,
+  roundDuration: number,
+  gameStatus: string,
+  eliminatedPlayers: string[],
 };
 
 /**
@@ -57,6 +62,11 @@ export namespace GameRoom {
       new ProductTypeElement("offerIds", AlgebraicType.createArrayType(AlgebraicType.createStringType())),
       new ProductTypeElement("startTime", AlgebraicType.createOptionType(AlgebraicType.createI64Type())),
       new ProductTypeElement("currentRound", AlgebraicType.createI32Type()),
+      new ProductTypeElement("buyinAmount", AlgebraicType.createF64Type()),
+      new ProductTypeElement("potSize", AlgebraicType.createF64Type()),
+      new ProductTypeElement("roundDuration", AlgebraicType.createI32Type()),
+      new ProductTypeElement("gameStatus", AlgebraicType.createStringType()),
+      new ProductTypeElement("eliminatedPlayers", AlgebraicType.createArrayType(AlgebraicType.createStringType())),
     ]);
   }
 
