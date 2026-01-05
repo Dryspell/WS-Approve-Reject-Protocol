@@ -13,7 +13,11 @@ import { Resizable, ResizableHandle, ResizablePanel } from "~/components/ui/resi
 import { circle, rect } from "~/lib/canvas/shapes";
 import { getMousePosition } from "~/lib/canvas/utils";
 import { withinCircle } from "../../lib/canvas/spatial";
-import { CRAFTING_RECIPES, canCraftRecipe, getCraftingCost, getCraftingTime, type CraftingRecipe } from "~/lib/crafting";
+import { type CraftingRecipe } from "~/lib/crafting";
+import UnitDetailsPanel from "./UnitDetailsPanel";
+import ResourcePanel from "./ResourcePanel";
+import InventoryPanel from "./InventoryPanel";
+import CraftingPanel from "./CraftingPanel";
 
 // Resource types (moved from game-tick.ts)
 export const RESOURCE_TYPES = {
@@ -91,11 +95,10 @@ const Game: Component<Props> = (props) => {
   const [offsetX, setOffsetX] = createSignal(0);
   const [offsetY, setOffsetY] = createSignal(0);
   const [inventories, setInventories] = createSignal<Record<number, UnitInventory>>({});
-  const [transferResourceType, setTransferResourceType] = createSignal("wood");
-  const [transferAmount, setTransferAmount] = createSignal<number>(1);
   
   // Client-side UI state (not game state - server is source of truth)
   const [selectedUnits, setSelectedUnits] = createSignal<Set<number>>(new Set());
+  const [waypoints, setWaypoints] = createSignal<Record<number, { x: number; y: number }>>({});
 
   onMount(() => {
     const connection = conn();
@@ -297,9 +300,24 @@ const Game: Component<Props> = (props) => {
         const [mouseX, mouseY] = getMousePosition(canvas, e);
         const connection = conn();
         if (connection && selectedUnits().size > 0) {
+          // Set waypoints for visual feedback
+          const newWaypoints: Record<number, { x: number; y: number }> = {};
           selectedUnits().forEach(unitId => {
+            newWaypoints[unitId] = { x: mouseX, y: mouseY };
             connection.reducers.queueUnitTask(unitId, "move", JSON.stringify({ x: mouseX, y: mouseY }));
           });
+          setWaypoints(prev => ({ ...prev, ...newWaypoints }));
+          
+          // Clear waypoints after 3 seconds (visual feedback timeout)
+          setTimeout(() => {
+            setWaypoints(prev => {
+              const updated = { ...prev };
+              selectedUnits().forEach(unitId => {
+                delete updated[unitId];
+              });
+              return updated;
+            });
+          }, 3000);
         }
       }
     });
@@ -444,6 +462,52 @@ const Game: Component<Props> = (props) => {
           ctx.textBaseline = "middle";
           ctx.fillText("S", unit.position.x, unit.position.y);
         }
+
+        // Draw waypoint indicator and movement path
+        const waypoint = waypoints()[unit.id];
+        if (waypoint) {
+          // Draw movement path line
+          ctx.beginPath();
+          ctx.moveTo(unit.position.x, unit.position.y);
+          ctx.lineTo(waypoint.x, waypoint.y);
+          ctx.strokeStyle = "#00aaff";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([10, 5]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Draw waypoint marker (flag icon)
+          const flagX = waypoint.x;
+          const flagY = waypoint.y;
+          
+          // Flag pole
+          ctx.beginPath();
+          ctx.moveTo(flagX, flagY);
+          ctx.lineTo(flagX, flagY - 15);
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          
+          // Flag
+          ctx.beginPath();
+          ctx.moveTo(flagX, flagY - 15);
+          ctx.lineTo(flagX + 10, flagY - 10);
+          ctx.lineTo(flagX, flagY - 5);
+          ctx.closePath();
+          ctx.fillStyle = "#00aaff";
+          ctx.fill();
+          ctx.strokeStyle = "#0088cc";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          // Waypoint circle (pulsing effect)
+          const pulseRadius = 8 + Math.sin(Date.now() / 200) * 2;
+          ctx.beginPath();
+          ctx.arc(flagX, flagY, pulseRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(0, 170, 255, 0.5)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       });
 
       // Draw selection box
@@ -541,7 +605,6 @@ const Game: Component<Props> = (props) => {
 
   const handleTransferResources = (
     sourceId: number,
-    targetId: number,
     resourceType: string,
     amount: number
   ) => {
@@ -556,12 +619,24 @@ const Game: Component<Props> = (props) => {
       return;
     }
 
+    // Find target storage
+    const targetStorage = Object.values(units()).find(u => u.isStorage);
+    if (!targetStorage) {
+      showToast({
+        title: "Error",
+        description: "No storage building found",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
+
     try {
       // Fire-and-forget reducer call
-      connection.reducers.transferResources(sourceId, targetId, resourceType, amount);
+      connection.reducers.transferResources(sourceId, targetStorage.id, resourceType, amount);
       showToast({
         title: "Success",
-        description: "Resources will be transferred",
+        description: `Transferred ${amount} ${resourceType} to storage`,
         duration: DEFAULT_TOAST_DURATION,
       });
     } catch (error) {
@@ -580,27 +655,13 @@ const Game: Component<Props> = (props) => {
     const connection = conn();
     if (!connection || !connected() || !hoveredUnit()) return;
 
-    const recipe = CRAFTING_RECIPES[recipeId as keyof typeof CRAFTING_RECIPES] as CraftingRecipe;
-    if (!recipe) return;
-
-    const inventory = inventories()[hoveredUnit()!.id];
-    if (!inventory || !canCraftRecipe(inventory as any, recipe)) {
-      showToast({
-        title: "Error",
-        description: "Not enough resources to craft this item",
-        variant: "error",
-        duration: DEFAULT_TOAST_DURATION,
-      });
-      return;
-    }
-
     try {
       // Fire-and-forget reducer call - server will handle crafting progress
       connection.reducers.queueUnitTask(hoveredUnit()!.id, "craft", recipeId);
       
       showToast({
         title: "Success",
-        description: `Crafting ${recipe.name} - check task queue for progress`,
+        description: `Started crafting - check task queue for progress`,
         duration: DEFAULT_TOAST_DURATION,
       });
     } catch (error) {
@@ -609,6 +670,18 @@ const Game: Component<Props> = (props) => {
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to start crafting",
         variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    }
+  };
+
+  const handleCancelTask = (taskId: number) => {
+    const connection = conn();
+    if (connection) {
+      connection.reducers.cancelUnitTask(taskId);
+      showToast({
+        title: "Task Cancelled",
+        description: "Task removed from queue",
         duration: DEFAULT_TOAST_DURATION,
       });
     }
@@ -667,201 +740,40 @@ const Game: Component<Props> = (props) => {
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel initialSize={0.25} class="overflow-hidden">
-          <div class="p-4">
-            <h3 class="mb-4 text-lg font-semibold">Details</h3>
-            <Show when={hoveredUnit()}>
-              <div class="rounded-lg border p-4">
-                <div class="space-y-2">
-                  <div class="flex items-center gap-2">
-                    <div
-                      class="h-4 w-4 rounded-full"
-                      style={{ "background-color": hoveredUnit()?.voteColor || "#ccc" }}
-                    />
-                    <span class="font-semibold">Unit {hoveredUnit()?.id}</span>
-                  </div>
-                  <div class="text-sm text-gray-600">
-                    <div>Owner: {hoveredUnit()?.voteOwner || "None"}</div>
-                    <div>Vote Color: {hoveredUnit()?.voteColor || "None"}</div>
-                    <div>Vote Guarantee: {hoveredUnit()?.voteGuarantee || "None"}</div>
-                    <div>Price: {hoveredUnit()?.votePrice || "Not for sale"}</div>
-                  </div>
-                  <div class="mt-4 flex gap-2">
-                    <button
-                      onClick={() => handleVoteColorChange(hoveredUnit()!.id, "red")}
-                      class="rounded bg-red-500 px-2 py-1 text-white hover:bg-red-600"
-                    >
-                      Red
-                    </button>
-                    <button
-                      onClick={() => handleVoteColorChange(hoveredUnit()!.id, "blue")}
-                      class="rounded bg-blue-500 px-2 py-1 text-white hover:bg-blue-600"
-                    >
-                      Blue
-                    </button>
-                    {hoveredUnit()?.votePrice === null ? (
-                      <button
-                        onClick={() => handleVoteTrade(hoveredUnit()!.id, 100)}
-                        class="rounded bg-green-500 px-2 py-1 text-white hover:bg-green-600"
-                      >
-                        Sell
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleVoteTrade(hoveredUnit()!.id, hoveredUnit()!.votePrice!)}
-                        class="rounded bg-yellow-500 px-2 py-1 text-white hover:bg-yellow-600"
-                      >
-                        Buy ({hoveredUnit()?.votePrice})
-                      </button>
-                    )}
-                  </div>
-                  
-                  {/* Task Queue */}
-                  <div class="mt-4">
-                    <h4 class="mb-2 font-semibold">Task Queue</h4>
-                    <div class="space-y-2">
-                      {(taskQueues()[hoveredUnit()!.id] || []).map(task => (
-                        <div class="flex items-center justify-between rounded border p-2">
-                          <div>
-                            <div class="font-medium">{task.taskType}</div>
-                            <div class="text-sm text-gray-500">Status: {task.status}</div>
-                          </div>
-                          {task.status === "pending" && (
-                            <button
-                              onClick={() => {
-                                const connection = conn();
-                                if (connection) {
-                                  connection.reducers.cancelUnitTask(task.id);
-                                }
-                              }}
-                              class="rounded bg-red-500 px-2 py-1 text-white hover:bg-red-600"
-                            >
-                              Cancel
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Show>
-            <Show when={hoveredResource()}>
-              <div class="mt-4 rounded-lg border p-4">
-                <div class="space-y-2">
-                  <div class="flex items-center gap-2">
-                    <div
-                      class="h-4 w-4 rounded-full"
-                      style={{ "background-color": RESOURCE_COLORS[hoveredResource()!.resourceType.toLowerCase()] || "#ccc" }}
-                    />
-                    <span class="font-semibold">{hoveredResource()!.resourceType}</span>
-                  </div>
-                  <div class="text-sm text-gray-600">
-                    <div>Amount: {hoveredResource()!.amount}</div>
-                  </div>
-                  <div class="mt-4 flex gap-2">
-                    <button
-                      onClick={() => handleGather(hoveredResource()!)}
-                      class="rounded bg-green-500 px-2 py-1 text-white hover:bg-green-600"
-                    >
-                      Gather
-                    </button>
-                    <button
-                      onClick={() => handleGroupGather(hoveredResource()!)}
-                      class="rounded bg-green-700 px-2 py-1 text-white hover:bg-green-800"
-                    >
-                      Group Gather
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </Show>
-            <Show when={inventories()[hoveredUnit()!.id]}>
-              <div class="mt-4 rounded-lg border p-4">
-                <div class="space-y-2">
-                  <h4 class="font-semibold">Inventory</h4>
-                  <div class="grid grid-cols-2 gap-2">
-                    <div>Wood: {inventories()[hoveredUnit()!.id]?.wood || 0}</div>
-                    <div>Stone: {inventories()[hoveredUnit()!.id]?.stone || 0}</div>
-                    <div>Metal Ore: {inventories()[hoveredUnit()!.id]?.metalOre || 0}</div>
-                    <div>Capacity: {inventories()[hoveredUnit()!.id]?.maxCapacity || 0}</div>
-                  </div>
-                  
-                  {!hoveredUnit()!.isStorage && (
-                    <div class="mt-4">
-                      <h4 class="font-semibold">Transfer Resources</h4>
-                      <div class="space-y-2">
-                        <select class="w-full rounded border p-1" value={transferResourceType()} onChange={(e) => setTransferResourceType(e.currentTarget.value)}>
-                          <option value="wood">Wood</option>
-                          <option value="stone">Stone</option>
-                          <option value="gold">Gold</option>
-                        </select>
-                        <input
-                          type="number"
-                          min="1"
-                          max={inventories()[hoveredUnit()!.id]?.maxCapacity || 0}
-                          class="w-full rounded border p-1"
-                          placeholder="Amount"
-                          value={transferAmount()}
-                          onInput={(e) => setTransferAmount(parseInt(e.currentTarget.value, 10))}
-                        />
-                        <button
-                          onClick={() => {
-                            const targetStorage = Object.values(units()).find(u => u.isStorage);
-                            if (!targetStorage) {
-                              showToast({
-                                title: "Error",
-                                description: "No storage building found to transfer resources to.",
-                                duration: DEFAULT_TOAST_DURATION,
-                              });
-                              return;
-                            }
-                            if (transferAmount() > 0) {
-                              handleTransferResources(
-                                hoveredUnit()!.id,
-                                targetStorage.id,
-                                transferResourceType(),
-                                transferAmount()
-                              );
-                            }
-                          }}
-                          class="w-full rounded bg-blue-500 px-2 py-1 text-white hover:bg-blue-600"
-                        >
-                          Transfer to Storage
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Show>
+          <div class="space-y-4 p-4">
+            <h3 class="text-lg font-semibold">Details</h3>
             
-            {/* Add Crafting Panel */}
-            <Show when={hoveredUnit()}>
-              <div class="mt-4 rounded-lg border p-4">
-                <h4 class="mb-4 font-semibold">Crafting</h4>
-                <div class="space-y-4">
-                  {Object.values(CRAFTING_RECIPES).map(recipe => (
-                    <div class="rounded border p-3">
-                      <div class="mb-2">
-                        <h5 class="font-medium">{recipe.name}</h5>
-                        <p class="text-sm text-gray-600">{recipe.description}</p>
-                      </div>
-                      <div class="mb-2 text-sm">
-                        <div class="text-gray-700">Cost: {getCraftingCost(recipe)}</div>
-                        <div class="text-gray-700">Time: {recipe.craftTime / 1000}s</div>
-                      </div>
-                      <button
-                        onClick={() => handleStartCrafting(recipe.id)}
-                        disabled={!canCraftRecipe(inventories()[hoveredUnit()!.id] as any, recipe)}
-                        class="w-full rounded bg-blue-500 px-2 py-1 text-white hover:bg-blue-600 disabled:bg-gray-400"
-                      >
-                        Craft
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Show>
+            {/* Unit Details Panel */}
+            <UnitDetailsPanel
+              unit={hoveredUnit()}
+              taskQueues={taskQueues()}
+              onVoteColorChange={handleVoteColorChange}
+              onVoteTrade={handleVoteTrade}
+              onCancelTask={handleCancelTask}
+            />
+
+            {/* Resource Panel */}
+            <ResourcePanel
+              resource={hoveredResource()}
+              selectedUnitsCount={selectedUnits().size}
+              onGather={handleGather}
+              onGroupGather={handleGroupGather}
+            />
+
+            {/* Inventory Panel */}
+            <InventoryPanel
+              unit={hoveredUnit()}
+              inventory={hoveredUnit() ? inventories()[hoveredUnit()!.id] : undefined}
+              storageExists={Object.values(units()).some(u => u.isStorage)}
+              onTransferResources={handleTransferResources}
+            />
+
+            {/* Crafting Panel */}
+            <CraftingPanel
+              unit={hoveredUnit()}
+              inventory={hoveredUnit() ? inventories()[hoveredUnit()!.id] : undefined}
+              onStartCrafting={handleStartCrafting}
+            />
           </div>
         </ResizablePanel>
       </Resizable>
