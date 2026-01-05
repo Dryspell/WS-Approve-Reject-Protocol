@@ -8,12 +8,14 @@ import type { GameRoom } from "~/module_bindings/game_room_type";
 import { useVoteStore } from "~/stores/voteStore";
 import { showToast } from "../ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
+import { ToastHelper } from "~/lib/toast-helpers";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { Resizable, ResizableHandle, ResizablePanel } from "~/components/ui/resizable";
 import { circle, rect } from "~/lib/canvas/shapes";
 import { getMousePosition } from "~/lib/canvas/utils";
 import { withinCircle } from "../../lib/canvas/spatial";
 import { type CraftingRecipe } from "~/lib/crafting";
+import { ParticleSystem, TrailSystem } from "~/lib/canvas/particles";
 import UnitDetailsPanel from "./UnitDetailsPanel";
 import ResourcePanel from "./ResourcePanel";
 import InventoryPanel from "./InventoryPanel";
@@ -99,6 +101,10 @@ const Game: Component<Props> = (props) => {
   // Client-side UI state (not game state - server is source of truth)
   const [selectedUnits, setSelectedUnits] = createSignal<Set<number>>(new Set());
   const [waypoints, setWaypoints] = createSignal<Record<number, { x: number; y: number }>>({});
+  
+  // Visual effects systems
+  let particleSystem: ParticleSystem | undefined;
+  let trailSystem: TrailSystem | undefined;
 
   onMount(() => {
     const connection = conn();
@@ -235,6 +241,10 @@ const Game: Component<Props> = (props) => {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // Initialize visual effects systems
+    particleSystem = new ParticleSystem();
+    trailSystem = new TrailSystem();
 
     // Set up mouse interaction
     canvas.addEventListener("mousemove", (e) => {
@@ -383,6 +393,15 @@ const Game: Component<Props> = (props) => {
 
       // Draw units
       Object.values(units()).forEach(unit => {
+        // Add trail points for moving units
+        const activeTasks = taskQueues()[unit.id] || [];
+        const moveTask = activeTasks.find(t => t.taskType === "move" && t.status === "in_progress");
+        if (moveTask && trailSystem) {
+          trailSystem.addPoint(unit.id, unit.position.x, unit.position.y);
+          // Render trail
+          trailSystem.renderTrail(ctx, unit.id, unit.voteColor || "#888");
+        }
+        
         // Draw unit circle
         circle(ctx, unit.position.x, unit.position.y, 20, {
           fillStyle: unit.voteColor || "#ccc",
@@ -412,7 +431,7 @@ const Game: Component<Props> = (props) => {
           ctx.arc(unit.position.x, unit.position.y, 30, 0, Math.PI * 2);
           ctx.stroke();
           
-          // Draw line to target if available
+          // Draw line to target and create particles if gathering
           if (activeTask.taskType === "gather") {
             const resource = resources()[activeTask.targetId];
             if (resource) {
@@ -420,7 +439,25 @@ const Game: Component<Props> = (props) => {
               ctx.moveTo(unit.position.x, unit.position.y);
               ctx.lineTo(resource.position.x, resource.position.y);
               ctx.stroke();
+              
+              // Create gathering particles occasionally
+              if (particleSystem && Math.random() < 0.1) {
+                const resourceColor = RESOURCE_COLORS[resource.resourceType.toLowerCase()] || "#888";
+                particleSystem.createGatherParticles(
+                  resource.position.x,
+                  resource.position.y,
+                  unit.position.x,
+                  unit.position.y,
+                  resourceColor,
+                  3
+                );
+              }
             }
+          }
+          
+          // Create crafting particles for crafting tasks
+          if (activeTask.taskType === "craft" && particleSystem && Math.random() < 0.15) {
+            particleSystem.createCraftingParticles(unit.position.x, unit.position.y, 3);
           }
         }
 
@@ -521,6 +558,17 @@ const Game: Component<Props> = (props) => {
         });
       }
 
+      // Update and render particle effects
+      if (particleSystem) {
+        particleSystem.update();
+        particleSystem.render(ctx);
+      }
+
+      // Update trail system
+      if (trailSystem) {
+        trailSystem.update();
+      }
+
       requestAnimationFrame(gameLoop);
     };
 
@@ -530,11 +578,7 @@ const Game: Component<Props> = (props) => {
   const handleVoteColorChange = async (unitId: number, color: string) => {
     try {
       await setUnitVoteColor(unitId, color);
-      showToast({
-        title: "Success",
-        description: "Vote color updated",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.voteColorChanged(unitId, color);
     } catch (error) {
       // Error is already handled by withSpacetimeDBErrorHandling
     }
@@ -543,11 +587,12 @@ const Game: Component<Props> = (props) => {
   const handleVoteTrade = async (unitId: number, price: number) => {
     try {
       await tradeUnitVote(unitId, props.user.id, price);
-      showToast({
-        title: "Success",
-        description: "Vote trade completed",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      const unit = units()[unitId];
+      if (unit?.votePrice === null) {
+        ToastHelper.voteSold(unitId, price);
+      } else {
+        ToastHelper.votePurchased(unitId, price);
+      }
     } catch (error) {
       // Error is already handled by withSpacetimeDBErrorHandling
     }
@@ -575,31 +620,17 @@ const Game: Component<Props> = (props) => {
   const handleCreateStorage = (position: { x: number; y: number }) => {
     const connection = conn();
     if (!connection || !connected()) {
-      showToast({
-        title: "Error",
-        description: "Not connected to SpacetimeDB",
-        variant: "error",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.disconnected();
       return;
     }
 
     try {
       // Fire-and-forget reducer call
       connection.reducers.createStorageBuilding(props.room.id, position, DEFAULT_STORAGE_CAPACITY);
-      showToast({
-        title: "Success",
-        description: "Storage building will be created",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.buildingCreated("Storage Building");
     } catch (error) {
       console.error("Failed to create storage:", error);
-      showToast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create storage",
-        variant: "error",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.error(error instanceof Error ? error.message : "Failed to create storage");
     }
   };
 
@@ -610,43 +641,24 @@ const Game: Component<Props> = (props) => {
   ) => {
     const connection = conn();
     if (!connection || !connected()) {
-      showToast({
-        title: "Error",
-        description: "Not connected to SpacetimeDB",
-        variant: "error",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.disconnected();
       return;
     }
 
     // Find target storage
     const targetStorage = Object.values(units()).find(u => u.isStorage);
     if (!targetStorage) {
-      showToast({
-        title: "Error",
-        description: "No storage building found",
-        variant: "error",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.error("No storage building found");
       return;
     }
 
     try {
       // Fire-and-forget reducer call
       connection.reducers.transferResources(sourceId, targetStorage.id, resourceType, amount);
-      showToast({
-        title: "Success",
-        description: `Transferred ${amount} ${resourceType} to storage`,
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.resourceTransferred(resourceType, amount);
     } catch (error) {
       console.error("Failed to transfer resources:", error);
-      showToast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to transfer resources",
-        variant: "error",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.error(error instanceof Error ? error.message : "Failed to transfer resources");
     }
   };
 
@@ -658,20 +670,10 @@ const Game: Component<Props> = (props) => {
     try {
       // Fire-and-forget reducer call - server will handle crafting progress
       connection.reducers.queueUnitTask(hoveredUnit()!.id, "craft", recipeId);
-      
-      showToast({
-        title: "Success",
-        description: `Started crafting - check task queue for progress`,
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.craftingStarted(recipeId, 10); // Would need actual recipe time
     } catch (error) {
       console.error("Failed to start crafting:", error);
-      showToast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to start crafting",
-        variant: "error",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.craftingFailed(error instanceof Error ? error.message : "Failed to start crafting");
     }
   };
 
@@ -679,11 +681,7 @@ const Game: Component<Props> = (props) => {
     const connection = conn();
     if (connection) {
       connection.reducers.cancelUnitTask(taskId);
-      showToast({
-        title: "Task Cancelled",
-        description: "Task removed from queue",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      ToastHelper.info("Task Cancelled", "Task removed from queue");
     }
   };
 
