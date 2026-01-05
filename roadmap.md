@@ -2,131 +2,254 @@
 
 ## Vision & Overview
 
-SocketSignal is a unique multiplayer game combining market-based voting mechanics with colony-building elements. Players manage colonies of laborers who participate in voting rounds, with minority voters surviving each round while building and managing resources in real-time.
+SocketSignal is a **market-based voting game** (The Vote Exchange) where players trade votes in a minority-wins system. The core gameplay loop is vote trading and strategic voting, with optional colony-building elements layered on top.
 
-### Core Pillars
-- **Real-time Multiplayer**: Powered by SpacetimeDB for instant state synchronization
-- **Strategic Depth**: Market dynamics, resource management, and voting strategy
-- **Social Gameplay**: Trading, alliances, and competitive colony building
-- **Scalable Design**: Multi-timeframe gameplay across different server tiers
+### Core Pillars (Priority Order)
+1. **The Vote Exchange**: Binary voting with minority-wins elimination (THE CORE GAME)
+2. **Market Trading**: Buy/sell votes and guarantees between players
+3. **Strategic Depth**: Bluffing, guarantees, wallet management
+4. **Real-time Multiplayer**: Powered by SpacetimeDB for instant state synchronization
+5. **Colony Builder Extension**: Optional MMO/resource layer (future expansion)
 
 ---
 
 ## Current State ✅
 
-### Completed Features
+### Core Vote Exchange (Priority 1)
+- ✅ VoteMarketPanel UI (needs guarantee system)
+- ✅ RoundTimer with phase indicators
+- ✅ Basic vote color setting (red/blue)
+- ✅ Round history visualization
+- ⚠️ **Missing**: Vote guarantees (public/private)
+- ⚠️ **Missing**: Vote tallying and minority calculation
+- ⚠️ **Missing**: Player elimination system
+- ⚠️ **Missing**: Wallet/money system for trading
+- ⚠️ **Missing**: Pot distribution logic
+- ⚠️ **Missing**: Multiple votes per player
+
+### Infrastructure (Supporting Core Game)
 - ✅ SpacetimeDB integration with official SDK
 - ✅ Type-safe Rust → TypeScript bindings
-- ✅ Basic unit movement and selection system
-- ✅ Resource gathering and inventory management
-- ✅ Crafting system with recipes
-- ✅ Vote state management and trading interface
 - ✅ Chat system with rooms and permissions
 - ✅ Connection status handling with auto-reconnect
-- ✅ Canvas-based unit visualization
-- ✅ Task queue system for units
-- ✅ Storage buildings for resource management
-- ✅ Basic UI components from Solid-UI (Button, Card, Badge, Resizable, Toast, etc.)
+- ✅ Solid-UI component library integration
+- ✅ Toast notification system
 
-### Active Development
-- 🔄 Full unit movement controls (right-click to move)
-- 🔄 Resource transfer UI improvements
-- 🔄 Game.tsx component refactoring
+### Colony Builder Extension (Priority 2 - Future)
+- ✅ Canvas-based unit visualization
+- ✅ Basic unit movement and selection
+- ✅ Resource gathering and inventory
+- ✅ Crafting system with recipes
+- ✅ Storage buildings
 
 ---
 
-## Phase 1: Core UI/UX Modernization 🎨
+## Phase 0: Core Vote Exchange Implementation 🎯
+
+**Priority**: CRITICAL | **Timeline**: 3-4 weeks
+
+This is THE core game. Everything else is secondary. Based on game-design/rules.md.
+
+### 0.1 Vote Ownership & Multiple Votes System
+- [ ] Update database schema: Player can own multiple votes
+  - Extend Vote table to track ownership transfers
+  - Add `vote_count` to User/Player table
+  - Track original owner vs current owner
+  
+- [ ] Implement vote ownership transfer
+  - Reducer: `transfer_vote(from_player, to_player, vote_id, price)`
+  - Update VoteMarketPanel to handle vote purchases
+  - Show "You own X votes" in UI
+  
+- [ ] Vote splitting interface
+  - Player with 2+ votes can split them (e.g., 1 red, 1 blue)
+  - UI: Vote allocation panel (drag votes to red/blue columns)
+  - Guarantee minority if you split evenly
+
+### 0.2 Wallet & Money System
+- [ ] Implement player wallet system
+  - Database: Add `wallet_balance` to User table
+  - Database: Add `bank_account` for saved currency
+  - Initial buy-in creates pot and sets wallet
+  
+- [ ] Transaction system
+  - Track all trades (vote sales, guarantee purchases)
+  - Deduct from buyer's wallet, add to seller's wallet
+  - Transaction history table for audit
+  
+- [ ] Pot management
+  - Track pot size (sum of buy-ins)
+  - Display pot size prominently in UI
+  - Pot distribution logic (winner takes all, or split)
+
+### 0.3 Guarantee System (Critical Feature)
+- [ ] **Public Guarantees** (one buyer only)
+  - Database: `guarantee_type: 'public' | 'private'`
+  - Seller promises to vote a specific color
+  - Once purchased, removed from market
+  - Buyer pays for information
+  
+- [ ] **Private Guarantees** (multiple buyers)
+  - Same seller can sell to multiple buyers
+  - Each buyer pays for the promise
+  - Seller can bluff (break promise)
+  
+- [ ] Guarantee UI
+  - Separate section in VoteMarketPanel
+  - "Sell Guarantee" button (choose color, price, type)
+  - "Buy Guarantee" for listed guarantees
+  - Show active guarantees you've purchased
+  - Warning: "Guarantees can be broken!"
+
+### 0.4 Vote Tallying & Elimination
+- [ ] End-of-round vote processing
+  - Count red vs blue votes
+  - Determine minority color
+  - Calculate who survives (minority voters)
+  
+- [ ] Player elimination system
+  - Mark eliminated players
+  - Remove from active player list
+  - They keep their wallet but can't vote
+  - Optional: Allow re-buy-in at higher cost
+  
+- [ ] Tie handling
+  - If votes are tied, game ends
+  - Split pot proportionate to vote count
+  - Display tie resolution UI
+
+### 0.5 Game Termination & Pot Distribution
+- [ ] Win conditions
+  - 1-2 players remaining: winners take pot
+  - Tie: split pot by vote proportion
+  - Display winner announcement
+  
+- [ ] Pot distribution logic
+  - Calculate winner's share
+  - Update wallet balances
+  - Show profit/loss summary for all players
+  - Transaction: pot → winner's wallet
+  
+- [ ] Game summary screen
+  - Show all rounds played
+  - Final standings (profit/loss per player)
+  - Trade history
+  - "Play Again" button
+
+### 0.6 Core Voting UI (Traditional Interface)
+- [ ] **Lobby/Pre-Game Screen**
+  - Player list with buy-in status
+  - Set buy-in amount
+  - "Ready" button
+  - Start game when all ready
+  
+- [ ] **Main Game Screen** (replace canvas focus)
+  - Top: Pot size, round number, timer
+  - Left: Player list with vote counts
+  - Center: Your votes (drag to set colors)
+  - Right: Market panel (votes, guarantees)
+  - Bottom: Chat
+  
+- [ ] **Vote Setting Interface**
+  - Visual vote cards you can drag
+  - Red/Blue drop zones
+  - "Lock in votes" button (can change until round ends)
+  - Show which votes are from guarantees
+  
+- [ ] **Market Interface Enhancements**
+  - Real-time order book (buy/sell offers)
+  - Price negotiation (counter-offers)
+  - Transaction confirmation dialogs
+  - Wallet balance always visible
+
+## Phase 1: Vote Exchange Polish & Features 🎨
 
 **Priority**: High | **Timeline**: 2-3 weeks
 
-### 1.1 Component Library Enhancement
-- [ ] Create `UnitCard` component using Solid-UI Card with hover effects
-  - Display unit stats, inventory, and vote status
-  - Use Badge for status indicators (active, idle, gathering)
-  - Implement with proper TypeScript types from module_bindings
+### 1.1 Advanced Trading Features
+- [ ] **Counter-offers system**
+  - Buyer can propose different price
+  - Seller can accept/reject/counter
+  - Negotiation history per trade
   
-- [ ] Build `ResourcePanel` using Tabs component
-  - Tab 1: Unit inventory with Progress bars for capacity
-  - Tab 2: Storage building contents
-  - Tab 3: Crafting recipes with visual indicators
-  - Use ScrollArea for long lists
+- [ ] **Buy/Sell requests**
+  - "I want to buy at $X" (bid)
+  - "I want to sell at $X" (ask)
+  - Match orders automatically
   
-- [ ] Create `VoteMarket` component with Card layout
-  - Market listings with price sorting
-  - Buy/sell forms using TextField components
-  - Trade history timeline using Flex layout
-  - Market analytics charts (integrate with existing graphs)
+- [ ] **Guarantee bluffing mechanics**
+  - Seller can break guarantee (penalty?)
+  - Reputation system for reliable sellers
+  - "Trust score" displayed
+  
+- [ ] **Side bets** (from rules.md)
+  - Bet on vote outcome
+  - Bet on who gets eliminated
+  - Separate betting pool
 
-- [ ] Design `ActionBar` component using Flex
-  - Quick actions for selected units
-  - Resource transfer shortcuts
-  - Vote color palette selector
-  - Building placement tools
+### 1.2 Multi-Round Gameplay
+- [ ] **Continuous games** (from rules.md)
+  - Pot distributed each round (e.g., 50%)
+  - Remaining pot carries to next round
+  - Players can re-buy-in mid-game
+  
+- [ ] **Post-elimination buy-in**
+  - Eliminated players can re-enter
+  - Higher cost than initial buy-in
+  - Fairness considerations
+  
+- [ ] **Transaction fees**
+  - % of each trade goes to pot
+  - Incentivizes more trading
+  - Company can match contributions
 
-### 1.2 Game.tsx Refactoring
-- [ ] Extract `UnitDetailsPanel.tsx` (~200 lines)
-  - Unit stats display with Card component
-  - Inventory management with visual feedback
-  - Action buttons using Button variants (outline, ghost, destructive)
-  - Task queue management with Tabs
+### 1.3 Player Experience
+- [ ] **Player profiles**
+  - Win/loss record
+  - Total profit/loss
+  - Favorite strategies
+  - Achievement badges
   
-- [ ] Extract `InventoryPanel.tsx` (~150 lines)
-  - Grid layout for resources with Progress indicators
-  - Transfer form using TextField with validation
-  - Capacity warnings using Toast
-  - Resource type selector using native select styled with Solid-UI
+- [ ] **Spectator mode**
+  - Watch ongoing games
+  - Learn strategies
+  - Can't interact
   
-- [ ] Extract `CraftingPanel.tsx` (~180 lines)
-  - Recipe cards with Badge for status (available, locked, crafting)
-  - Cost breakdown with visual resource icons
-  - Crafting queue with Progress bars
-  - Recipe categories using Tabs
+- [ ] **Tutorial system**
+  - Game 1: No trading (basic minority game)
+  - Game 2: Simple vote trading
+  - Game 3: Multiple votes and splitting
+  - Game 4: Guarantees introduction
+  - Interactive walkthrough
   
-- [ ] Extract `GameCanvas.tsx` (~300 lines)
-  - Separate rendering logic from game logic
-  - Improve performance with canvas optimization
-  - Add minimap feature (small canvas preview)
-  - Zoom and pan controls with visual indicators
+- [ ] **Game replays**
+  - Watch past games
+  - See all trades and decisions
+  - Learn from winners
 
-### 1.3 Visual Polish
-- [ ] Implement consistent color scheme
-  - Define color tokens in tailwind.config.cjs
-  - Use Solid-UI variants for semantic colors
-  - Resource-type color coding (already partially done)
+### 1.4 Social & Communication
+- [ ] **Enhanced chat** (already have basic)
+  - Private messages for negotiations
+  - Trade proposals in chat
+  - Emojis and reactions
   
-- [ ] Add loading states with Progress component
-  - Connection loading (SpacetimeDB)
-  - Resource gathering progress
-  - Crafting progress indicators
+- [ ] **Player reputation**
+  - Trust score (keeps guarantees?)
+  - Trade history
+  - Ratings from other players
   
-- [ ] Create toast notification system enhancements
-  - Success: Resource gathered, craft complete
-  - Warning: Low inventory, trade pending
-  - Error: Connection lost, invalid action
-  - Info: Round changes, game events
-  
-- [ ] Design hover tooltips for UI elements
-  - Unit stats on canvas hover
-  - Resource node information
-  - Building details and capacity
-  - Vote market price trends
-
-### 1.4 Responsive Design
-- [ ] Mobile-friendly layout adjustments
-  - Stack panels vertically on small screens
-  - Touch-friendly button sizes
-  - Simplified canvas controls for touch
-  
-- [ ] Tablet optimization
-  - Two-column layout using Resizable
-  - Collapsible side panels
-  - Gesture support for unit selection
+- [ ] **Alliances** (future consideration)
+  - Team up with other players
+  - Share information
+  - Coordinate voting
 
 ---
 
-## Phase 2: Gameplay Features 🎮
+## Phase 2: Colony Builder Extension 🎮
 
-**Priority**: High | **Timeline**: 4-6 weeks
+**Priority**: Medium (AFTER Vote Exchange works) | **Timeline**: 4-6 weeks
+
+**Note**: This is the MMO/resource layer that sits alongside The Vote Exchange. Players can focus on voting OR colony building OR both.
 
 ### 2.1 Advanced Unit Controls
 - [ ] Implement full right-click movement system

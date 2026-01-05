@@ -4,23 +4,34 @@ A multiplayer game combining market-based voting mechanics with colony-building 
 
 ## Overview
 
-SocketSignal is a unique multiplayer game that combines two core mechanics:
+SocketSignal is **The Vote Exchange** - a market-based multiplayer game where players trade votes in a minority-wins elimination system.
 
-1. **The Vote Exchange**: A market-based game where players trade votes in a minority-wins system
-2. **Colony Builder**: An MMO-style resource management and colony building system
+### Core Gameplay
 
-Players manage colonies of laborers who participate in voting rounds, with the minority voters surviving each round. The game features:
+Players buy into a game, creating a pot. During each timed round (e.g., 5 minutes):
+- **Trade votes**: Buy and sell voting tickets between players
+- **Trade guarantees**: Purchase promises about how others will vote (they can bluff!)
+- **Strategic voting**: Players with multiple votes can split them to guarantee minority
+- **Elimination**: After voting, majority voters are eliminated, minority survives
+- **Winner takes pot**: Last 1-2 players standing win the pot
 
-- Real-time trading of votes and resources
-- Colony building and resource management
-- Multi-timeframe gameplay across different server tiers
-- Automated combat system for eliminated laborers
-- Complex market dynamics and resource crafting
+### Optional Extension: Colony Builder
+
+An MMO-style resource management layer that runs parallel to The Vote Exchange:
+- Resource gathering and crafting
+- Building construction
+- Unit management
+- Resource marketplace
+
+**Note**: The colony builder is secondary. The Vote Exchange is the core product.
 
 For detailed game design documentation, see:
 
-- [Core Game Rules](./game-design/rules.md)
-- [Colony Builder Mechanics](./game-design/rules-colony-builder.md)
+- **[VOTE_EXCHANGE_PRIORITY.md](./VOTE_EXCHANGE_PRIORITY.md)** - **START HERE**
+- [Core Game Rules](./game-design/rules.md) - The Vote Exchange mechanics
+- [Development Roadmap](./roadmap.md) - Implementation plan
+- [TODOs](./todos.md) - Current sprint tasks
+- [Colony Builder Mechanics](./game-design/rules-colony-builder.md) - Optional extension
 
 ## Development Setup
 
