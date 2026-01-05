@@ -44,11 +44,16 @@ pub struct ChatPermission {
 
 // Game tables
 #[table(name = user, public)]
+#[derive(Clone)]
 pub struct User {
     #[primary_key]
     identity: Identity,
     name: Option<String>,
     online: bool,
+    // Vote Exchange: Wallet system
+    wallet_balance: f64,      // Money available for trading
+    bank_account: f64,        // Saved currency (long-term)
+    total_profit_loss: f64,   // Lifetime profit/loss tracking
 }
 
 #[table(name = message, public)]
@@ -70,6 +75,12 @@ pub struct GameRoom {
     offer_ids: Vec<String>,
     start_time: Option<i64>,
     current_round: i32,
+    // Vote Exchange: Game settings
+    buyin_amount: f64,        // Initial buy-in per player
+    pot_size: f64,            // Current pot (sum of buy-ins + fees)
+    round_duration: i32,      // Duration in seconds (e.g., 300 = 5 minutes)
+    game_status: String,      // "lobby" | "active" | "completed"
+    eliminated_players: Vec<String>, // Players eliminated in previous rounds
 }
 
 #[table(name = unit, public)]
@@ -205,6 +216,7 @@ pub fn create_room(
     _room_id: String, // Unused - we use auto-generated ID instead
     name: String,
     creator_id: String,
+    buyin_amount: f64, // Vote Exchange: buy-in amount
 ) -> Result<(), String> {
     let room = GameRoom {
         id: 0, // Will be auto-incremented
@@ -214,6 +226,12 @@ pub fn create_room(
         offer_ids: vec![],
         start_time: None,
         current_round: 0,
+        // Vote Exchange fields
+        buyin_amount,
+        pot_size: 0.0, // Will be set when game starts
+        round_duration: 300, // 5 minutes default
+        game_status: "lobby".to_string(),
+        eliminated_players: vec![],
     };
     
     // Insert returns the row with the auto-generated ID
@@ -270,11 +288,44 @@ pub fn toggle_ready(ctx: &ReducerContext, room_id: i32, user_id: String) -> Resu
 pub fn start_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
     if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
         let room_clone = room.clone();
+        
+        // Vote Exchange: Collect buy-ins and create pot
+        let mut pot = 0.0;
+        for member_id in &room.member_ids {
+            if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_string() == *member_id) {
+                let mut updated_user = user.clone();
+                
+                // Check if user has enough money
+                if updated_user.wallet_balance < room.buyin_amount {
+                    return Err(format!("Player {} has insufficient funds", member_id));
+                }
+                
+                // Deduct buy-in
+                updated_user.wallet_balance -= room.buyin_amount;
+                ctx.db.user().identity().update(updated_user);
+                
+                pot += room.buyin_amount;
+                
+                // Create initial vote for this player
+                ctx.db.vote().insert(Vote {
+                    id: 0,
+                    room_id,
+                    round_number: 1,
+                    player_id: member_id.clone(),
+                    original_owner: member_id.clone(),
+                    color: None, // Not set yet
+                    timestamp: ctx.timestamp,
+                });
+            }
+        }
+        
+        room.pot_size = pot;
         room.start_time = Some(ctx.timestamp.to_micros_since_unix_epoch() * 1000 + 5000); // 5 second countdown
         room.current_round = 1;
+        room.game_status = "active".to_string();
         ctx.db.game_room().id().update(room);
 
-        // Create initial units
+        // Create initial units (for colony builder extension)
         create_initial_units(ctx, &room_clone)?;
     }
     Ok(())
@@ -588,6 +639,9 @@ pub fn client_connected(ctx: &ReducerContext) {
             name: None,
             identity: ctx.sender,
             online: true,
+            wallet_balance: 100.0,    // Starting wallet
+            bank_account: 0.0,
+            total_profit_loss: 0.0,
         });
     }
 }
@@ -689,6 +743,7 @@ pub fn set_chat_permission(
     }
 }
 
+// Vote Exchange: Vote tracking with ownership
 #[table(name = vote, public)]
 pub struct Vote {
     #[primary_key]
@@ -696,8 +751,53 @@ pub struct Vote {
     id: i32,
     room_id: i32,
     round_number: i32,
-    unit_id: i32,
-    color: String, // "red" | "blue"
+    player_id: String,        // Current owner of this vote
+    original_owner: String,   // Who started with this vote
+    color: Option<String>,    // "red" | "blue" | null (not yet set)
+    timestamp: Timestamp,
+}
+
+// Vote Exchange: Transaction tracking
+#[table(name = transaction, public)]
+pub struct Transaction {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    room_id: i32,
+    from_player: String,
+    to_player: String,
+    transaction_type: String, // "vote_sale" | "guarantee_purchase" | "pot_distribution"
+    amount: f64,
+    vote_id: Option<i32>,     // If this was a vote sale
+    guarantee_id: Option<i32>, // If this was a guarantee purchase
+    timestamp: Timestamp,
+}
+
+// Vote Exchange: Guarantee system
+#[table(name = guarantee, public)]
+pub struct Guarantee {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    room_id: i32,
+    round_number: i32,
+    seller_id: String,
+    color: String,            // "red" | "blue" - promised vote color
+    price: f64,
+    guarantee_type: String,   // "public" (one buyer) | "private" (multiple buyers)
+    is_active: bool,          // false if cancelled or fulfilled (for public)
+    created_at: Timestamp,
+}
+
+// Vote Exchange: Guarantee purchases
+#[table(name = guarantee_purchase, public)]
+pub struct GuaranteePurchase {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    guarantee_id: i32,
+    buyer_id: String,
+    price_paid: f64,
     timestamp: Timestamp,
 }
 
@@ -755,62 +855,313 @@ pub fn trade_unit_vote(
     Ok(())
 }
 
+// Vote Exchange: Transfer vote ownership (buy/sell votes)
+#[reducer]
+pub fn transfer_vote_ownership(
+    ctx: &ReducerContext,
+    vote_id: i32,
+    buyer_id: String,
+    price: f64,
+) -> Result<(), String> {
+    // Get the vote
+    if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
+        let seller_id = vote.player_id.clone();
+        let room_id = vote.room_id;
+        
+        // Get buyer and seller
+        let buyer = ctx.db.user().iter()
+            .find(|u| u.identity.to_string() == buyer_id)
+            .ok_or("Buyer not found")?;
+        let seller = ctx.db.user().iter()
+            .find(|u| u.identity.to_string() == seller_id)
+            .ok_or("Seller not found")?;
+        
+        // Check buyer has enough money
+        if buyer.wallet_balance < price {
+            return Err("Insufficient funds".to_string());
+        }
+        
+        // Transfer money
+        let mut updated_buyer = buyer.clone();
+        updated_buyer.wallet_balance -= price;
+        ctx.db.user().identity().update(updated_buyer);
+        
+        let mut updated_seller = seller.clone();
+        updated_seller.wallet_balance += price;
+        ctx.db.user().identity().update(updated_seller);
+        
+        // Transfer vote ownership
+        vote.player_id = buyer_id.clone();
+        ctx.db.vote().id().update(vote);
+        
+        // Record transaction
+        ctx.db.transaction().insert(Transaction {
+            id: 0,
+            room_id,
+            from_player: seller_id,
+            to_player: buyer_id,
+            transaction_type: "vote_sale".to_string(),
+            amount: price,
+            vote_id: Some(vote_id),
+            guarantee_id: None,
+            timestamp: ctx.timestamp,
+        });
+        
+        Ok(())
+    } else {
+        Err("Vote not found".to_string())
+    }
+}
+
+// Vote Exchange: Create a guarantee
+#[reducer]
+pub fn create_guarantee(
+    ctx: &ReducerContext,
+    room_id: i32,
+    round_number: i32,
+    color: String,
+    price: f64,
+    guarantee_type: String,
+) -> Result<(), String> {
+    // Validate color
+    if color != "red" && color != "blue" {
+        return Err("Invalid color".to_string());
+    }
+    
+    // Validate guarantee type
+    if guarantee_type != "public" && guarantee_type != "private" {
+        return Err("Invalid guarantee type".to_string());
+    }
+    
+    ctx.db.guarantee().insert(Guarantee {
+        id: 0,
+        room_id,
+        round_number,
+        seller_id: ctx.sender.to_string(),
+        color,
+        price,
+        guarantee_type,
+        is_active: true,
+        created_at: ctx.timestamp,
+    });
+    
+    Ok(())
+}
+
+// Vote Exchange: Purchase a guarantee
+#[reducer]
+pub fn purchase_guarantee(
+    ctx: &ReducerContext,
+    guarantee_id: i32,
+) -> Result<(), String> {
+    if let Some(mut guarantee) = ctx.db.guarantee().id().find(guarantee_id) {
+        if !guarantee.is_active {
+            return Err("Guarantee no longer active".to_string());
+        }
+        
+        let buyer_id = ctx.sender.to_string();
+        let seller_id = guarantee.seller_id.clone();
+        let price = guarantee.price;
+        let room_id = guarantee.room_id;
+        
+        // Get buyer and seller
+        let buyer = ctx.db.user().iter()
+            .find(|u| u.identity.to_string() == buyer_id)
+            .ok_or("Buyer not found")?;
+        let seller = ctx.db.user().iter()
+            .find(|u| u.identity.to_string() == seller_id)
+            .ok_or("Seller not found")?;
+        
+        // Check buyer has enough money
+        if buyer.wallet_balance < price {
+            return Err("Insufficient funds".to_string());
+        }
+        
+        // Transfer money
+        let mut updated_buyer = buyer.clone();
+        updated_buyer.wallet_balance -= price;
+        ctx.db.user().identity().update(updated_buyer);
+        
+        let mut updated_seller = seller.clone();
+        updated_seller.wallet_balance += price;
+        ctx.db.user().identity().update(updated_seller);
+        
+        // If public guarantee, mark as inactive (only one buyer)
+        if guarantee.guarantee_type == "public" {
+            guarantee.is_active = false;
+            ctx.db.guarantee().id().update(guarantee);
+        }
+        
+        // Record purchase
+        ctx.db.guarantee_purchase().insert(GuaranteePurchase {
+            id: 0,
+            guarantee_id,
+            buyer_id: buyer_id.clone(),
+            price_paid: price,
+            timestamp: ctx.timestamp,
+        });
+        
+        // Record transaction
+        ctx.db.transaction().insert(Transaction {
+            id: 0,
+            room_id,
+            from_player: buyer_id,
+            to_player: seller_id,
+            transaction_type: "guarantee_purchase".to_string(),
+            amount: price,
+            vote_id: None,
+            guarantee_id: Some(guarantee_id),
+            timestamp: ctx.timestamp,
+        });
+        
+        Ok(())
+    } else {
+        Err("Guarantee not found".to_string())
+    }
+}
+
+// Vote Exchange: Set your vote color
+#[reducer]
+pub fn set_vote_color(
+    ctx: &ReducerContext,
+    vote_id: i32,
+    color: String,
+) -> Result<(), String> {
+    if color != "red" && color != "blue" {
+        return Err("Invalid color".to_string());
+    }
+    
+    if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
+        // Check if sender owns this vote
+        if vote.player_id != ctx.sender.to_string() {
+            return Err("You don't own this vote".to_string());
+        }
+        
+        vote.color = Some(color);
+        ctx.db.vote().id().update(vote);
+        Ok(())
+    } else {
+        Err("Vote not found".to_string())
+    }
+}
+
+// Vote Exchange: Process round votes and eliminate majority
 #[reducer]
 pub fn process_round_votes(
     ctx: &ReducerContext,
     room_id: i32,
     round_number: i32,
 ) -> Result<(), String> {
-    // Get all units in the room
-    let units = ctx.db.unit().iter()
-        .filter(|u| u.room_id == room_id)
+    // Get all votes for this room and round
+    let votes = ctx.db.vote().iter()
+        .filter(|v| v.room_id == room_id && v.round_number == round_number)
         .collect::<Vec<_>>();
     
-    // Count votes
+    // Count votes by color
     let mut red_votes = 0;
     let mut blue_votes = 0;
+    let mut red_voters = Vec::new();
+    let mut blue_voters = Vec::new();
     
-    for unit in &units {
-        if let Some(color) = &unit.vote_color {
+    for vote in &votes {
+        if let Some(color) = &vote.color {
             match color.as_str() {
-                "red" => red_votes += 1,
-                "blue" => blue_votes += 1,
+                "red" => {
+                    red_votes += 1;
+                    if !red_voters.contains(&vote.player_id) {
+                        red_voters.push(vote.player_id.clone());
+                    }
+                },
+                "blue" => {
+                    blue_votes += 1;
+                    if !blue_voters.contains(&vote.player_id) {
+                        blue_voters.push(vote.player_id.clone());
+                    }
+                },
                 _ => continue,
             }
-            
-            // Record vote
-            ctx.db.vote().insert(Vote {
-                id: 0, // Will be auto-incremented
-                room_id,
-                round_number,
-                unit_id: unit.id,
-                color: color.clone(),
-                timestamp: ctx.timestamp,
-            });
         }
     }
     
-    // Determine majority
-    let majority = if red_votes > blue_votes { "red" } else { "blue" };
-    
-    // Eliminate units in majority
-    for mut unit in units {
-        if let Some(color) = &unit.vote_color {
-            if color == majority {
-                // Create elimination event
-                create_game_event(
-                    ctx,
-                    room_id.to_string(),
-                    "elimination".to_string(),
-                    unit.id.to_string(),
-                    "majority".to_string(),
-                    0,
-                )?;
+    // Handle tie - game ends, split pot
+    if red_votes == blue_votes {
+        if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
+            room.game_status = "completed".to_string();
+            ctx.db.game_room().id().update(room.clone());
+            
+            // Split pot proportionally by vote count
+            let total_votes = red_votes + blue_votes;
+            if total_votes > 0 {
+                let pot_per_vote = room.pot_size / total_votes as f64;
                 
-                // Remove unit
-                ctx.db.unit().id().delete(&unit.id);
+                // Distribute to all players based on their vote count
+                for vote in &votes {
+                    if let Some(color) = &vote.color {
+                        let player_id = &vote.player_id;
+                        if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_string() == *player_id) {
+                            let mut updated_user = user.clone();
+                            updated_user.wallet_balance += pot_per_vote;
+                            ctx.db.user().identity().update(updated_user);
+                        }
+                    }
+                }
             }
         }
+        return Ok(());
+    }
+    
+    // Determine minority and majority
+    let (minority_voters, majority_voters) = if red_votes < blue_votes {
+        (red_voters, blue_voters)
+    } else {
+        (blue_voters, red_voters)
+    };
+    
+    // Eliminate majority voters
+    if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
+        for player_id in &majority_voters {
+            if !room.eliminated_players.contains(player_id) {
+                room.eliminated_players.push(player_id.clone());
+            }
+        }
+        
+        // Check win condition: 1-2 players remaining
+        let remaining_players: Vec<_> = room.member_ids.iter()
+            .filter(|id| !room.eliminated_players.contains(id))
+            .collect();
+        
+        if remaining_players.len() <= 2 {
+            // Game over - distribute pot to winners
+            room.game_status = "completed".to_string();
+            
+            let pot_per_winner = room.pot_size / remaining_players.len() as f64;
+            for player_id in remaining_players {
+                if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_string() == *player_id) {
+                    let mut updated_user = user.clone();
+                    updated_user.wallet_balance += pot_per_winner;
+                    updated_user.total_profit_loss += pot_per_winner - room.buyin_amount;
+                    ctx.db.user().identity().update(updated_user);
+                    
+                    // Record pot distribution
+                    ctx.db.transaction().insert(Transaction {
+                        id: 0,
+                        room_id,
+                        from_player: "pot".to_string(),
+                        to_player: player_id.clone(),
+                        transaction_type: "pot_distribution".to_string(),
+                        amount: pot_per_winner,
+                        vote_id: None,
+                        guarantee_id: None,
+                        timestamp: ctx.timestamp,
+                    });
+                }
+            }
+        } else {
+            // Continue to next round
+            room.current_round += 1;
+        }
+        
+        ctx.db.game_room().id().update(room);
     }
     
     Ok(())
