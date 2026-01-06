@@ -899,6 +899,46 @@ See roadmap.md Phase 2 for full colony builder details.
 
 ---
 
+## 🎉 Sprint 6 Complete - January 5, 2026
+
+### What We Built Today (Part 4)
+**Social & Engagement Features**:
+1. **Leaderboard System** - Global rankings with detailed player stats
+2. **Game Replay Viewer** - Playback controls for reviewing past games
+3. **In-Game Chat** - Real-time messaging between players
+4. **Player Profiles** - Stats, achievements, and customization
+5. **Room Presets** - Quick game mode selection (Quick, Standard, Strategic, High Stakes)
+
+**Features Added**:
+- ✅ Leaderboard with rankings, win rates, and profit/loss tracking
+- ✅ Replay viewer with play/pause, skip, and variable speed controls
+- ✅ Chat panel integrated into game interface (bottom tab)
+- ✅ Player profile system with stats and achievements
+- ✅ 5 room presets + custom configuration
+- ✅ Achievement system (6 achievements: First Victory, Master Trader, etc.)
+- ✅ Profile editing (name customization)
+- ✅ Real-time leaderboard updates
+- ✅ Event timeline in replay viewer
+
+**Files Created**:
+- `src/components/game/Leaderboard.tsx` (new, 180 lines)
+- `src/components/game/ReplayViewer.tsx` (new, 220 lines)
+- `src/components/game/ChatPanel.tsx` (new, 180 lines)
+- `src/components/game/PlayerProfile.tsx` (new, 280 lines)
+- `src/components/game/RoomPresets.tsx` (new, 180 lines)
+- `src/routes/leaderboard.tsx` (new)
+- `src/routes/profile.tsx` (new)
+- `SPRINT_6_SUMMARY.md` (documentation)
+
+**Files Updated**:
+- `src/components/Vote/VotingInterface.tsx` (added chat/replay tabs)
+- `src/components/Vote/GamePreStartInteractions.tsx` (added preset selector)
+
+**Ready for Next Sprint**:
+The game now has complete social features! Next up: Mobile optimization
+
+---
+
 ## 🎉 Sprint 4 Complete - January 5, 2026
 
 ### What We Built Today (Part 2)
@@ -996,10 +1036,11 @@ The Vote Exchange is now fully playable:
 - ✅ **Sprint 3**: Vote Exchange UI (8 components, full UI implementation)
 - ✅ **Sprint 4**: Game Flow Automation (auto-round, buy-in, elimination modal, 24 unit tests)
 - ✅ **Sprint 5**: Polish & Dev Tools (sounds, animations, loading, errors, debug, admin)
+- ✅ **Sprint 6**: Additional Features (leaderboard, replay viewer, chat, profiles, presets)
 
 ### Code Statistics
-- **Total Components Created**: 20+
-- **Total Lines Written**: ~5,000+
+- **Total Components Created**: 25+
+- **Total Lines Written**: ~7,500+
 - **Unit Tests**: 24 passing
 - **Backend Reducers**: 10
 - **Database Tables**: 6
@@ -1013,8 +1054,8 @@ The Vote Exchange is now fully playable:
 - **Polish**: 100% ✅ (sounds, animations, loading, errors)
 - **Dev Tools**: 100% ✅ (debug panel, admin panel)
 - **Testing**: 50% (unit tests ✅, manual testing pending)
-- **Additional Features**: 0% (next sprint)
-- **Mobile Support**: 0% (last sprint)
+- **Additional Features**: 100% ✅ (leaderboard, replay, chat, profiles, presets)
+- **Mobile Support**: 0% (next sprint)
 
-**Last Updated**: January 5, 2026 - Sprint 5 COMPLETE ✅  
+**Last Updated**: January 5, 2026 - Sprint 6 COMPLETE ✅  
 **See [roadmap.md](./roadmap.md) for long-term vision and detailed phase breakdowns.**

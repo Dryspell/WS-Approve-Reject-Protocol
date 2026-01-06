@@ -1,4 +1,4 @@
-import { Accessor } from "solid-js";
+import { Accessor, createSignal } from "solid-js";
 import { SetStoreFunction } from "solid-js/store";
 import type { GameRoom } from "~/module_bindings/game_room_type";
 import type { ReadyState } from "~/module_bindings/ready_state_type";
@@ -6,10 +6,11 @@ import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { showToast } from "../ui/toast";
 import { Button } from "../ui/button";
 import { userIsReady } from "~/lib/game-utils";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { Badge } from "../ui/badge";
 import UserAvatarCard from "../Chat/UserAvatarCard";
 import type { DbConnection } from "~/module_bindings/index";
+import RoomPresets from "../game/RoomPresets";
 
 export default function GamePreStartInteractions(props: {
   roomId: string;
@@ -24,6 +25,7 @@ export default function GamePreStartInteractions(props: {
   if (!room) return null;
   
   const { memberIds } = room;
+  const [showPresets, setShowPresets] = createSignal(false);
 
   const handleToggleReady = () => {
     const connection = props.conn();
@@ -74,6 +76,28 @@ export default function GamePreStartInteractions(props: {
 
   return (
     <div class="space-y-4">
+      {/* Room Presets Info */}
+      <Button
+        variant="outline"
+        class="w-full"
+        onClick={() => setShowPresets(!showPresets())}
+      >
+        {showPresets() ? '▲ Hide' : '▼ Show'} Game Mode Info
+      </Button>
+
+      <Show when={showPresets()}>
+        <RoomPresets
+          onSelectPreset={(preset) => {
+            showToast({
+              title: "Game Mode Selected",
+              description: `${preset.name}: $${preset.buyinAmount} buy-in, ${preset.roundDuration / 60} min rounds`,
+              duration: DEFAULT_TOAST_DURATION,
+            });
+            setShowPresets(false);
+          }}
+        />
+      </Show>
+
       {/* Game Info */}
       <div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
         <div class="flex items-center justify-between">

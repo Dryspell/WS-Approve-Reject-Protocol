@@ -10,12 +10,15 @@ import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import RoundTimer from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
 import EliminationModal from "./EliminationModal";
+import ChatPanel from "../game/ChatPanel";
+import ReplayViewer from "../game/ReplayViewer";
 import { SoundToggle } from "~/components/ui/sound-toggle";
 import { ErrorBoundary } from "~/components/ui/error-boundary";
 import { DebugPanel } from "~/components/dev/DebugPanel";
 import { AdminPanel } from "~/components/dev/AdminPanel";
 import { ToastHelper } from "~/lib/toast-helpers";
 import { sounds } from "~/lib/sounds";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 
 interface VotingInterfaceProps {
   room: GameRoom;
@@ -456,6 +459,30 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           />
         </div>
       </div>
+
+      {/* Bottom Panel: Chat & Replay Viewer */}
+      <Card class="max-h-96">
+        <Tabs defaultValue="chat">
+          <div class="border-b px-4 pt-3">
+            <TabsList class="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="chat">💬 Chat</TabsTrigger>
+              <TabsTrigger value="replay">🎬 Replay</TabsTrigger>
+            </TabsList>
+          </div>
+          
+          <TabsContent value="chat" class="h-80 p-0">
+            <ChatPanel roomId={props.room.id} />
+          </TabsContent>
+          
+          <TabsContent value="replay" class="h-80 overflow-auto p-4">
+            <ReplayViewer
+              roomId={props.room.id}
+              transactions={transactions()}
+              gameEvents={[]}
+            />
+          </TabsContent>
+        </Tabs>
+      </Card>
 
       {/* Elimination Modal */}
       <Show when={showEliminationModal()}>
