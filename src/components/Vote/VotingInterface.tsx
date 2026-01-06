@@ -10,7 +10,12 @@ import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import RoundTimer from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
 import EliminationModal from "./EliminationModal";
+import { SoundToggle } from "~/components/ui/sound-toggle";
+import { ErrorBoundary } from "~/components/ui/error-boundary";
+import { DebugPanel } from "~/components/dev/DebugPanel";
+import { AdminPanel } from "~/components/dev/AdminPanel";
 import { ToastHelper } from "~/lib/toast-helpers";
+import { sounds } from "~/lib/sounds";
 
 interface VotingInterfaceProps {
   room: GameRoom;
@@ -174,8 +179,10 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     try {
       connection.reducers.setVoteColor(voteId, color);
       ToastHelper.voteColorChanged(voteId, color);
+      sounds.voteSet(color as 'red' | 'blue');
     } catch (error) {
       ToastHelper.error("Failed to set vote color");
+      sounds.error();
     }
   };
 
@@ -197,8 +204,17 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   };
 
   return (
-    <div class="flex h-screen flex-col gap-4 p-4">
-      {/* Top Bar: Pot, Timer, Wallet */}
+    <ErrorBoundary>
+      <div class="flex h-screen flex-col gap-4 p-4">
+        {/* Dev Tools */}
+        <DebugPanel
+          room={props.room}
+          user={props.currentUser}
+          votes={votes()}
+          players={allPlayers()}
+        />
+        <AdminPanel />
+      {/* Top Bar: Pot, Timer, Wallet, Sound Toggle */}
       <div class="flex items-center justify-between">
         {/* Pot Display */}
         <Card class="flex-1">
@@ -206,7 +222,9 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             <div class="text-4xl">💰</div>
             <div>
               <div class="text-sm text-gray-500">Pot</div>
-              <div class="text-2xl font-bold">${props.room.potSize.toFixed(2)}</div>
+              <div id="pot-amount" class="text-2xl font-bold animate-pulse">
+                ${props.room.potSize.toFixed(2)}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -224,7 +242,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         <Card class="flex-1">
           <CardContent class="flex items-center gap-4 p-4">
             <div class="text-4xl">💵</div>
-            <div>
+            <div class="flex-1">
               <div class="text-sm text-gray-500">Your Wallet</div>
               <div class="text-2xl font-bold">
                 ${props.currentUser.walletBalance.toFixed(2)}
@@ -234,6 +252,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 ${props.currentUser.totalProfitLoss.toFixed(2)} lifetime
               </div>
             </div>
+            <SoundToggle />
           </CardContent>
         </Card>
       </div>
@@ -477,7 +496,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </Card>
         </div>
       </Show>
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 };
 

@@ -8,6 +8,7 @@ import type { Guarantee } from "~/module_bindings/guarantee_type";
 import type { GuaranteePurchase } from "~/module_bindings/guarantee_purchase_type";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { ToastHelper } from "~/lib/toast-helpers";
+import { sounds } from "~/lib/sounds";
 
 interface GuaranteeMarketProps {
   roomId: number;
@@ -61,11 +62,13 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
         "Guarantee Created",
         `${createType() === "public" ? "Public" : "Private"} guarantee for ${createColor()} at $${createPrice()}`
       );
+      sounds.guaranteePurchased();
       
       // Reset form
       setCreatePrice(5);
     } catch (error) {
       ToastHelper.error("Failed to create guarantee");
+      sounds.error();
     }
   };
 
@@ -82,8 +85,10 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
     try {
       connection.reducers.purchaseGuarantee(guaranteeId);
       ToastHelper.success("Guarantee Purchased", `You paid $${price} for this promise`);
+      sounds.guaranteePurchased();
     } catch (error) {
       ToastHelper.error("Failed to purchase guarantee");
+      sounds.error();
     }
   };
 

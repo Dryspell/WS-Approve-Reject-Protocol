@@ -10,6 +10,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import GuaranteeMarket from "./GuaranteeMarket";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { ToastHelper } from "~/lib/toast-helpers";
+import { sounds } from "~/lib/sounds";
 
 interface VoteMarketPanelProps {
   votes: Vote[];
@@ -83,8 +84,11 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
     try {
       connection.reducers.transferVoteOwnership(voteId, props.currentUserId, price);
       ToastHelper.success("Vote Purchased", `You bought vote #${voteId} for $${price}`);
+      sounds.tradeComplete();
+      sounds.moneyReceived();
     } catch (error) {
       ToastHelper.error("Failed to purchase vote");
+      sounds.error();
     }
   };
 
