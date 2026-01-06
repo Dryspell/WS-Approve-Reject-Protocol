@@ -5,6 +5,8 @@ import { Progress } from "~/components/ui/progress";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import type { User } from "~/module_bindings/user_type";
 import type { Transaction } from "~/module_bindings/transaction_type";
+import { Button } from "~/components/ui/button";
+import BankTransferModal from "../game/BankTransferModal";
 
 interface WalletDisplayProps {
   user: User;
@@ -14,6 +16,7 @@ interface WalletDisplayProps {
 
 const WalletDisplay: Component<WalletDisplayProps> = (props) => {
   const [showTransactions, setShowTransactions] = createSignal(false);
+  const [showBankTransfer, setShowBankTransfer] = createSignal(false);
 
   const profitLoss = () => {
     if (!props.buyinAmount) return props.user.totalProfitLoss;
@@ -82,14 +85,22 @@ const WalletDisplay: Component<WalletDisplayProps> = (props) => {
         </div>
 
         {/* Bank Account */}
-        <Show when={props.user.bankAccount > 0}>
-          <div>
-            <div class="flex justify-between text-sm">
-              <span class="text-gray-600">Bank Account</span>
-              <span class="font-semibold">${props.user.bankAccount.toFixed(2)}</span>
-            </div>
+        <div class="space-y-2">
+          <div class="flex justify-between text-sm">
+            <span class="text-gray-600">Bank Account (Safe Storage)</span>
+            <span class="font-semibold text-blue-600">
+              ${props.user.bankAccount.toFixed(2)}
+            </span>
           </div>
-        </Show>
+          <Button
+            size="sm"
+            variant="outline"
+            class="w-full"
+            onClick={() => setShowBankTransfer(true)}
+          >
+            🏦 Bank Transfer
+          </Button>
+        </div>
 
         {/* Lifetime Stats */}
         <div class="border-t pt-3">
@@ -188,6 +199,14 @@ const WalletDisplay: Component<WalletDisplayProps> = (props) => {
           </ul>
         </div>
       </CardContent>
+
+      {/* Bank Transfer Modal */}
+      <Show when={showBankTransfer()}>
+        <BankTransferModal
+          user={props.user}
+          onClose={() => setShowBankTransfer(false)}
+        />
+      </Show>
     </Card>
   );
 };

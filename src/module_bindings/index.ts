@@ -62,6 +62,8 @@ import { PurchaseGuarantee } from "./purchase_guarantee_reducer.ts";
 export { PurchaseGuarantee };
 import { QueueUnitTask } from "./queue_unit_task_reducer.ts";
 export { QueueUnitTask };
+import { RebuyIntoGame } from "./rebuy_into_game_reducer.ts";
+export { RebuyIntoGame };
 import { RemoveVoteFromSale } from "./remove_vote_from_sale_reducer.ts";
 export { RemoveVoteFromSale };
 import { SendChatMessage } from "./send_chat_message_reducer.ts";
@@ -88,10 +90,14 @@ import { TradeUnitVote } from "./trade_unit_vote_reducer.ts";
 export { TradeUnitVote };
 import { TransferResources } from "./transfer_resources_reducer.ts";
 export { TransferResources };
+import { TransferToBank } from "./transfer_to_bank_reducer.ts";
+export { TransferToBank };
 import { TransferVoteOwnership } from "./transfer_vote_ownership_reducer.ts";
 export { TransferVoteOwnership };
 import { UpgradeUnit } from "./upgrade_unit_reducer.ts";
 export { UpgradeUnit };
+import { WithdrawFromBank } from "./withdraw_from_bank_reducer.ts";
+export { WithdrawFromBank };
 
 // Import and reexport all table handle types
 import { ChatMessageTableHandle } from "./chat_message_table.ts";
@@ -324,6 +330,10 @@ const REMOTE_MODULE = {
       reducerName: "queue_unit_task",
       argsType: QueueUnitTask.getTypeScriptAlgebraicType(),
     },
+    rebuy_into_game: {
+      reducerName: "rebuy_into_game",
+      argsType: RebuyIntoGame.getTypeScriptAlgebraicType(),
+    },
     remove_vote_from_sale: {
       reducerName: "remove_vote_from_sale",
       argsType: RemoveVoteFromSale.getTypeScriptAlgebraicType(),
@@ -376,6 +386,10 @@ const REMOTE_MODULE = {
       reducerName: "transfer_resources",
       argsType: TransferResources.getTypeScriptAlgebraicType(),
     },
+    transfer_to_bank: {
+      reducerName: "transfer_to_bank",
+      argsType: TransferToBank.getTypeScriptAlgebraicType(),
+    },
     transfer_vote_ownership: {
       reducerName: "transfer_vote_ownership",
       argsType: TransferVoteOwnership.getTypeScriptAlgebraicType(),
@@ -383,6 +397,10 @@ const REMOTE_MODULE = {
     upgrade_unit: {
       reducerName: "upgrade_unit",
       argsType: UpgradeUnit.getTypeScriptAlgebraicType(),
+    },
+    withdraw_from_bank: {
+      reducerName: "withdraw_from_bank",
+      argsType: WithdrawFromBank.getTypeScriptAlgebraicType(),
     },
   },
   // Constructors which are used by the DbConnectionImpl to
@@ -426,6 +444,7 @@ export type Reducer = never
 | { name: "ProcessRoundVotes", args: ProcessRoundVotes }
 | { name: "PurchaseGuarantee", args: PurchaseGuarantee }
 | { name: "QueueUnitTask", args: QueueUnitTask }
+| { name: "RebuyIntoGame", args: RebuyIntoGame }
 | { name: "RemoveVoteFromSale", args: RemoveVoteFromSale }
 | { name: "SendChatMessage", args: SendChatMessage }
 | { name: "SendMessage", args: SendMessage }
@@ -439,8 +458,10 @@ export type Reducer = never
 | { name: "ToggleReady", args: ToggleReady }
 | { name: "TradeUnitVote", args: TradeUnitVote }
 | { name: "TransferResources", args: TransferResources }
+| { name: "TransferToBank", args: TransferToBank }
 | { name: "TransferVoteOwnership", args: TransferVoteOwnership }
 | { name: "UpgradeUnit", args: UpgradeUnit }
+| { name: "WithdrawFromBank", args: WithdrawFromBank }
 ;
 
 export class RemoteReducers {
@@ -670,6 +691,22 @@ export class RemoteReducers {
     this.connection.offReducer("queue_unit_task", callback);
   }
 
+  rebuyIntoGame(roomId: number) {
+    const __args = { roomId };
+    let __writer = new BinaryWriter(1024);
+    RebuyIntoGame.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("rebuy_into_game", __argsBuffer, this.setCallReducerFlags.rebuyIntoGameFlags);
+  }
+
+  onRebuyIntoGame(callback: (ctx: ReducerEventContext, roomId: number) => void) {
+    this.connection.onReducer("rebuy_into_game", callback);
+  }
+
+  removeOnRebuyIntoGame(callback: (ctx: ReducerEventContext, roomId: number) => void) {
+    this.connection.offReducer("rebuy_into_game", callback);
+  }
+
   removeVoteFromSale(voteId: number) {
     const __args = { voteId };
     let __writer = new BinaryWriter(1024);
@@ -878,6 +915,22 @@ export class RemoteReducers {
     this.connection.offReducer("transfer_resources", callback);
   }
 
+  transferToBank(amount: number) {
+    const __args = { amount };
+    let __writer = new BinaryWriter(1024);
+    TransferToBank.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("transfer_to_bank", __argsBuffer, this.setCallReducerFlags.transferToBankFlags);
+  }
+
+  onTransferToBank(callback: (ctx: ReducerEventContext, amount: number) => void) {
+    this.connection.onReducer("transfer_to_bank", callback);
+  }
+
+  removeOnTransferToBank(callback: (ctx: ReducerEventContext, amount: number) => void) {
+    this.connection.offReducer("transfer_to_bank", callback);
+  }
+
   transferVoteOwnership(voteId: number, buyerId: string, price: number) {
     const __args = { voteId, buyerId, price };
     let __writer = new BinaryWriter(1024);
@@ -908,6 +961,22 @@ export class RemoteReducers {
 
   removeOnUpgradeUnit(callback: (ctx: ReducerEventContext, unitId: number, upgradeType: string) => void) {
     this.connection.offReducer("upgrade_unit", callback);
+  }
+
+  withdrawFromBank(amount: number) {
+    const __args = { amount };
+    let __writer = new BinaryWriter(1024);
+    WithdrawFromBank.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("withdraw_from_bank", __argsBuffer, this.setCallReducerFlags.withdrawFromBankFlags);
+  }
+
+  onWithdrawFromBank(callback: (ctx: ReducerEventContext, amount: number) => void) {
+    this.connection.onReducer("withdraw_from_bank", callback);
+  }
+
+  removeOnWithdrawFromBank(callback: (ctx: ReducerEventContext, amount: number) => void) {
+    this.connection.offReducer("withdraw_from_bank", callback);
   }
 
 }
@@ -978,6 +1047,11 @@ export class SetReducerFlags {
     this.queueUnitTaskFlags = flags;
   }
 
+  rebuyIntoGameFlags: CallReducerFlags = 'FullUpdate';
+  rebuyIntoGame(flags: CallReducerFlags) {
+    this.rebuyIntoGameFlags = flags;
+  }
+
   removeVoteFromSaleFlags: CallReducerFlags = 'FullUpdate';
   removeVoteFromSale(flags: CallReducerFlags) {
     this.removeVoteFromSaleFlags = flags;
@@ -1043,6 +1117,11 @@ export class SetReducerFlags {
     this.transferResourcesFlags = flags;
   }
 
+  transferToBankFlags: CallReducerFlags = 'FullUpdate';
+  transferToBank(flags: CallReducerFlags) {
+    this.transferToBankFlags = flags;
+  }
+
   transferVoteOwnershipFlags: CallReducerFlags = 'FullUpdate';
   transferVoteOwnership(flags: CallReducerFlags) {
     this.transferVoteOwnershipFlags = flags;
@@ -1051,6 +1130,11 @@ export class SetReducerFlags {
   upgradeUnitFlags: CallReducerFlags = 'FullUpdate';
   upgradeUnit(flags: CallReducerFlags) {
     this.upgradeUnitFlags = flags;
+  }
+
+  withdrawFromBankFlags: CallReducerFlags = 'FullUpdate';
+  withdrawFromBank(flags: CallReducerFlags) {
+    this.withdrawFromBankFlags = flags;
   }
 
 }

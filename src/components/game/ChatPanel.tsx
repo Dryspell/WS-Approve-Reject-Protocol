@@ -6,6 +6,8 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import type { Identity } from "~/module_bindings";
+import type { ChatMessage as DBChatMessage } from "~/module_bindings/chat_message_type";
+import { showToast } from "~/components/ui/toast";
 
 interface ChatMessage {
   id: string;
@@ -13,7 +15,7 @@ interface ChatMessage {
   senderName: string;
   message: string;
   timestamp: number;
-  type: 'player' | 'system' | 'trade-offer';
+  type: 'player' | 'system';
 }
 
 interface ChatPanelProps {
@@ -27,19 +29,68 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
   const [messages, setMessages] = createSignal<ChatMessage[]>([]);
   const [inputValue, setInputValue] = createSignal('');
   const [scrollAreaRef, setScrollAreaRef] = createSignal<HTMLDivElement>();
+  const [chatRoomId, setChatRoomId] = createSignal<string>(`game_${props.roomId}`);
 
   // Auto-scroll to bottom when new messages arrive
   createEffect(() => {
     const scrollArea = scrollAreaRef();
     if (scrollArea) {
-      scrollArea.scrollTop = scrollArea.scrollHeight;
+      setTimeout(() => {
+        scrollArea.scrollTop = scrollArea.scrollHeight;
+      }, 50);
     }
   });
 
   onMount(() => {
-    // Add welcome message
-    addSystemMessage('Welcome to the game chat! You can communicate with other players here.');
+    const connection = conn();
+    if (!connection) return;
+
+    // Subscribe to chat messages
+    connection.db.chatMessage.onInsert((ctx, message) => {
+      if (message.roomId === chatRoomId()) {
+        addMessageFromDB(message);
+      }
+    });
+
+    // Load existing messages
+    const existingMessages = Array.from(connection.db.chatMessage.iter())
+      .filter(m => m.roomId === chatRoomId())
+      .sort((a, b) => {
+        const timeA = a.timestamp.seconds * 1000 + a.timestamp.nanoseconds / 1000000;
+        const timeB = b.timestamp.seconds * 1000 + b.timestamp.nanoseconds / 1000000;
+        return timeA - timeB;
+      });
+
+    existingMessages.forEach(msg => addMessageFromDB(msg));
+
+    // Add welcome message if no messages yet
+    if (existingMessages.length === 0) {
+      addSystemMessage('Welcome to the game chat! You can communicate with other players here.');
+    }
   });
+
+  const addMessageFromDB = (dbMessage: DBChatMessage) => {
+    const connection = conn();
+    if (!connection) return;
+
+    const sender = connection.db.user.identity.get(dbMessage.sender);
+    const timestamp = dbMessage.timestamp.seconds * 1000 + dbMessage.timestamp.nanoseconds / 1000000;
+
+    const msg: ChatMessage = {
+      id: dbMessage.id,
+      senderId: dbMessage.sender.toHexString(),
+      senderName: sender?.name || 'Anonymous',
+      message: dbMessage.text,
+      timestamp,
+      type: 'player',
+    };
+
+    setMessages(prev => {
+      // Avoid duplicates
+      if (prev.some(m => m.id === msg.id)) return prev;
+      return [...prev, msg];
+    });
+  };
 
   const addSystemMessage = (text: string) => {
     const msg: ChatMessage = {
@@ -50,7 +101,7 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
       timestamp: Date.now(),
       type: 'system',
     };
-    setMessages([...messages(), msg]);
+    setMessages(prev => [...prev, msg]);
   };
 
   const sendMessage = () => {
@@ -60,23 +111,18 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
     const connection = conn();
     if (!connection) return;
 
-    // Get current user
-    const currentUser = connection.db.user.identity.get(identity() as Identity);
-    
-    const msg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      senderId: identity()!.toHexString(),
-      senderName: currentUser?.name || 'Anonymous',
-      message,
-      timestamp: Date.now(),
-      type: 'player',
-    };
-
-    setMessages([...messages(), msg]);
-    setInputValue('');
-
-    // TODO: When SpacetimeDB adds chat support, send via reducer:
-    // connection.call('sendChatMessage', props.roomId, message);
+    try {
+      // Send via SpacetimeDB reducer
+      connection.reducers.sendChatMessage(chatRoomId(), message, null);
+      setInputValue('');
+    } catch (error) {
+      console.error('Failed to send chat message:', error);
+      showToast({
+        title: "Error",
+        description: "Failed to send message. Make sure you have chat permissions.",
+        variant: "error",
+      });
+    }
   };
 
   const handleKeyPress = (e: KeyboardEvent) => {

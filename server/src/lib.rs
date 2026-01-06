@@ -221,7 +221,7 @@ pub fn create_room(
     let room = GameRoom {
         id: 0, // Will be auto-incremented
         name,
-        member_ids: vec![creator_id],
+        member_ids: vec![creator_id.clone()],
         ticket_ids: vec![],
         offer_ids: vec![],
         start_time: None,
@@ -236,6 +236,23 @@ pub fn create_room(
     
     // Insert returns the row with the auto-generated ID
     let inserted_room = ctx.db.game_room().insert(room);
+
+    // Create corresponding chat room for game
+    let chat_room_id = format!("game_{}", inserted_room.id);
+    ctx.db.chat_room().insert(ChatRoom {
+        id: chat_room_id.clone(),
+        name: format!("Game Chat: {}", inserted_room.name),
+        created_at: ctx.timestamp.to_micros_since_unix_epoch(),
+    });
+
+    // Give creator chat permissions
+    if let Some(creator_identity) = ctx.db.user().iter().find(|u| u.identity.to_string() == creator_id) {
+        ctx.db.chat_permission().insert(ChatPermission {
+            room_id: chat_room_id.clone(),
+            user_id: creator_identity.identity,
+            permission: "write".to_string(),
+        });
+    }
 
     // Use the actual room ID (as string) for ReadyState
     let ready_state = ReadyState {
@@ -252,8 +269,18 @@ pub fn create_room(
 pub fn join_room(ctx: &ReducerContext, room_id: i32, user_id: String) -> Result<(), String> {
     if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
         if !room.member_ids.contains(&user_id) {
-            room.member_ids.push(user_id);
+            room.member_ids.push(user_id.clone());
             ctx.db.game_room().id().update(room);
+
+            // Give chat permissions to new member
+            let chat_room_id = format!("game_{}", room_id);
+            if let Some(user_identity) = ctx.db.user().iter().find(|u| u.identity.to_string() == user_id) {
+                ctx.db.chat_permission().insert(ChatPermission {
+                    room_id: chat_room_id,
+                    user_id: user_identity.identity,
+                    permission: "write".to_string(),
+                });
+            }
         }
     }
     Ok(())
@@ -1287,6 +1314,122 @@ pub fn cancel_unit_task(
         }
     }
     Ok(())
+}
+
+// Vote Exchange: Bank account management
+#[reducer]
+pub fn transfer_to_bank(ctx: &ReducerContext, amount: f64) -> Result<(), String> {
+    if let Some(mut user) = ctx.db.user().identity().find(ctx.sender) {
+        if amount <= 0.0 {
+            return Err("Amount must be positive".to_string());
+        }
+        
+        if user.wallet_balance < amount {
+            return Err("Insufficient wallet balance".to_string());
+        }
+        
+        user.wallet_balance -= amount;
+        user.bank_account += amount;
+        ctx.db.user().identity().update(user);
+        
+        Ok(())
+    } else {
+        Err("User not found".to_string())
+    }
+}
+
+#[reducer]
+pub fn withdraw_from_bank(ctx: &ReducerContext, amount: f64) -> Result<(), String> {
+    if let Some(mut user) = ctx.db.user().identity().find(ctx.sender) {
+        if amount <= 0.0 {
+            return Err("Amount must be positive".to_string());
+        }
+        
+        if user.bank_account < amount {
+            return Err("Insufficient bank balance".to_string());
+        }
+        
+        user.bank_account -= amount;
+        user.wallet_balance += amount;
+        ctx.db.user().identity().update(user);
+        
+        Ok(())
+    } else {
+        Err("User not found".to_string())
+    }
+}
+
+// Vote Exchange: Post-elimination re-buy
+#[reducer]
+pub fn rebuy_into_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
+    let player_id = ctx.sender.to_hex().to_string();
+    
+    if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
+        // Check if game is active
+        if room.game_status != "active" {
+            return Err("Game is not active".to_string());
+        }
+        
+        // Check if player is eliminated
+        if !room.eliminated_players.contains(&player_id) {
+            return Err("You are not eliminated".to_string());
+        }
+        
+        // Rebuy cost is 3x the original buy-in
+        let rebuy_cost = room.buyin_amount * 3.0;
+        let current_round = room.current_round;
+        
+        if let Some(mut user) = ctx.db.user().identity().find(ctx.sender) {
+            if user.wallet_balance < rebuy_cost {
+                return Err(format!("Insufficient funds. Re-buy costs ${:.2}", rebuy_cost));
+            }
+            
+            // Deduct re-buy cost
+            user.wallet_balance -= rebuy_cost;
+            user.total_profit_loss -= rebuy_cost;
+            ctx.db.user().identity().update(user);
+            
+            // Remove from eliminated players
+            room.eliminated_players.retain(|p| p != &player_id);
+            
+            // Add re-buy to pot (optional: could be 100% or partial)
+            room.pot_size += rebuy_cost * 0.8; // 80% to pot, 20% house fee
+            
+            ctx.db.game_room().id().update(room);
+            
+            // Give player a new vote
+            ctx.db.vote().insert(Vote {
+                id: 0,
+                room_id,
+                round_number: current_round,
+                player_id: player_id.clone(),
+                original_owner: player_id.clone(),
+                color: None,
+                is_for_sale: false,
+                sale_price: None,
+                timestamp: ctx.timestamp,
+            });
+            
+            // Record transaction
+            ctx.db.transaction().insert(Transaction {
+                id: 0,
+                room_id,
+                from_player: player_id.clone(),
+                to_player: "pot".to_string(),
+                transaction_type: "rebuy".to_string(),
+                amount: rebuy_cost,
+                vote_id: None,
+                guarantee_id: None,
+                timestamp: ctx.timestamp,
+            });
+            
+            Ok(())
+        } else {
+            Err("User not found".to_string())
+        }
+    } else {
+        Err("Room not found".to_string())
+    }
 }
 
 #[reducer]

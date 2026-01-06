@@ -1,7 +1,11 @@
-import { Component, For, Show } from "solid-js";
+import { Component, For, Show, createSignal } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
+import RebuyModal from "../game/RebuyModal";
+import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import type { User } from "~/module_bindings/user_type";
+import type { GameRoom } from "~/module_bindings/game_room_type";
 
 interface EliminationModalProps {
   roundNumber: number;
@@ -10,11 +14,20 @@ interface EliminationModalProps {
   minorityColor: "red" | "blue";
   redVotes: number;
   blueVotes: number;
+  room: GameRoom;
+  currentUser: User;
   onClose: () => void;
 }
 
 const EliminationModal: Component<EliminationModalProps> = (props) => {
+  const { identity } = useSpacetimeDB();
+  const [showRebuy, setShowRebuy] = createSignal(false);
+  
   const isTie = () => props.redVotes === props.blueVotes;
+  const isCurrentUserEliminated = () => {
+    const userId = identity()?.toHexString();
+    return userId && props.eliminatedPlayers.includes(userId);
+  };
   const majorityColor = () => props.minorityColor === "red" ? "blue" : "red";
 
   return (
@@ -133,13 +146,40 @@ const EliminationModal: Component<EliminationModalProps> = (props) => {
             </div>
           </Show>
 
-          {/* Continue Button */}
-          <Button onClick={props.onClose} class="w-full py-6 text-lg font-semibold">
-            <Show when={props.survivingPlayers.length > 2} fallback={<>See Final Results →</>}>
-              Continue to Next Round →
+          {/* Action Buttons */}
+          <div class="space-y-2">
+            <Show when={isCurrentUserEliminated()}>
+              <Button
+                class="w-full py-6 text-lg font-semibold"
+                variant="default"
+                onClick={() => setShowRebuy(true)}
+              >
+                🎮 Re-Enter Game (3x Buy-in)
+              </Button>
             </Show>
-          </Button>
+            <Button
+              onClick={props.onClose}
+              class="w-full py-6 text-lg font-semibold"
+              variant={isCurrentUserEliminated() ? 'outline' : 'default'}
+            >
+              <Show when={props.survivingPlayers.length > 2} fallback={<>See Final Results →</>}>
+                {isCurrentUserEliminated() ? 'Watch Game' : 'Continue to Next Round'} →
+              </Show>
+            </Button>
+          </div>
         </CardContent>
+
+        {/* Re-buy Modal */}
+        <Show when={showRebuy()}>
+          <RebuyModal
+            user={props.currentUser}
+            room={props.room}
+            onClose={() => setShowRebuy(false)}
+            onSuccess={() => {
+              props.onClose();
+            }}
+          />
+        </Show>
       </Card>
     </div>
   );

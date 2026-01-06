@@ -493,6 +493,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           minorityColor={getVoteTotals().minority}
           redVotes={getVoteTotals().red}
           blueVotes={getVoteTotals().blue}
+          room={props.room}
+          currentUser={props.currentUser}
           onClose={() => setShowEliminationModal(false)}
         />
       </Show>
