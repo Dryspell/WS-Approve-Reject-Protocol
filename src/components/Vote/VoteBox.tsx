@@ -20,6 +20,7 @@ const VoteBox: Component = () => {
   const [roomsReadyState, setRoomsReadyState] = createStore<Record<string, ReadyState>>({});
   const [currentRoom, setCurrentRoom] = createSignal<string | undefined>(undefined);
   const [newRoomName, setNewRoomName] = createSignal("");
+  const [buyinAmount, setBuyinAmount] = createSignal<number>(10); // Default $10 buy-in
   const [showCreateRoom, setShowCreateRoom] = createSignal(false);
   const [subscriptionsSet, setSubscriptionsSet] = createSignal(false);
   const [currentUser, setCurrentUser] = createSignal<any>(null);
@@ -160,10 +161,11 @@ const VoteBox: Component = () => {
       const creatorId = identity()?.toHexString() || "anonymous";
       
       // Call the reducer - it's fire-and-forget, the onInsert callback will update the list
-      connection.reducers.createRoom(roomId, roomName, creatorId);
+      connection.reducers.createRoom(roomId, roomName, creatorId, buyinAmount());
       
       // Clear input and hide form immediately
       setNewRoomName("");
+      setBuyinAmount(10); // Reset to default
       setShowCreateRoom(false);
       
       // Show feedback - the room will appear in the list when created
@@ -261,33 +263,60 @@ const VoteBox: Component = () => {
       </div>
 
       {showCreateRoom() && (
-        <div class="flex gap-2 px-4">
-          <input
-            type="text"
-            value={newRoomName()}
-            onInput={e => setNewRoomName(e.currentTarget.value)}
-            onKeyDown={e => {
-              if (e.key === "Enter" && newRoomName().trim() && connected()) {
-                handleCreateRoom();
-              }
-            }}
-            placeholder="Room name"
-            disabled={!connected()}
-            class="flex-1 rounded border p-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          <button
-            onClick={handleCreateRoom}
-            disabled={!connected() || !newRoomName().trim()}
-            class="rounded bg-green-500 px-4 py-2 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Create
-          </button>
-          <button
-            onClick={() => setShowCreateRoom(false)}
-            class="rounded bg-gray-500 px-4 py-2 text-white hover:bg-gray-600"
-          >
-            Cancel
-          </button>
+        <div class="space-y-3 rounded-lg border bg-gray-50 p-4 mx-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">
+                Room Name
+              </label>
+              <input
+                type="text"
+                value={newRoomName()}
+                onInput={e => setNewRoomName(e.currentTarget.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && newRoomName().trim() && connected()) {
+                    handleCreateRoom();
+                  }
+                }}
+                placeholder="My Game Room"
+                disabled={!connected()}
+                class="w-full rounded border p-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">
+                Buy-in Amount ($)
+              </label>
+              <input
+                type="number"
+                min="0.01"
+                step="1"
+                value={buyinAmount()}
+                onInput={e => setBuyinAmount(parseFloat(e.currentTarget.value) || 10)}
+                placeholder="10"
+                disabled={!connected()}
+                class="w-full rounded border p-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+          </div>
+          <div class="rounded border border-blue-200 bg-blue-50 p-2 text-xs text-blue-700">
+            💡 <strong>Buy-in:</strong> Each player pays this amount to join. Winner(s) take the pot!
+          </div>
+          <div class="flex gap-2">
+            <button
+              onClick={handleCreateRoom}
+              disabled={!connected() || !newRoomName().trim() || buyinAmount() <= 0}
+              class="flex-1 rounded bg-green-500 px-4 py-2 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Create Room (${buyinAmount().toFixed(2)} buy-in)
+            </button>
+            <button
+              onClick={() => setShowCreateRoom(false)}
+              class="rounded bg-gray-500 px-4 py-2 text-white hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

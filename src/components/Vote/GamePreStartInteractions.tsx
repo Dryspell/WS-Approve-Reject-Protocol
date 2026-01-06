@@ -73,32 +73,62 @@ export default function GamePreStartInteractions(props: {
   };
 
   return (
-    <>
-      <div class="flex flex-row items-center justify-between">
+    <div class="space-y-4">
+      {/* Game Info */}
+      <div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-lg font-semibold text-blue-900">
+              {room.name}
+            </div>
+            <div class="text-sm text-blue-700">
+              {memberIds.length} {memberIds.length === 1 ? "player" : "players"} • ${room.buyinAmount.toFixed(2)} buy-in
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-sm text-blue-600">Pot</div>
+            <div class="text-2xl font-bold text-blue-900">
+              ${(room.buyinAmount * memberIds.length).toFixed(2)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Players */}
+      <div class="flex flex-row flex-wrap gap-2">
         <For each={memberIds}>
           {memberId => (
             <UserAvatarCard user={{ id: memberId, username: memberId }}>
               <div class="flex justify-end">
                 {userIsReady(props.roomId, memberId, props.roomsPreStart) ? (
-                  <Badge class="bg-green-700">Ready</Badge>
+                  <Badge class="bg-green-700">✓ Ready</Badge>
                 ) : (
-                  <Badge class="bg-orange-600">Not Ready</Badge>
+                  <Badge class="bg-orange-600">Waiting...</Badge>
                 )}
               </div>
             </UserAvatarCard>
           )}
         </For>
       </div>
-      <div class="flex flex-row items-center justify-between">
+
+      {/* Ready Button */}
+      <div class="flex flex-col gap-2">
         <Button
-          variant="outline"
-          class="m-1.5 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 text-sm font-medium"
+          variant={userIsReady(props.roomId, props.user().id, props.roomsPreStart) ? "outline" : "default"}
+          class="w-full py-6 text-lg font-semibold"
           onClick={handleToggleReady}
           disabled={!props.connected()}
         >
-          {userIsReady(props.roomId, props.user().id, props.roomsPreStart) ? `Unready` : `Ready?`}
+          {userIsReady(props.roomId, props.user().id, props.roomsPreStart) 
+            ? "✓ Ready (click to unready)" 
+            : "Ready to Play?"}
         </Button>
+        <div class="text-center text-sm text-gray-600">
+          {userIsReady(props.roomId, props.user().id, props.roomsPreStart)
+            ? "Waiting for other players..."
+            : `You'll pay $${room.buyinAmount.toFixed(2)} when the game starts`}
+        </div>
       </div>
-    </>
+    </div>
   );
 }

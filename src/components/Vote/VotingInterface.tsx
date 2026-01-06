@@ -1,13 +1,15 @@
-import { Component, createSignal, For, Show, onMount } from "solid-js";
+import { Component, createSignal, For, Show, onMount, onCleanup, createEffect } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import type { User } from "~/module_bindings/user_type";
 import type { GameRoom } from "~/module_bindings/game_room_type";
 import type { Vote } from "~/module_bindings/vote_type";
+import type { Transaction } from "~/module_bindings/transaction_type";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import RoundTimer from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
+import EliminationModal from "./EliminationModal";
 import { ToastHelper } from "~/lib/toast-helpers";
 
 interface VotingInterfaceProps {
@@ -19,7 +21,46 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const { conn, connected } = useSpacetimeDB();
   const [votes, setVotes] = createSignal<Vote[]>([]);
   const [allPlayers, setAllPlayers] = createSignal<User[]>([]);
+  const [transactions, setTransactions] = createSignal<Transaction[]>([]);
   const [draggedVote, setDraggedVote] = createSignal<Vote | null>(null);
+  const [roundProcessing, setRoundProcessing] = createSignal(false);
+  const [showEliminationModal, setShowEliminationModal] = createSignal(false);
+  const [lastProcessedRound, setLastProcessedRound] = createSignal(0);
+
+  // Auto-process rounds when timer expires
+  createEffect(() => {
+    if (!props.room.startTime || props.room.gameStatus !== "active") return;
+
+    const checkRoundEnd = setInterval(() => {
+      const now = Date.now();
+      const roundStart = Number(props.room.startTime);
+      const elapsed = Math.floor((now - roundStart) / 1000);
+      const timeLeft = props.room.roundDuration - elapsed;
+
+      // Trigger round processing when time is up (with 1 second buffer)
+      if (timeLeft <= 0 && !roundProcessing()) {
+        setRoundProcessing(true);
+        processRound();
+      }
+    }, 1000); // Check every second
+
+    onCleanup(() => clearInterval(checkRoundEnd));
+  });
+
+  const processRound = async () => {
+    const connection = conn();
+    if (!connection) return;
+
+    try {
+      console.log("⏰ Round time expired - processing votes...");
+      await connection.reducers.processRoundVotes(props.room.id);
+      ToastHelper.info("Round Processing", "Tallying votes and determining results...");
+    } catch (error) {
+      console.error("Failed to process round:", error);
+      ToastHelper.error("Failed to process round");
+      setRoundProcessing(false);
+    }
+  };
 
   onMount(() => {
     const connection = conn();
@@ -50,6 +91,37 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         prev.map((u) => (u.identity.isEqual(newUser.identity) ? newUser : u))
       );
     });
+
+    // Subscribe to GameRoom updates to detect round changes
+    connection.db.gameRoom.onUpdate((ctx, oldRoom, newRoom) => {
+      // Check if a new round just started (round number increased)
+      if (newRoom.id === props.room.id && newRoom.currentRound > lastProcessedRound()) {
+        // Show elimination modal for the previous round
+        if (lastProcessedRound() > 0) {
+          setShowEliminationModal(true);
+        }
+        setLastProcessedRound(newRoom.currentRound);
+        setRoundProcessing(false);
+      }
+    });
+
+    // Subscribe to transactions for market history
+    connection.db.transaction.onInsert((ctx, transaction) => {
+      setTransactions((prev) => [...prev, transaction]);
+    });
+
+    // Initial load of all data
+    const initialVotes = Array.from(connection.db.vote.iter());
+    setVotes(initialVotes);
+
+    const initialPlayers = Array.from(connection.db.user.iter());
+    setAllPlayers(initialPlayers);
+
+    const initialTransactions = Array.from(connection.db.transaction.iter());
+    setTransactions(initialTransactions);
+
+    // Set initial round tracking
+    setLastProcessedRound(props.room.currentRound);
   });
 
   // Get player's votes
@@ -79,6 +151,19 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     return allPlayers().filter((player) =>
       props.room.eliminatedPlayers.includes(player.identity.toHexString())
     );
+  };
+
+  // Calculate vote totals for elimination modal
+  const getVoteTotals = () => {
+    const currentRoundVotes = votes().filter(
+      (v) => v.roomId === props.room.id && v.roundNumber === props.room.currentRound
+    );
+    
+    const red = currentRoundVotes.filter((v) => v.color === "red").length;
+    const blue = currentRoundVotes.filter((v) => v.color === "blue").length;
+    const minority = red < blue ? "red" : blue < red ? "blue" : "red"; // In case of tie, doesn't matter
+
+    return { red, blue, minority: minority as "red" | "blue" };
   };
 
   // Handle vote color setting
@@ -343,23 +428,32 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         {/* Right: Market Panel */}
         <div class="overflow-auto">
           <VoteMarketPanel
-            units={[]} // Will be updated to work with votes instead of units
+            votes={votes()}
+            transactions={transactions()}
+            roomId={props.room.id}
+            roundNumber={props.room.currentRound}
             currentUserId={props.currentUser.identity.toHexString()}
-            onBuyVote={(unitId, price) => {
-              // TODO: Implement vote purchasing
-              console.log("Buy vote", unitId, price);
-            }}
-            onSetPrice={(unitId, price) => {
-              // TODO: Implement price setting
-              console.log("Set price", unitId, price);
-            }}
+            userWalletBalance={props.currentUser.walletBalance}
           />
         </div>
       </div>
 
+      {/* Elimination Modal */}
+      <Show when={showEliminationModal()}>
+        <EliminationModal
+          roundNumber={props.room.currentRound - 1}
+          eliminatedPlayers={eliminatedPlayers().map(p => p.identity.toHexString())}
+          survivingPlayers={remainingPlayers().map(p => p.identity.toHexString())}
+          minorityColor={getVoteTotals().minority}
+          redVotes={getVoteTotals().red}
+          blueVotes={getVoteTotals().blue}
+          onClose={() => setShowEliminationModal(false)}
+        />
+      </Show>
+
       {/* Game Status Messages */}
       <Show when={props.room.gameStatus === "completed"}>
-        <div class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <Card class="w-96">
             <CardHeader>
               <CardTitle class="text-center text-2xl">🎉 Game Over!</CardTitle>

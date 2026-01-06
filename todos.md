@@ -623,6 +623,47 @@ See roadmap.md Phase 2 for full colony builder details.
 
 ---
 
+## 🎉 Sprint 4 Complete - January 5, 2026
+
+### What We Built Today (Part 2)
+**Game Flow Automation**:
+1. **Auto-round processing** - Timer automatically triggers vote tallying when time expires
+2. **Buy-in amount UI** - Enhanced lobby with configurable buy-in and pot display
+3. **Elimination modal** - Beautiful results screen showing vote counts and eliminations
+4. **Unit tests** - 24 passing tests for crafting and spatial utils
+
+**Features Added**:
+- ✅ Auto-trigger `process_round_votes` on timer expiry (1-second polling)
+- ✅ Buy-in amount input in room creation form
+- ✅ Enhanced lobby showing pot size and player count
+- ✅ Elimination modal with vote distribution visualization
+- ✅ Strategy tips in elimination modal
+- ✅ Tie handling display
+- ✅ 14 unit tests for crafting logic (canCraftRecipe, getCraftingCost, getCraftingTime)
+- ✅ 10 unit tests for spatial utils (kmeans clustering)
+- ✅ Test suite running successfully (24 tests passing)
+
+**Files Created/Updated**:
+- `src/components/Vote/EliminationModal.tsx` (new, 160 lines)
+- `src/components/Vote/VotingInterface.tsx` (updated with auto-processing)
+- `src/components/Vote/VoteBox.tsx` (updated with buy-in UI)
+- `src/components/Vote/GamePreStartInteractions.tsx` (enhanced lobby display)
+- `tests/crafting.test.ts` (new, 200+ lines)
+- `tests/spatial-utils.test.ts` (new, 180+ lines)
+- `vitest.config.ts` (fixed path resolution)
+
+**Ready for Manual Testing**:
+The game is now fully playable end-to-end:
+1. Create room with custom buy-in
+2. Players join and ready up
+3. Game starts, players trade votes
+4. Timer expires, votes are tallied automatically
+5. Elimination modal shows results
+6. Next round starts or game ends
+7. Winners receive pot distribution
+
+---
+
 ## 🎉 Sprint 3 Complete - January 5, 2026
 
 ### What We Built Today
