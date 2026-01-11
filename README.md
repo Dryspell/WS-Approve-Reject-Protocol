@@ -1,155 +1,95 @@
-# SocketSignal
+# SocketSignal - The Vote Exchange
 
-A multiplayer game combining market-based voting mechanics with colony-building elements, built with SolidStart.
+A multiplayer game combining market-based voting mechanics with strategic elimination, built with SolidJS and SpacetimeDB.
 
 ## Overview
 
-SocketSignal is **The Vote Exchange** - a market-based multiplayer game where players trade votes in a minority-wins elimination system.
+**The Vote Exchange** is a market-based multiplayer game where players trade votes in a minority-wins elimination system.
 
 ### Core Gameplay
 
-Players buy into a game, creating a pot. During each timed round (e.g., 5 minutes):
+Players buy into a game, creating a pot. During each timed round:
 - **Trade votes**: Buy and sell voting tickets between players
 - **Trade guarantees**: Purchase promises about how others will vote (they can bluff!)
 - **Strategic voting**: Players with multiple votes can split them to guarantee minority
 - **Elimination**: After voting, majority voters are eliminated, minority survives
 - **Winner takes pot**: Last 1-2 players standing win the pot
 
-### Optional Extension: Colony Builder
-
-An MMO-style resource management layer that runs parallel to The Vote Exchange:
-- Resource gathering and crafting
-- Building construction
-- Unit management
-- Resource marketplace
-
-**Note**: The colony builder is secondary. The Vote Exchange is the core product.
-
-For detailed game design documentation, see:
-
-- **[VOTE_EXCHANGE_UI_IMPLEMENTATION.md](./VOTE_EXCHANGE_UI_IMPLEMENTATION.md)** - **Latest: UI Complete! ✅**
-- **[SPRINT_3_SUMMARY.md](./SPRINT_3_SUMMARY.md)** - Server Implementation Complete
-- **[VOTE_EXCHANGE_PRIORITY.md](./VOTE_EXCHANGE_PRIORITY.md)** - Why Vote Exchange is the core
-- [VOTE_EXCHANGE_IMPLEMENTATION.md](./VOTE_EXCHANGE_IMPLEMENTATION.md) - Technical implementation details
-- [Core Game Rules](./game-design/rules.md) - The Vote Exchange mechanics
-- [Development Roadmap](./roadmap.md) - Implementation plan
-- [TODOs](./todos.md) - Current sprint tasks (Server ✅ Complete, UI 🔄 In Progress)
-- [Colony Builder Mechanics](./game-design/rules-colony-builder.md) - Optional extension
-
-## Development Setup
-
-### Prerequisites
-
-- Node.js (v18 or higher)
-- npm, yarn, or pnpm
-- SpaceTimeDB CLI (for database management)
-
-### SpaceTimeDB Setup
-
-SocketSignal uses SpaceTimeDB for real-time multiplayer functionality. Here's how to set it up:
-
-1. Install the SpaceTimeDB CLI:
+## Quick Start
 
 ```bash
-npm install -g @clockworklabs/spacetimedb-cli
-```
-
-2. Initialize SpaceTimeDB in your project:
-
-```bash
-spacetimedb init
-```
-
-3. Create a new SpaceTimeDB module:
-
-```bash
-spacetimedb create-module socket-signal
-```
-
-4. Start the SpaceTimeDB development server:
-
-```bash
-spacetimedb dev
-```
-
-The SpaceTimeDB server will run on `localhost:3000` by default. Your game client will connect to this server for real-time updates.
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/socket-signal.git
-cd socket-signal
-
 # Install dependencies
-npm install
-# or
-yarn
-# or
 pnpm install
+
+# Terminal 1: Start SpacetimeDB
+spacetime start
+
+# Terminal 2: Publish module & start dev server
+pnpm publish:local
+pnpm dev
 ```
 
-### Development
+Navigate to `http://localhost:3001/vote` to play!
 
-Start the development server:
+See [docs/getting-started.md](./docs/getting-started.md) for detailed setup instructions.
 
-```bash
-npm run dev
+## Project Status
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
+**Feature Complete**: 95% ✅  
+**Current Focus**: Mobile Optimization (Sprint 8)
 
-### Building
+The Vote Exchange is fully playable on desktop with all core mechanics implemented.
 
-Build the project for production:
+## Documentation
 
-```bash
-npm run build
-```
+| Document | Description |
+|----------|-------------|
+| [Getting Started](./docs/getting-started.md) | Setup and how to play |
+| [SpacetimeDB Guide](./docs/spacetimedb.md) | Database integration |
+| [Testing Guide](./docs/testing.md) | Test scenarios and manual testing |
+| [Deployment Guide](./docs/deployment.md) | Production deployment |
+| [Development History](./docs/development-history.md) | Sprint summaries |
+| [Game Rules](./game-design/rules.md) | Complete game mechanics |
+| [TODOs](./todos.md) | Current sprint tasks |
 
-The build output will be optimized for deployment to different environments based on your configuration in `app.config.js`.
+## Tech Stack
+
+- **Frontend**: SolidJS, SolidStart, TailwindCSS, Solid-UI
+- **Backend**: SpacetimeDB (Rust)
+- **Real-time**: WebSocket via SpacetimeDB SDK
+- **Testing**: Vitest
 
 ## Project Structure
 
-- `/src` - Source code
-- `/game-design` - Game design documentation
-- `/public` - Static assets
-- `/tests` - Test files
-- `/spacetimedb` - SpaceTimeDB module definitions and migrations
+```
+socketSignal/
+├── server/              # SpacetimeDB Rust module
+│   └── src/lib.rs       # Tables, reducers, game logic
+├── src/
+│   ├── components/      # UI components
+│   │   └── Vote/        # Vote Exchange components
+│   ├── hooks/           # React hooks
+│   ├── lib/             # Utilities
+│   ├── module_bindings/ # Auto-generated SpacetimeDB types
+│   └── routes/          # Page routes
+├── game-design/         # Game design documentation
+├── docs/                # Technical documentation
+└── tests/               # Unit tests
+```
 
-## SpaceTimeDB Usage
+## Development
 
-SpaceTimeDB is used for:
-
-- Real-time game state synchronization
-- Vote exchange market operations
-- Resource trading and inventory management
-- Player and laborer data persistence
-
-Key SpaceTimeDB concepts used in SocketSignal:
-
-- **Tables**: Store game state (players, laborers, resources, etc.)
-- **Reducers**: Handle game actions (voting, trading, building)
-- **Subscriptions**: Real-time updates for game clients
-- **Queries**: Fetch game state and market data
-
-Example SpaceTimeDB table definition:
-
-```rust
-#[spacetimedb(table)]
-pub struct Player {
-    #[primarykey]
-    pub id: u64,
-    pub name: String,
-    pub wallet_balance: u64,
-    pub colony_id: Option<u64>,
-}
+```bash
+pnpm dev          # Start development server
+pnpm generate     # Regenerate TypeScript bindings
+pnpm publish:local # Publish SpacetimeDB module
+pnpm test         # Run unit tests
+pnpm build        # Build for production
 ```
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting pull requests.
+Contributions are welcome! Please read the [game rules](./game-design/rules.md) to understand the core mechanics before contributing.
 
 ## License
 
