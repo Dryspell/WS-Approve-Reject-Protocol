@@ -56,6 +56,8 @@
 
 ## 🧪 Testing & Validation
 
+> **See [docs/qa-testing-outline.md](./docs/qa-testing-outline.md) for comprehensive QA testing scenarios**
+
 - [ ] **Multi-player Testing**
   - [ ] Game 1 scenario: 10 players, no trading
   - [ ] Game 2 scenario: Vote trading between players

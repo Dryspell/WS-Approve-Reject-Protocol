@@ -182,6 +182,7 @@ The MMO/resource layer sits alongside The Vote Exchange. Players can focus on vo
 - [Getting Started](./docs/getting-started.md) - Setup and how to play
 - [SpacetimeDB Guide](./docs/spacetimedb.md) - Database integration
 - [Testing Guide](./docs/testing.md) - Test scenarios
+- [QA Testing Outline](./docs/qa-testing-outline.md) - Comprehensive QA test cases
 - [Deployment Guide](./docs/deployment.md) - Production deployment
 - [Development History](./docs/development-history.md) - Sprint summaries
 - [Game Rules](./game-design/rules.md) - Complete game mechanics
