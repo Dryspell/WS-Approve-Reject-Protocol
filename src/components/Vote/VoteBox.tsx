@@ -30,16 +30,16 @@ const VoteBox: Component = () => {
   });
 
   // Initialize SpacetimeDB connection
-  const { conn, connected, identity } = useSpacetimeDB();
+  const { conn, connected, identity, subscribed } = useSpacetimeDB();
 
   // Subscribe to current user data
   createEffect(() => {
     const connection = conn();
-    if (!connection || !connected() || !identity()) return;
+    if (!connection || !connected() || !subscribed() || !identity()) return;
 
     // Load current user
     const identityHex = identity()!.toHexString();
-    const userFromDb = connection.db.user.identity().find(identity()!);
+    const userFromDb = connection.db.user.identity.find(identity()!);
     if (userFromDb) {
       setCurrentUser(userFromDb);
     }
@@ -56,9 +56,9 @@ const VoteBox: Component = () => {
   createEffect(() => {
     const connection = conn();
 
-    // Only proceed if we have both connection and it's connected
-    if (!connection || !connected()) {
-      console.log("Waiting for connection... connected:", connected(), "conn:", !!connection);
+    // Only proceed if we have connection, it's connected, AND subscriptions are applied
+    if (!connection || !connected() || !subscribed()) {
+      console.log("Waiting for connection... connected:", connected(), "conn:", !!connection, "subscribed:", subscribed());
       return;
     }
 
@@ -122,6 +122,22 @@ const VoteBox: Component = () => {
       setRoomsReadyState({
         [newState.roomId]: newState
       });
+    });
+
+    // Listen for createRoom reducer results (success and errors)
+    connection.reducers.onCreateRoom((ctx) => {
+      console.log("📝 createRoom reducer completed:", ctx);
+      if (ctx.event.status.tag === "Failed") {
+        console.error("❌ createRoom failed:", ctx.event.status.value);
+        showToast({
+          title: "Error Creating Room",
+          description: ctx.event.status.value || "Unknown error",
+          variant: "error",
+          duration: DEFAULT_TOAST_DURATION,
+        });
+      } else {
+        console.log("✅ createRoom succeeded");
+      }
     });
 
     // Mark subscriptions as set up
@@ -227,14 +243,24 @@ const VoteBox: Component = () => {
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <Show
-              when={connected()}
+              when={connected() && subscribed()}
               fallback={
-                <>
-                  <Badge variant="destructive">
-                    <span class="mr-1">●</span> Disconnected
+                <Show
+                  when={connected()}
+                  fallback={
+                    <>
+                      <Badge variant="destructive">
+                        <span class="mr-1">●</span> Disconnected
+                      </Badge>
+                      <span class="text-sm text-muted-foreground">Connecting to SpacetimeDB...</span>
+                    </>
+                  }
+                >
+                  <Badge variant="secondary">
+                    <span class="mr-1">●</span> Syncing
                   </Badge>
-                  <span class="text-sm text-muted-foreground">Connecting to SpacetimeDB...</span>
-                </>
+                  <span class="text-sm text-muted-foreground">Loading game data...</span>
+                </Show>
               }
             >
               <Badge variant="default">

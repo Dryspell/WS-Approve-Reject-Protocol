@@ -1,11 +1,15 @@
 import { createSignal, createContext, useContext, ParentComponent, onCleanup, onMount, createEffect } from "solid-js";
-import { Identity, type ErrorContextInterface } from "@clockworklabs/spacetimedb-sdk";
-import { DbConnection } from "../module_bindings/index";
+import { isServer } from "solid-js/web";
+
+// Types imported dynamically to avoid SSR issues
+type Identity = import("@clockworklabs/spacetimedb-sdk").Identity;
+type DbConnection = import("../module_bindings/index").DbConnection;
 
 type SpacetimeDBContextType = {
   conn: () => DbConnection | null;
   identity: () => Identity | null;
   connected: () => boolean;
+  subscribed: () => boolean;
 };
 
 const SpacetimeDBContext = createContext<SpacetimeDBContextType>();
@@ -14,8 +18,18 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
   const [conn, setConn] = createSignal<DbConnection | null>(null);
   const [identity, setIdentity] = createSignal<Identity | null>(null);
   const [connected, setConnected] = createSignal(false);
+  const [subscribed, setSubscribed] = createSignal(false);
 
-  onMount(() => {
+  onMount(async () => {
+    // Skip connection on server-side rendering
+    if (isServer) {
+      return;
+    }
+    
+    // Dynamically import SDK and bindings to avoid SSR issues
+    const { Identity: IdentityClass } = await import("@clockworklabs/spacetimedb-sdk");
+    const { DbConnection: DbConnectionClass } = await import("../module_bindings/index");
+    
     // Get the host URL - for cloud it will be like "wss://testnet.spacetimedb.com"
     const host = import.meta.env.VITE_SPACETIME_HOST || "ws://localhost:3000";
     const moduleName = import.meta.env.VITE_SPACETIME_MODULE_NAME || import.meta.env.VITE_SPACETIME_DATABASE || "game";
@@ -46,22 +60,33 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
         .subscriptionBuilder()
         .onApplied(() => {
           console.log('SpacetimeDB client cache initialized.');
+          setSubscribed(true);
+        })
+        .onError((ctx: any) => {
+          console.error('SpacetimeDB subscription error:', ctx);
         })
         .subscribe([
+          // Core tables
           'SELECT * FROM message',
           'SELECT * FROM user',
+          // Chat system
           'SELECT * FROM chat_message',
           'SELECT * FROM chat_room',
           'SELECT * FROM chat_permission',
+          // Game system
           'SELECT * FROM game_room',
           'SELECT * FROM unit',
+          'SELECT * FROM unit_stats',
           'SELECT * FROM resource',
           'SELECT * FROM unit_inventory',
+          'SELECT * FROM unit_task_queue',
           'SELECT * FROM game_event',
           'SELECT * FROM ready_state',
           'SELECT * FROM vote',
-          'SELECT * FROM unit_task_queue',
-          // Social system tables
+          'SELECT * FROM transaction',
+          'SELECT * FROM guarantee',
+          'SELECT * FROM guarantee_purchase',
+          // Social system
           'SELECT * FROM friend_request',
           'SELECT * FROM friendship',
           'SELECT * FROM direct_message_conversation',
@@ -75,7 +100,7 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
       setConnected(false);
     };
 
-    const onConnectError = (ctx: ErrorContextInterface, error: Error) => {
+    const onConnectError = (ctx: any, error: Error) => {
       console.error("Failed to connect to SpacetimeDB:", error);
       setConnected(false);
     };
@@ -92,7 +117,7 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
     }
 
     // Create the connection
-    const builder = DbConnection.builder()
+    const builder = DbConnectionClass.builder()
       .withUri(host)
       .withModuleName(moduleName)
       .onConnect(onConnect)
@@ -120,6 +145,7 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
     conn,
     identity,
     connected,
+    subscribed,
   };
 
   return (
