@@ -118,11 +118,18 @@
 - ✅ Sprint 5: Polish & Developer Tools
 - ✅ Sprint 6: Social & Engagement Features
 - ✅ Sprint 7: Feature Completion
+- ✅ Sprint 8.1: Friends & Private Messaging System
+  - Friend requests (send/accept/reject/cancel)
+  - Friendship management
+  - Direct message conversations
+  - User blocking functionality
+  - Social panel UI with tabs
 
 ### Current Status
 - **Backend**: 100% ✅
 - **UI**: 100% ✅
 - **Polish**: 100% ✅
+- **Social Features**: 100% ✅ (Friends, DMs, Blocking)
 - **Testing**: 50% 🟡
 - **Mobile Support**: 0% 🔴 (Current Sprint)
 

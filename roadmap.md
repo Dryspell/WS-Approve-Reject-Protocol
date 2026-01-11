@@ -149,8 +149,9 @@ The MMO/resource layer sits alongside The Vote Exchange. Players can focus on vo
 
 **Priority**: LOW | **Timeline**: Future
 
-- [ ] Friend system
-- [ ] Private messaging
+- [x] Friend system (friend requests, accept/reject, remove friends)
+- [x] Private messaging (conversation-based DMs)
+- [x] User blocking (block/unblock with automatic cleanup)
 - [ ] Clan/guild system
 - [ ] Spectator mode
 - [ ] Bot players for solo practice

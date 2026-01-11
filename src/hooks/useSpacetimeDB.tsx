@@ -61,6 +61,12 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
           'SELECT * FROM ready_state',
           'SELECT * FROM vote',
           'SELECT * FROM unit_task_queue',
+          // Social system tables
+          'SELECT * FROM friend_request',
+          'SELECT * FROM friendship',
+          'SELECT * FROM direct_message_conversation',
+          'SELECT * FROM direct_message',
+          'SELECT * FROM blocked_user',
         ]);
     };
 

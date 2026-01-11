@@ -19,6 +19,10 @@ const routes = [
     label: "Chat",
   },
   {
+    value: "social",
+    label: "Social",
+  },
+  {
     value: "vote",
     label: "Vote",
   },
