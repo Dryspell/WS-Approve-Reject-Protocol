@@ -1,4 +1,4 @@
-import { Component, createSignal, For, createEffect, Show } from "solid-js";
+import { Component, createSignal, For, createEffect, Show, onMount, Accessor, Setter } from "solid-js";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import { randAnimal } from "@ngneat/falso";
 import { createId } from "@paralleldrive/cuid2";
@@ -15,6 +15,55 @@ import type { GameRoom } from "~/module_bindings/game_room_type";
 import type { ReadyState } from "~/module_bindings/ready_state_type";
 import { Badge } from "../ui/badge";
 
+/**
+ * Check if multiuser mode is enabled via URL parameter.
+ * When ?multiuser=true, each tab gets a unique user identity using sessionStorage.
+ * This is useful for testing with multiple players in different browser tabs.
+ */
+function isMultiuserMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('multiuser') === 'true';
+}
+
+/**
+ * Create a user signal that uses sessionStorage in multiuser mode (unique per tab)
+ * or localStorage in normal mode (shared across tabs for session continuity).
+ */
+function createUserSignal(): [Accessor<{ name: string; id: string }>, Setter<{ name: string; id: string }>] {
+  const defaultUser = { name: randAnimal(), id: createId() };
+  
+  if (typeof window === 'undefined') {
+    // SSR: return a simple signal
+    return createSignal(defaultUser);
+  }
+  
+  if (isMultiuserMode()) {
+    // Multiuser mode: use sessionStorage for tab-unique identity
+    const storageKey = 'multiuser-chat-user';
+    const stored = sessionStorage.getItem(storageKey);
+    const initialUser = stored ? JSON.parse(stored) : defaultUser;
+    
+    // Store the new user if not already stored
+    if (!stored) {
+      sessionStorage.setItem(storageKey, JSON.stringify(initialUser));
+    }
+    
+    const [user, setUser] = createSignal(initialUser);
+    
+    // Sync changes to sessionStorage
+    createEffect(() => {
+      sessionStorage.setItem(storageKey, JSON.stringify(user()));
+    });
+    
+    console.log('🧪 Multiuser mode: Using unique session-based user identity', initialUser.id.slice(0, 8));
+    return [user, setUser];
+  }
+  
+  // Normal mode: use localStorage for session continuity
+  return createLocalStorageSignal("chat-user", defaultUser);
+}
+
 const VoteBox: Component = () => {
   const [rooms, setRooms] = createSignal<Record<string, GameRoom>>({});
   const [roomsReadyState, setRoomsReadyState] = createStore<Record<string, ReadyState>>({});
@@ -24,10 +73,7 @@ const VoteBox: Component = () => {
   const [showCreateRoom, setShowCreateRoom] = createSignal(false);
   const [subscriptionsSet, setSubscriptionsSet] = createSignal(false);
   const [currentUser, setCurrentUser] = createSignal<any>(null);
-  const [user, setUser] = createLocalStorageSignal("chat-user", {
-    name: randAnimal(),
-    id: createId(),
-  });
+  const [user, setUser] = createUserSignal();
 
   // Initialize SpacetimeDB connection
   const { conn, connected, identity, subscribed } = useSpacetimeDB();

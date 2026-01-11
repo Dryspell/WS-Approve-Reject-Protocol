@@ -78,8 +78,11 @@
 - [ ] SpacetimeDB subscription optimization
 
 ### Testing
+- [x] E2E tests for critical user flows (Playwright setup complete)
+- [x] Multi-user testing support via `?multiuser=true` URL parameter
 - [ ] Add integration tests for SpacetimeDB operations
-- [ ] E2E tests for critical user flows
+- [ ] Expand E2E test coverage for voting mechanics
+- [ ] Add E2E tests for vote trading and guarantees
 
 ### Error Handling
 - [ ] Wrap all reducer calls in try-catch
@@ -132,7 +135,7 @@
 - **UI**: 100% ✅
 - **Polish**: 100% ✅
 - **Social Features**: 100% ✅ (Friends, DMs, Blocking)
-- **Testing**: 50% 🟡
+- **Testing**: 65% 🟡 (E2E infrastructure added)
 - **Mobile Support**: 0% 🔴 (Current Sprint)
 
 ---

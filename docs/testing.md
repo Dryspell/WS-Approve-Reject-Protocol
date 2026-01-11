@@ -11,6 +11,9 @@ pnpm dev
 
 # Terminal 3: Run unit tests
 pnpm test
+
+# Terminal 4: Run E2E tests (requires dev server running)
+pnpm test:e2e
 ```
 
 Navigate to `http://localhost:3001/vote`
@@ -26,6 +29,53 @@ pnpm test
 
 - **Crafting Tests** (14 tests): Resource requirements, costs, times
 - **Spatial Utils Tests** (10 tests): K-means clustering, centroid calculation
+
+### E2E Tests (Playwright)
+```bash
+# Run all E2E tests (headless)
+pnpm test:e2e
+
+# Run with browser UI (visual debugging)
+pnpm test:e2e:ui
+
+# Run with browser visible
+pnpm test:e2e:headed
+
+# Debug mode (step through tests)
+pnpm test:e2e:debug
+
+# View HTML report after tests
+pnpm test:e2e:report
+```
+
+**E2E Test Coverage:**
+- Room creation and joining
+- Multi-player identity isolation
+- Ready system
+- Connection status
+- Voting interface
+- Vote trading marketplace
+
+---
+
+## Multi-User Testing Mode
+
+For manual testing with multiple players in different browser tabs, add `?multiuser=true` to the URL:
+
+```
+http://localhost:3001/vote?multiuser=true
+```
+
+This ensures each tab gets a **unique user identity** instead of sharing localStorage.
+
+**How it works:**
+- Normal mode: User data stored in `localStorage` (shared across tabs)
+- Multiuser mode: User data stored in `sessionStorage` (unique per tab)
+
+**When to use:**
+- Testing vote trading between players
+- Testing game mechanics with multiple participants
+- QA testing scenarios from the testing outline
 
 ---
 
