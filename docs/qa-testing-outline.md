@@ -30,8 +30,48 @@
 3. Multiple browser instances (use incognito/private windows for separate players)
 4. Navigate to `http://localhost:3001/vote`
 
-### Test Player Setup
-- Open 3-5 browser tabs (each represents a different player)
+### Automated E2E Tests (Playwright)
+
+Many test cases have corresponding automated E2E tests. Run them with:
+
+```bash
+# Run all E2E tests
+pnpm test:e2e
+
+# Run specific priority tests
+pnpm test:e2e priority-1    # Core Voting
+pnpm test:e2e priority-2    # Chat
+pnpm test:e2e priority-3    # Social
+pnpm test:e2e priority-6    # Edge Cases
+
+# Interactive UI mode
+pnpm test:e2e:ui
+```
+
+**E2E Test Files:**
+- `e2e/full-game-flow.spec.ts` - Complete user journey tests
+- `e2e/priority-1-core-voting.spec.ts` - VG-001 to VG-062
+- `e2e/priority-2-chat.spec.ts` - CH-001 to CH-021
+- `e2e/priority-3-social.spec.ts` - SO-001 to SO-034
+- `e2e/priority-4-ui.spec.ts` - UI-001 to UI-031
+- `e2e/priority-5-leaderboard.spec.ts` - LB-001 to PR-004
+- `e2e/priority-6-edge-cases.spec.ts` - EC-001 to EC-022
+- `e2e/priority-7-performance.spec.ts` - PF-001 to PF-022
+
+**Test Results (January 11, 2026):**
+See `e2e/TEST-RESULTS.md` for detailed analysis.
+
+| Area | Status | Notes |
+|------|--------|-------|
+| Room Creation | ✅ Passing | VG-002, VG-003 verified |
+| Multi-player Identity | ✅ Passing | Unique identities confirmed |
+| Ready System | ⚠️ Needs Investigation | Toggle not updating UI |
+| Toast Notifications | ✅ Passing | UI-013 verified |
+| Form Components | ✅ Passing | UI-014 verified |
+
+### Manual Test Player Setup
+- Open 3-5 browser tabs with `?multiuser=true` parameter
+- Example: `http://localhost:3001/vote?multiuser=true`
 - Each tab will auto-create a unique identity
 - Set unique names for each player for easier tracking
 

@@ -80,6 +80,11 @@
 ### Testing
 - [x] E2E tests for critical user flows (Playwright setup complete)
 - [x] Multi-user testing support via `?multiuser=true` URL parameter
+- [x] Room creation & joining tests passing
+- [x] Multi-player identity isolation verified
+- [x] Toast notifications & form UI tests passing
+- [ ] **FIX NEEDED**: Ready system toggle not updating UI in E2E tests (see `e2e/TEST-RESULTS.md`)
+- [ ] Add `data-testid` attributes for reliable test selectors
 - [ ] Add integration tests for SpacetimeDB operations
 - [ ] Expand E2E test coverage for voting mechanics
 - [ ] Add E2E tests for vote trading and guarantees
@@ -135,7 +140,7 @@
 - **UI**: 100% ✅
 - **Polish**: 100% ✅
 - **Social Features**: 100% ✅ (Friends, DMs, Blocking)
-- **Testing**: 65% 🟡 (E2E infrastructure added)
+- **Testing**: 70% 🟡 (E2E passing for core flows, ready system needs fix)
 - **Mobile Support**: 0% 🔴 (Current Sprint)
 
 ---

@@ -40,3 +40,8 @@ Thumbs.db
 *.tmp
 sqlite.db
 gitignore
+
+# Playwright
+/test-results
+/playwright-report
+/playwright/.cache
