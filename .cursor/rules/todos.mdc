@@ -1,0 +1,10 @@
+---
+description: Track project progress in todos.md
+globs: 
+alwaysApply: true
+---
+Track progress in [todos.md](mdc:todos.md):
+- Update task status when completing sprint items or fixing bugs
+- Mark items with [x] when complete, add new sub-items as needed
+- Keep "Last Updated" date current
+- Reference `docs/development-history.md` for completed sprint context

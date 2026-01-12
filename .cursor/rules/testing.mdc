@@ -1,0 +1,39 @@
+---
+description: Testing patterns and E2E guidelines
+globs: 
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "e2e/**/*"
+alwaysApply: false
+---
+## Testing Stack
+
+- **Unit Tests**: Vitest (`pnpm test`)
+- **E2E Tests**: Playwright (`pnpm test:e2e`)
+
+## E2E Testing Guidelines
+
+**Multi-user testing** requires the `?multiuser=true` URL parameter to give each browser tab a unique identity.
+
+**Test selectors** - Always use `data-testid` attributes for reliable selectors:
+```tsx
+<button data-testid="ready-button">Ready</button>
+```
+
+**Database reset** before E2E runs:
+```bash
+pnpm test:reset-db
+```
+
+**Minimum 3 players** required for games to auto-start (`MIN_PLAYERS_TO_START`).
+
+## E2E Test Files (by priority)
+
+| File | Coverage |
+|------|----------|
+| `priority-1-core-voting.spec.ts` | Room creation, voting, trading, elimination |
+| `priority-2-chat.spec.ts` | Chat messaging, permissions |
+| `priority-3-social.spec.ts` | Friends, DMs, blocking |
+| `priority-6-edge-cases.spec.ts` | Connection issues, concurrent actions |
+
+See `docs/qa-testing-outline.md` for full test case documentation.

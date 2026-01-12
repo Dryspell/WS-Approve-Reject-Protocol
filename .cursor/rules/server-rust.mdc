@@ -1,0 +1,47 @@
+---
+description: SpacetimeDB Rust module patterns
+globs:
+  - "server/**/*"
+alwaysApply: false
+---
+## SpacetimeDB Rust Module
+
+The game backend lives in `server/src/lib.rs`. Key components:
+
+### Tables (Data Models)
+```rust
+#[spacetimedb::table(name = user, public)]
+pub struct User {
+    #[primary_key]
+    identity: Identity,
+    name: String,
+    wallet_balance: i64,
+    // ...
+}
+```
+
+### Reducers (Mutations)
+```rust
+#[spacetimedb::reducer]
+pub fn join_room(ctx: &ReducerContext, room_id: u64) -> Result<(), String> {
+    // Validation, then table inserts/updates
+}
+```
+
+### Development Workflow
+
+After modifying `lib.rs`:
+1. Publish to local SpacetimeDB: `pnpm publish:local`
+2. Regenerate TypeScript bindings: `pnpm generate`
+3. Restart dev server if needed
+
+### Debugging
+```bash
+pnpm logs:local                          # View server logs
+pnpm sql:local "SELECT * FROM user"      # Query database
+```
+
+### Security Considerations
+- All reducers should validate caller identity via `ctx.sender`
+- Prevent duplicate insertions (check before insert)
+- Rate limiting for public-facing reducers (planned)

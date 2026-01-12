@@ -28,7 +28,6 @@ Thumbs.db
 
 # Editor
 .vscode/
-.cursor/
 /.idea
 .project
 .classpath

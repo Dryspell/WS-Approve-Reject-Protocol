@@ -1,0 +1,34 @@
+---
+description: Mobile optimization guidelines (Sprint 8 focus)
+globs:
+  - "src/components/**/*.tsx"
+  - "src/routes/**/*.tsx"
+alwaysApply: false
+---
+## Current Sprint: Mobile Optimization
+
+The app is transitioning to mobile-first. Follow these guidelines:
+
+### Touch Targets
+- Minimum **44x44px** tap targets for interactive elements
+- Adequate spacing between clickable items
+
+### Responsive Layout
+- Desktop: 3-column layout (players | votes | market)
+- Mobile: Stacked/tabbed layout with collapsible panels
+- Use Tailwind responsive prefixes: `sm:`, `md:`, `lg:`
+
+### Touch Interactions
+- Drag-and-drop should work with touch events
+- Consider long-press for context menus
+- Swipe gestures for navigation where appropriate
+
+### PWA Considerations
+- App should work offline (service worker)
+- Manifest.json for installability
+- Appropriate viewport meta tags
+
+### Performance
+- Lazy load heavy components
+- Use virtual scrolling for long lists (100+ items)
+- Monitor bundle size with code splitting

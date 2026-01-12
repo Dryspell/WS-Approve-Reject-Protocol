@@ -1,0 +1,44 @@
+---
+description: SpacetimeDB patterns and type generation
+globs: 
+alwaysApply: true
+---
+## SpacetimeDB Type Generation
+
+**NEVER** manually create types for database entities. Types are auto-generated from the Rust schema.
+
+After any schema changes in `server/src/lib.rs`, regenerate bindings:
+```bash
+pnpm generate
+# or: spacetime generate --lang typescript --out-dir src/module_bindings --project-path server
+```
+
+## Key Patterns
+
+**Connection & Identity:**
+```typescript
+const { conn, identity, connected } = useSpacetimeDB();
+```
+
+**Read Data:**
+```typescript
+const users = () => conn()?.db.user.getAll() ?? [];
+const myUser = () => conn()?.db.user.identity.find(identity());
+```
+
+**Call Reducers (mutations):**
+```typescript
+conn()?.reducers.sendChatMessage(roomId, content, null);
+```
+
+**Subscribe to Updates:**
+```typescript
+conn()?.db.user.onInsert((ctx, user) => { /* handle */ });
+conn()?.db.user.onUpdate((ctx, oldUser, newUser) => { /* handle */ });
+```
+
+## Module Bindings
+
+Files in `src/module_bindings/` are **auto-generated** - never edit manually.
+
+See [SpacetimeDB Docs](https://spacetimedb.com/docs/sdks/typescript/quickstart) and `SPACETIMEDB_EXAMPLES.tsx` for more patterns.

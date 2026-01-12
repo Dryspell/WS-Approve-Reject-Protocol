@@ -1,0 +1,35 @@
+---
+description: SolidJS framework patterns and package management
+globs: 
+alwaysApply: true
+---
+## Framework: SolidJS + SolidStart
+
+This project uses **SolidJS** (not React). Key differences:
+- Use `createSignal`, `createMemo`, `createEffect` (not useState, useMemo, useEffect)
+- Components don't re-render - signals update reactively
+- Use `<Show>`, `<For>`, `<Switch>` for conditional/list rendering
+- Props are accessed directly, not destructured at call site (preserves reactivity)
+- Use `onMount` / `onCleanup` for lifecycle
+
+## Package Management
+
+Use **pnpm** for all package operations:
+```bash
+pnpm install          # Install dependencies
+pnpm add <package>    # Add new package
+pnpm dev              # Start dev server
+```
+
+## UI Components
+
+Use **Solid-UI** (ShadCN port for SolidJS) for new UI elements:
+- Docs: https://www.solid-ui.com/docs/cli
+- Check existing components in `src/components/ui/` before adding new ones
+- Follow established patterns in `src/components/Vote/` for game UI
+
+## Testing
+
+- Include unit tests for new utility functions (Vitest)
+- Add `data-testid` attributes for E2E test selectors
+- Ensure existing tests pass after changes: `pnpm test`

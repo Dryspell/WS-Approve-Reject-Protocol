@@ -1,0 +1,41 @@
+---
+description: Vote Exchange game mechanics and rules
+globs:
+  - "src/components/Vote/**/*"
+  - "server/src/**/*"
+alwaysApply: false
+---
+## Core Game Mechanics: The Vote Exchange
+
+A **minority-wins elimination game** with vote trading. Understand these rules before modifying game logic:
+
+### Gameplay Loop
+1. Players **buy in** → creates pot
+2. **Trading phase**: Buy/sell votes and guarantees between players
+3. **Voting phase**: Cast votes (Red or Blue)
+4. **Resolution**: Majority voters **eliminated**, minority survives
+5. Last 1-2 players **win the pot**
+
+### Key Mechanics
+
+**Vote Splitting**: Players with 2+ votes can split across Red/Blue → guarantees minority survival
+
+**Guarantees**: Promises to vote a certain way (can be honored or broken/"bluffed")
+- Public: Visible to all players
+- Private: Between specific players only
+
+**Wallet vs Bank**: Players have in-game wallet (for trades) and bank (savings)
+
+**Ties**: Equal votes → no eliminations, game continues
+
+### Server-Side Authority
+
+All game logic runs in **SpacetimeDB reducers** (`server/src/lib.rs`):
+- `join_room`, `leave_room`, `toggle_ready`
+- `list_vote_for_sale`, `buy_vote`, `cancel_vote_listing`
+- `create_guarantee`, `purchase_guarantee`
+- `cast_vote`, `process_round`
+
+UI is read-only reflection of server state. Never duplicate game logic client-side.
+
+See `game-design/rules.md` for complete game examples and edge cases.
