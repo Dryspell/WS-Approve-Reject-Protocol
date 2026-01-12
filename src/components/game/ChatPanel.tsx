@@ -155,7 +155,7 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
       <Show when={!props.minimized}>
         <CardContent class="flex flex-1 flex-col p-0">
           {/* Messages */}
-          <ScrollArea class="flex-1 p-4" ref={setScrollAreaRef}>
+          <ScrollArea class="flex-1 p-4" ref={setScrollAreaRef} data-testid="chat-messages">
             <div class="space-y-3">
               <For each={messages()} fallback={
                 <div class="py-8 text-center text-xs text-gray-500">
@@ -218,13 +218,14 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
             <div class="flex gap-2">
               <TextField class="flex-1">
                 <TextFieldInput
+                  data-testid="chat-input"
                   placeholder="Type a message..."
                   value={inputValue()}
                   onInput={(e) => setInputValue(e.currentTarget.value)}
                   onKeyPress={handleKeyPress}
                 />
               </TextField>
-              <Button onClick={sendMessage} disabled={!inputValue().trim()}>
+              <Button data-testid="send-button" onClick={sendMessage} disabled={!inputValue().trim()}>
                 Send
               </Button>
             </div>

@@ -233,7 +233,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         </Card>
 
         {/* Round Timer */}
-        <div class="flex-1 px-4">
+        <div class="flex-1 px-4" data-testid="round-timer">
           <RoundTimer
             roundNumber={props.room.currentRound}
             roundStartTime={props.room.startTime ? BigInt(props.room.startTime) : undefined}
@@ -242,15 +242,15 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         </div>
 
         {/* Wallet Display */}
-        <Card class="flex-1">
+        <Card class="flex-1" data-testid="wallet-display">
           <CardContent class="flex items-center gap-4 p-4">
             <div class="text-4xl">💵</div>
             <div class="flex-1">
               <div class="text-sm text-gray-500">Your Wallet</div>
-              <div class="text-2xl font-bold">
+              <div class="text-2xl font-bold" data-testid="wallet-balance">
                 ${props.currentUser.walletBalance.toFixed(2)}
               </div>
-              <div class="text-xs text-gray-500">
+              <div class="text-xs text-gray-500" data-testid="profit-loss">
                 {props.currentUser.totalProfitLoss >= 0 ? "+" : ""}
                 ${props.currentUser.totalProfitLoss.toFixed(2)} lifetime
               </div>
@@ -363,6 +363,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
 
             {/* Red Drop Zone */}
             <div
+              data-testid="vote-red"
+              data-color="red"
               onDragOver={handleDragOver}
               onDrop={() => handleDrop("red")}
               class="min-h-32 rounded-lg border-2 border-red-300 bg-red-50 p-4"
@@ -400,6 +402,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
 
             {/* Blue Drop Zone */}
             <div
+              data-testid="vote-blue"
+              data-color="blue"
               onDragOver={handleDragOver}
               onDrop={() => handleDrop("blue")}
               class="min-h-32 rounded-lg border-2 border-blue-300 bg-blue-50 p-4"

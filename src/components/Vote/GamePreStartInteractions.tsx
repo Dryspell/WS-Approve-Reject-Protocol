@@ -2,6 +2,7 @@ import { Accessor, createSignal } from "solid-js";
 import { SetStoreFunction } from "solid-js/store";
 import type { GameRoom } from "~/module_bindings/game_room_type";
 import type { ReadyState } from "~/module_bindings/ready_state_type";
+import type { Identity } from "~/module_bindings/index";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { showToast } from "../ui/toast";
 import { Button } from "../ui/button";
@@ -16,6 +17,7 @@ export default function GamePreStartInteractions(props: {
   roomId: string;
   rooms: Record<string, GameRoom>;
   user: Accessor<{ name: string; id: string }>;
+  identity: Accessor<Identity | undefined>; // SpacetimeDB identity for server communication
   roomsPreStart: Record<string, ReadyState>;
   setRoomsPreStart: SetStoreFunction<Record<string, ReadyState>>;
   conn: Accessor<DbConnection | null>;
@@ -27,9 +29,20 @@ export default function GamePreStartInteractions(props: {
   const { memberIds } = room;
   const [showPresets, setShowPresets] = createSignal(false);
 
+  // Get the user's SpacetimeDB identity hex string for server communication
+  const getUserIdForServer = (): string | null => {
+    const identity = props.identity();
+    if (!identity) {
+      console.warn("⚠️ No SpacetimeDB identity available");
+      return null;
+    }
+    return identity.toHexString();
+  };
+
   const handleToggleReady = () => {
     const connection = props.conn();
     const user = props.user();
+    const identityHex = getUserIdForServer();
 
     if (!connection || !props.connected()) {
       showToast({
@@ -41,20 +54,35 @@ export default function GamePreStartInteractions(props: {
       return;
     }
 
+    if (!identityHex) {
+      showToast({
+        title: "Error",
+        description: "Identity not available yet. Please wait...",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
+
     try {
       const currentState = props.roomsPreStart[props.roomId];
-      const wasReady = currentState?.readyUserIds.includes(user.id) || false;
+      // Use SpacetimeDB identity hex string, NOT the local user.id
+      const wasReady = currentState?.readyUserIds.includes(identityHex) || false;
 
-      console.log("Toggle ready:", {
+      console.log("🎮 Toggle ready:", {
         roomId: room.id,
-        userId: user.id,
+        roomIdString: props.roomId,
+        identityHex,
+        localUserId: user.id,
         currentState,
         wasReady,
+        memberIds: room.memberIds,
+        readyUserIds: currentState?.readyUserIds || [],
         allReadyStates: props.roomsPreStart
       });
 
-      // Call the reducer - it's fire-and-forget, the onUpdate callback in parent will update state
-      connection.reducers.toggleReady(room.id, user.id);
+      // Call the reducer with SpacetimeDB identity, NOT local user.id
+      connection.reducers.toggleReady(room.id, identityHex);
 
       showToast({
         title: wasReady ? "Unreadied" : "Readied Up",
@@ -138,17 +166,18 @@ export default function GamePreStartInteractions(props: {
       {/* Ready Button */}
       <div class="flex flex-col gap-2">
         <Button
-          variant={userIsReady(props.roomId, props.user().id, props.roomsPreStart) ? "outline" : "default"}
+          data-testid="ready-button"
+          variant={userIsReady(props.roomId, getUserIdForServer() || "", props.roomsPreStart) ? "outline" : "default"}
           class="w-full py-6 text-lg font-semibold"
           onClick={handleToggleReady}
-          disabled={!props.connected()}
+          disabled={!props.connected() || !props.identity()}
         >
-          {userIsReady(props.roomId, props.user().id, props.roomsPreStart) 
+          {userIsReady(props.roomId, getUserIdForServer() || "", props.roomsPreStart) 
             ? "✓ Ready (click to unready)" 
             : "Ready to Play?"}
         </Button>
         <div class="text-center text-sm text-gray-600">
-          {userIsReady(props.roomId, props.user().id, props.roomsPreStart)
+          {userIsReady(props.roomId, getUserIdForServer() || "", props.roomsPreStart)
             ? "Waiting for other players..."
             : `You'll pay $${room.buyinAmount.toFixed(2)} when the game starts`}
         </div>

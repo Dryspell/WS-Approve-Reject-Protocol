@@ -83,8 +83,8 @@
 - [x] Room creation & joining tests passing
 - [x] Multi-player identity isolation verified
 - [x] Toast notifications & form UI tests passing
-- [ ] **FIX NEEDED**: Ready system toggle not updating UI in E2E tests (see `e2e/TEST-RESULTS.md`)
-- [ ] Add `data-testid` attributes for reliable test selectors
+- [x] **FIXED**: Ready system toggle was using wrong user ID (cuid2 vs SpacetimeDB identity)
+- [x] Add `data-testid` attributes for reliable test selectors (connection-status, ready-button, vote-red, vote-blue, round-timer, wallet-balance, chat-input, send-button, chat-messages)
 - [ ] Add integration tests for SpacetimeDB operations
 - [ ] Expand E2E test coverage for voting mechanics
 - [ ] Add E2E tests for vote trading and guarantees
@@ -140,9 +140,9 @@
 - **UI**: 100% ✅
 - **Polish**: 100% ✅
 - **Social Features**: 100% ✅ (Friends, DMs, Blocking)
-- **Testing**: 70% 🟡 (E2E passing for core flows, ready system needs fix)
+- **Testing**: 80% 🟡 (E2E passing for core flows, ready system fixed)
 - **Mobile Support**: 0% 🔴 (Current Sprint)
 
 ---
 
-**Last Updated**: January 11, 2026
+**Last Updated**: January 12, 2026

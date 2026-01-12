@@ -156,7 +156,11 @@ const VoteBox: Component = () => {
 
     // Listen for ready state insertions
     connection.db.readyState.onInsert((ctx, readyState) => {
-      console.log("✅ New ready state inserted:", readyState);
+      console.log("✅ New ready state inserted:", {
+        roomId: readyState.roomId,
+        readyUserIds: readyState.readyUserIds,
+        round: readyState.round
+      });
       setRoomsReadyState({
         [readyState.roomId]: readyState
       });
@@ -164,7 +168,12 @@ const VoteBox: Component = () => {
 
     // Listen for ready state updates
     connection.db.readyState.onUpdate((ctx, oldState, newState) => {
-      console.log("🔄 Ready state updated:", newState);
+      console.log("🔄 Ready state updated:", {
+        roomId: newState.roomId,
+        oldReadyUserIds: oldState.readyUserIds,
+        newReadyUserIds: newState.readyUserIds,
+        round: newState.round
+      });
       setRoomsReadyState({
         [newState.roomId]: newState
       });
@@ -295,24 +304,24 @@ const VoteBox: Component = () => {
                   when={connected()}
                   fallback={
                     <>
-                      <Badge variant="destructive">
+                      <Badge variant="destructive" data-testid="connection-status">
                         <span class="mr-1">●</span> Disconnected
                       </Badge>
                       <span class="text-sm text-muted-foreground">Connecting to SpacetimeDB...</span>
                     </>
                   }
                 >
-                  <Badge variant="secondary">
+                  <Badge variant="secondary" data-testid="connection-status">
                     <span class="mr-1">●</span> Syncing
                   </Badge>
                   <span class="text-sm text-muted-foreground">Loading game data...</span>
                 </Show>
               }
             >
-              <Badge variant="default">
+              <Badge variant="default" data-testid="connection-status">
                 <span class="mr-1">●</span> Connected
               </Badge>
-              <span class="text-sm text-muted-foreground">
+              <span class="text-sm text-muted-foreground" data-testid="identity-display">
                 Identity: {identity()?.toHexString().slice(0, 12)}...
               </span>
             </Show>
@@ -440,6 +449,7 @@ const VoteBox: Component = () => {
                           roomId={roomId}
                           rooms={rooms()}
                           user={user}
+                          identity={identity}
                           roomsPreStart={roomsReadyState}
                           setRoomsPreStart={setRoomsReadyState}
                           conn={conn}
