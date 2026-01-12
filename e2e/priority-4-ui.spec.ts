@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { MultiPlayerHelper } from './helpers/multi-player';
-import { VoteGamePage } from './helpers/page-objects';
+import { VoteGamePage, uniqueRoomName } from './helpers/page-objects';
 
 /**
  * Priority 4: Game Management & UI E2E Tests
@@ -135,44 +135,49 @@ test.describe('4.3 Ready System UI', () => {
   test('UI-020: Toggle ready button works', async () => {
     const player = await multiPlayer.createPlayer();
     const gamePage = new VoteGamePage(player);
+    const roomName = uniqueRoomName('Ready UI Test');
 
     await gamePage.goto();
     await gamePage.waitForConnection();
-    await gamePage.createRoom('Ready UI Test', 10);
-    await gamePage.joinRoom('Ready UI Test');
+    await gamePage.createRoom(roomName, 10);
+    await gamePage.joinRoom(roomName);
 
-    // Initial state - should show "Ready to Play"
-    await expect(player.locator('button:has-text("Ready")')).toBeVisible({ timeout: 5000 });
+    // Initial state - should show "Ready to Play" button
+    await expect(gamePage.readyButton).toBeVisible({ timeout: 5000 });
 
     // Click ready
     await gamePage.clickReady();
 
-    // Should show ready state
-    await expect(player.locator('text=/✓|unready/i')).toBeVisible({ timeout: 5000 });
+    // Should show ready state - the button text changes to include "unready"
+    await expect(player.locator('[data-testid="ready-button"]')).toContainText(/unready/i, { timeout: 5000 });
   });
 
   test('UI-021: Ready count displays for multiple players', async () => {
     const [player1, player2] = await multiPlayer.createPlayers(2);
     const page1 = new VoteGamePage(player1);
     const page2 = new VoteGamePage(player2);
+    const roomName = uniqueRoomName('Ready Count Test');
 
     await page1.goto();
     await page2.goto();
     await page1.waitForConnection();
     await page2.waitForConnection();
 
-    await page1.createRoom('Ready Count Test', 10);
+    await page1.createRoom(roomName, 10);
     
-    await expect(player2.locator('text=Ready Count Test')).toBeVisible({ timeout: 10000 });
+    await expect(player2.locator(`[role="tab"]:has-text("${roomName}")`).first()).toBeVisible({ timeout: 10000 });
 
-    await page1.joinRoom('Ready Count Test');
-    await page2.joinRoom('Ready Count Test');
+    await page2.joinRoom(roomName);
+    await page1.joinRoom(roomName);
+
+    // Wait for ready buttons
+    await expect(page1.readyButton).toBeVisible({ timeout: 10000 });
 
     // Player 1 readies
     await page1.clickReady();
 
-    // Should show some indication of ready status
-    await expect(player1.locator('text=/Ready|✓/')).toBeVisible({ timeout: 5000 });
+    // Should show ready state on the button
+    await expect(player1.locator('[data-testid="ready-button"]')).toContainText(/unready/i, { timeout: 5000 });
   });
 });
 

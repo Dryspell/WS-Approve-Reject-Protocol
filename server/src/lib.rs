@@ -331,19 +331,28 @@ pub fn join_room(ctx: &ReducerContext, room_id: i32, user_id: String) -> Result<
             room.member_ids.push(user_id.clone());
             ctx.db.game_room().id().update(room);
 
-            // Give chat permissions to new member
+            // Give chat permissions to new member (if not already granted)
             let chat_room_id = format!("game_{}", room_id);
             if let Some(user_identity) = ctx.db.user().iter().find(|u| u.identity.to_string() == user_id) {
-                ctx.db.chat_permission().insert(ChatPermission {
-                    room_id: chat_room_id,
-                    user_id: user_identity.identity,
-                    permission: "write".to_string(),
-                });
+                // Check if permission already exists to avoid duplicate key error
+                let existing_permission = ctx.db.chat_permission().iter()
+                    .find(|p| p.room_id == chat_room_id && p.user_id == user_identity.identity);
+                
+                if existing_permission.is_none() {
+                    ctx.db.chat_permission().insert(ChatPermission {
+                        room_id: chat_room_id,
+                        user_id: user_identity.identity,
+                        permission: "write".to_string(),
+                    });
+                }
             }
         }
     }
     Ok(())
 }
+
+/// Minimum number of players required to start a game
+const MIN_PLAYERS_TO_START: usize = 3;
 
 #[reducer]
 pub fn toggle_ready(ctx: &ReducerContext, room_id: i32, user_id: String) -> Result<(), String> {
@@ -360,9 +369,11 @@ pub fn toggle_ready(ctx: &ReducerContext, room_id: i32, user_id: String) -> Resu
         let ready_count = ready_state.ready_user_ids.len();
         ctx.db.ready_state().room_id().update(ready_state);
 
-        // Check if all users are ready
+        // Check if all users are ready AND we have minimum players
         if let Some(room) = ctx.db.game_room().id().find(room_id) {
-            if ready_count == room.member_ids.len() {
+            let member_count = room.member_ids.len();
+            // Only auto-start if we have at least MIN_PLAYERS_TO_START players
+            if ready_count == member_count && member_count >= MIN_PLAYERS_TO_START {
                 start_game(ctx, room_id)?;
             }
         }
@@ -2141,5 +2152,86 @@ pub fn unblock_user(ctx: &ReducerContext, user_id: Identity) -> Result<(), Strin
     ctx.db.blocked_user().id().delete(block.id);
     
     log::info!("User {:?} unblocked {:?}", blocker, user_id);
+    Ok(())
+}
+
+// ============================================================================
+// TEST UTILITIES - For E2E test isolation
+// ============================================================================
+
+/// Reset test data - clears game rooms and ready states for test isolation.
+/// This should only be used in test environments, not production.
+/// 
+/// # Arguments
+/// * `confirmation` - Must be "RESET_TEST_DATA" to prevent accidental calls
+#[reducer]
+pub fn reset_test_data(ctx: &ReducerContext, confirmation: String) -> Result<(), String> {
+    // Safety check to prevent accidental data loss
+    if confirmation != "RESET_TEST_DATA" {
+        return Err("Invalid confirmation string. Pass 'RESET_TEST_DATA' to confirm.".to_string());
+    }
+    
+    log::warn!("🧹 Resetting test data - clearing game rooms and ready states");
+    
+    // Collect all game room IDs first to avoid borrowing issues
+    let room_ids: Vec<i32> = ctx.db.game_room().iter().map(|r| r.id).collect();
+    let room_count = room_ids.len();
+    
+    // Delete all game rooms
+    for room_id in room_ids {
+        ctx.db.game_room().id().delete(room_id);
+    }
+    
+    // Collect all ready state room IDs
+    let ready_state_ids: Vec<String> = ctx.db.ready_state().iter().map(|r| r.room_id.clone()).collect();
+    let ready_count = ready_state_ids.len();
+    
+    // Delete all ready states
+    for room_id in ready_state_ids {
+        ctx.db.ready_state().room_id().delete(room_id);
+    }
+    
+    // Delete game-related chat rooms (those starting with "game_")
+    let game_chat_ids: Vec<String> = ctx.db.chat_room().iter()
+        .filter(|r| r.id.starts_with("game_"))
+        .map(|r| r.id.clone())
+        .collect();
+    let chat_count = game_chat_ids.len();
+    
+    for chat_id in game_chat_ids {
+        ctx.db.chat_room().id().delete(chat_id.clone());
+        
+        // Also delete chat permissions for this room
+        let permissions: Vec<_> = ctx.db.chat_permission().iter()
+            .filter(|p| p.room_id == chat_id)
+            .map(|p| p.room_id.clone())
+            .collect();
+        for perm_id in permissions {
+            ctx.db.chat_permission().room_id().delete(perm_id);
+        }
+    }
+    
+    // Delete all votes
+    let vote_ids: Vec<i32> = ctx.db.vote().iter().map(|v| v.id).collect();
+    let vote_count = vote_ids.len();
+    for vote_id in vote_ids {
+        ctx.db.vote().id().delete(vote_id);
+    }
+    
+    // Delete all guarantees
+    let guarantee_ids: Vec<i32> = ctx.db.guarantee().iter().map(|g| g.id).collect();
+    for guarantee_id in guarantee_ids {
+        ctx.db.guarantee().id().delete(guarantee_id);
+    }
+    
+    // Delete all units
+    let unit_ids: Vec<i32> = ctx.db.unit().iter().map(|u| u.id).collect();
+    for unit_id in unit_ids {
+        ctx.db.unit().id().delete(unit_id);
+    }
+    
+    log::info!("✅ Test data reset complete: {} rooms, {} ready states, {} chat rooms, {} votes deleted", 
+        room_count, ready_count, chat_count, vote_count);
+    
     Ok(())
 }

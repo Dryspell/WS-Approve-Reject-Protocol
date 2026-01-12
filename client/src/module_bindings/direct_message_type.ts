@@ -30,22 +30,19 @@ import {
   Timestamp,
   deepEqual,
 } from "@clockworklabs/spacetimedb-sdk";
-export type Vote = {
+export type DirectMessage = {
   id: number,
-  roomId: number,
-  roundNumber: number,
-  playerId: string,
-  originalOwner: string,
-  color: string | undefined,
-  isForSale: boolean,
-  salePrice: number | undefined,
+  conversationId: string,
+  sender: Identity,
+  text: string,
   timestamp: Timestamp,
+  isRead: boolean,
 };
 
 /**
  * A namespace for generated helper functions.
  */
-export namespace Vote {
+export namespace DirectMessage {
   /**
   * A function which returns this type represented as an AlgebraicType.
   * This function is derived from the AlgebraicType used to generate this type.
@@ -53,23 +50,20 @@ export namespace Vote {
   export function getTypeScriptAlgebraicType(): AlgebraicType {
     return AlgebraicType.createProductType([
       new ProductTypeElement("id", AlgebraicType.createI32Type()),
-      new ProductTypeElement("roomId", AlgebraicType.createI32Type()),
-      new ProductTypeElement("roundNumber", AlgebraicType.createI32Type()),
-      new ProductTypeElement("playerId", AlgebraicType.createStringType()),
-      new ProductTypeElement("originalOwner", AlgebraicType.createStringType()),
-      new ProductTypeElement("color", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
-      new ProductTypeElement("isForSale", AlgebraicType.createBoolType()),
-      new ProductTypeElement("salePrice", AlgebraicType.createOptionType(AlgebraicType.createF64Type())),
+      new ProductTypeElement("conversationId", AlgebraicType.createStringType()),
+      new ProductTypeElement("sender", AlgebraicType.createIdentityType()),
+      new ProductTypeElement("text", AlgebraicType.createStringType()),
       new ProductTypeElement("timestamp", AlgebraicType.createTimestampType()),
+      new ProductTypeElement("isRead", AlgebraicType.createBoolType()),
     ]);
   }
 
-  export function serialize(writer: BinaryWriter, value: Vote): void {
-    Vote.getTypeScriptAlgebraicType().serialize(writer, value);
+  export function serialize(writer: BinaryWriter, value: DirectMessage): void {
+    DirectMessage.getTypeScriptAlgebraicType().serialize(writer, value);
   }
 
-  export function deserialize(reader: BinaryReader): Vote {
-    return Vote.getTypeScriptAlgebraicType().deserialize(reader);
+  export function deserialize(reader: BinaryReader): DirectMessage {
+    return DirectMessage.getTypeScriptAlgebraicType().deserialize(reader);
   }
 
 }

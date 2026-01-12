@@ -20,41 +20,50 @@ export default defineConfig({
   // Fail the build on CI if you accidentally left test.only
   forbidOnly: !!process.env.CI,
   
-  // Retry failed tests (useful for flaky network tests)
-  retries: process.env.CI ? 2 : 0,
+  // Retry failed tests - always disabled for now (faster debugging)
+  retries: 0,
   
-  // Limit parallel workers on CI
-  workers: process.env.CI ? 1 : undefined,
+  // Workers: Use single worker to avoid test interference with shared SpacetimeDB
+  // (All tests share the same database, so parallel tests can cause race conditions)
+  workers: 1,
   
-  // Reporter configuration
-  reporter: [
-    ['list'],
-    ['html', { open: 'never' }],
-  ],
+  // Reporter configuration - quieter output for faster feedback
+  reporter: process.env.CI 
+    ? [['list'], ['html', { open: 'never' }]]
+    : [['line']],  // Minimal output for local dev
   
   // Shared settings for all tests
   use: {
     // Base URL for all tests
     baseURL: 'http://localhost:3001',
     
-    // Collect trace on first retry
-    trace: 'on-first-retry',
+    // Only collect trace on CI (saves time locally)
+    trace: process.env.CI ? 'on-first-retry' : 'off',
     
     // Take screenshot on failure
     screenshot: 'only-on-failure',
     
-    // Record video on failure
-    video: 'retain-on-failure',
+    // Only record video on CI (saves time locally)
+    video: process.env.CI ? 'retain-on-failure' : 'off',
     
-    // Default timeout for actions
-    actionTimeout: 10000,
+    // Default timeout for actions (reduced for faster failure detection)
+    actionTimeout: 8000,
+    
+    // Disable animations for faster tests
+    reducedMotion: 'reduce',
   },
 
   // Configure projects for different browsers
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { 
+        ...devices['Desktop Chrome'],
+        // Disable GPU for faster headless testing
+        launchOptions: {
+          args: ['--disable-gpu', '--disable-dev-shm-usage'],
+        },
+      },
     },
     // Uncomment to test on more browsers:
     // {
@@ -73,13 +82,19 @@ export default defineConfig({
     url: 'http://localhost:3001',
     reuseExistingServer: true, // Always reuse if already running
     timeout: 120000,
+    // Suppress noisy output
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
   
-  // Global test timeout
-  timeout: 60000,
+  // Global test timeout (reduced for faster failure detection)
+  timeout: 30000,
   
   // Expect timeout for assertions
   expect: {
-    timeout: 10000,
+    timeout: 8000,
   },
+  
+  // Quiet mode - suppress warnings about env vars
+  quiet: true,
 });

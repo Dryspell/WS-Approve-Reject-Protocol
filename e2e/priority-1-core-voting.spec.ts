@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { MultiPlayerHelper } from './helpers/multi-player';
-import { VoteGamePage } from './helpers/page-objects';
+import { VoteGamePage, uniqueRoomName } from './helpers/page-objects';
 
 /**
  * Priority 1: Core Voting Gameplay E2E Tests
@@ -110,29 +110,47 @@ test.describe('1.1 Game Room Creation & Joining', () => {
     }
   });
 
-  test('VG-005: Room auto-start when all ready', async () => {
-    const [player1, player2] = await multiPlayer.createPlayers(2);
+  test('VG-005: Room auto-start when all ready (3+ players)', async () => {
+    // Minimum 3 players required for game to auto-start
+    const [player1, player2, player3] = await multiPlayer.createPlayers(3);
     const gamePage1 = new VoteGamePage(player1);
     const gamePage2 = new VoteGamePage(player2);
+    const gamePage3 = new VoteGamePage(player3);
+    const roomName = uniqueRoomName('Ready Start VG-005');
     
-    // Setup room
+    // All players connect
     await gamePage1.goto();
-    await gamePage1.waitForConnection();
-    await gamePage1.createRoom('Ready Start VG-005', 10);
-    await gamePage1.joinRoom('Ready Start VG-005');
-    
     await gamePage2.goto();
+    await gamePage3.goto();
+    await gamePage1.waitForConnection();
     await gamePage2.waitForConnection();
-    await expect(player2.locator('text=Ready Start VG-005')).toBeVisible({ timeout: 10000 });
-    await gamePage2.joinRoom('Ready Start VG-005');
+    await gamePage3.waitForConnection();
     
-    // Both players ready up
+    // Player 1 creates room
+    await gamePage1.createRoom(roomName, 10);
+    
+    // Other players see and join room
+    await expect(player2.locator(`[role="tab"]:has-text("${roomName}")`).first()).toBeVisible({ timeout: 10000 });
+    await expect(player3.locator(`[role="tab"]:has-text("${roomName}")`).first()).toBeVisible({ timeout: 10000 });
+    
+    await gamePage2.joinRoom(roomName);
+    await gamePage3.joinRoom(roomName);
+    await gamePage1.joinRoom(roomName);
+    
+    // Wait for Ready buttons to be visible
+    await expect(gamePage1.readyButton).toBeVisible({ timeout: 10000 });
+    await expect(gamePage2.readyButton).toBeVisible({ timeout: 10000 });
+    await expect(gamePage3.readyButton).toBeVisible({ timeout: 10000 });
+    
+    // All players ready up
     await gamePage1.clickReady();
     await gamePage2.clickReady();
+    await gamePage3.clickReady();
     
-    // Verify ready status is shown
-    await expect(player1.locator('text=/Ready|✓/')).toBeVisible({ timeout: 5000 });
-    await expect(player2.locator('text=/Ready|✓/')).toBeVisible({ timeout: 5000 });
+    // Verify ready status is shown for all players
+    await expect(player1.locator('text=/Ready|✓/').first()).toBeVisible({ timeout: 5000 });
+    await expect(player2.locator('text=/Ready|✓/').first()).toBeVisible({ timeout: 5000 });
+    await expect(player3.locator('text=/Ready|✓/').first()).toBeVisible({ timeout: 5000 });
   });
 });
 

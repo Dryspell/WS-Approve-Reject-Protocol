@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { MultiPlayerHelper } from './helpers/multi-player';
-import { VoteGamePage } from './helpers/page-objects';
+import { VoteGamePage, uniqueRoomName } from './helpers/page-objects';
 
 /**
  * Priority 7: Performance & Load Testing E2E Tests
@@ -113,6 +113,7 @@ test.describe('7.3 Real-time Sync', () => {
 
   test('PF-021: Ready state syncs between players', async ({ browser }) => {
     const multiPlayer = new MultiPlayerHelper(browser);
+    const roomName = uniqueRoomName('Ready Sync Test');
     
     try {
       const [player1, player2] = await multiPlayer.createPlayers(2);
@@ -124,19 +125,22 @@ test.describe('7.3 Real-time Sync', () => {
       await page1.waitForConnection();
       await page2.waitForConnection();
 
-      await page1.createRoom('Ready Sync Test', 10);
+      await page1.createRoom(roomName, 10);
       
-      await expect(player2.locator('text=Ready Sync Test')).toBeVisible({ timeout: 10000 });
+      await expect(player2.locator(`[role="tab"]:has-text("${roomName}")`).first()).toBeVisible({ timeout: 10000 });
 
-      await page1.joinRoom('Ready Sync Test');
-      await page2.joinRoom('Ready Sync Test');
+      await page2.joinRoom(roomName);
+      await page1.joinRoom(roomName);
+
+      // Wait for ready buttons
+      await expect(page1.readyButton).toBeVisible({ timeout: 10000 });
 
       // Player 1 readies
       const readyStart = Date.now();
       await page1.clickReady();
 
-      // Player 1 should see their ready state
-      await expect(player1.locator('text=/✓|Ready.*unready/i')).toBeVisible({ timeout: 5000 });
+      // Player 1 should see their ready state on the button
+      await expect(player1.locator('[data-testid="ready-button"]')).toContainText(/unready/i, { timeout: 5000 });
       
       const readyTime = Date.now() - readyStart;
       console.log(`Ready state updated in ${readyTime}ms`);

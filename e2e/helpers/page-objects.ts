@@ -81,6 +81,8 @@ export class VoteGamePage {
   }
 
   async createRoom(name: string, buyinAmount: number = 10) {
+    // Wait for button to be enabled (connection established)
+    await expect(this.createRoomButton).toBeEnabled({ timeout: 15000 });
     await this.createRoomButton.click();
     await this.roomNameInput.fill(name);
     await this.buyinAmountInput.fill(buyinAmount.toString());
@@ -96,6 +98,9 @@ export class VoteGamePage {
   }
 
   async clickReady() {
+    // Wait for button to be visible and enabled
+    await expect(this.readyButton).toBeVisible({ timeout: 10000 });
+    await expect(this.readyButton).toBeEnabled({ timeout: 5000 });
     await this.readyButton.click();
   }
 

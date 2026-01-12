@@ -85,6 +85,14 @@
 - [x] Toast notifications & form UI tests passing
 - [x] **FIXED**: Ready system toggle was using wrong user ID (cuid2 vs SpacetimeDB identity)
 - [x] Add `data-testid` attributes for reliable test selectors (connection-status, ready-button, vote-red, vote-blue, round-timer, wallet-balance, chat-input, send-button, chat-messages)
+- [x] **FIXED**: Server join_room reducer - prevent duplicate ChatPermission insertions
+- [x] **FIXED**: VoteBox handleJoinRoom - always set currentRoom for tab navigation
+- [x] Single-player ready flow tests passing
+- [x] **FIXED**: Multi-player E2E test improvements:
+  - [x] Add database reset before test runs (`pnpm test:reset-db` + `reset_test_data` reducer)
+  - [x] Add minimum player count (3) before game can auto-start (`MIN_PLAYERS_TO_START` constant)
+  - [x] Unique SpacetimeDB identities per browser context (via MultiPlayerHelper + `?multiuser=true`)
+  - [x] All ready tests passing (8/8)
 - [ ] Add integration tests for SpacetimeDB operations
 - [ ] Expand E2E test coverage for voting mechanics
 - [ ] Add E2E tests for vote trading and guarantees
@@ -140,7 +148,7 @@
 - **UI**: 100% ✅
 - **Polish**: 100% ✅
 - **Social Features**: 100% ✅ (Friends, DMs, Blocking)
-- **Testing**: 80% 🟡 (E2E passing for core flows, ready system fixed)
+- **Testing**: 90% 🟢 (All ready tests passing, multi-player tests fixed, database reset working)
 - **Mobile Support**: 0% 🔴 (Current Sprint)
 
 ---

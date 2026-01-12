@@ -259,27 +259,37 @@ const VoteBox: Component = () => {
   };
 
   const handleJoinRoom = (roomId: string) => {
+    // Always set the current room in UI first (so tab navigation works)
+    setCurrentRoom(roomId);
+    
     const connection = conn();
+    const userIdentity = identity()?.toHexString();
 
     if (!connection || !connected()) {
-      showToast({
-        title: "Error",
-        description: "Not connected to SpacetimeDB",
-        variant: "error",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      console.log("⚠️ Cannot join room - not connected yet");
+      return;
+    }
+
+    if (!userIdentity) {
+      console.log("⚠️ Cannot join room - identity not available yet");
       return;
     }
 
     try {
-      // Just set the current room - the user should already have access
-      setCurrentRoom(roomId);
+      // Get the room to check if we're already a member
+      const room = rooms()[roomId];
+      const roomIdNum = room?.id;
       
-      showToast({
-        title: "Joined Room",
-        description: "Successfully joined the room",
-        duration: DEFAULT_TOAST_DURATION,
-      });
+      if (room && roomIdNum !== undefined) {
+        // Check if user is already a member
+        const isAlreadyMember = room.memberIds.includes(userIdentity);
+        
+        if (!isAlreadyMember) {
+          // Call the server's joinRoom reducer to add user to memberIds
+          console.log("🚀 Joining room:", { roomId: roomIdNum, userIdentity });
+          connection.reducers.joinRoom(roomIdNum, userIdentity);
+        }
+      }
     } catch (error) {
       console.error("Failed to join room:", error);
       showToast({
@@ -420,7 +430,7 @@ const VoteBox: Component = () => {
         </div>
       </Show>
 
-      <Tabs value={currentRoom()} onChange={setCurrentRoom}>
+      <Tabs value={currentRoom()} onChange={handleJoinRoom}>
         <TabsList>
           <For each={Object.entries(rooms())}>
             {([roomId, room]) => (

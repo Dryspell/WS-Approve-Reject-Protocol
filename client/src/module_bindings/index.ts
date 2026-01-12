@@ -32,6 +32,12 @@ import {
 } from "@clockworklabs/spacetimedb-sdk";
 
 // Import and reexport all reducer arg types
+import { AcceptFriendRequest } from "./accept_friend_request_reducer.ts";
+export { AcceptFriendRequest };
+import { BlockUser } from "./block_user_reducer.ts";
+export { BlockUser };
+import { CancelFriendRequest } from "./cancel_friend_request_reducer.ts";
+export { CancelFriendRequest };
 import { CancelUnitTask } from "./cancel_unit_task_reducer.ts";
 export { CancelUnitTask };
 import { ClientConnected } from "./client_connected_reducer.ts";
@@ -54,6 +60,8 @@ import { IdentityDisconnected } from "./identity_disconnected_reducer.ts";
 export { IdentityDisconnected };
 import { JoinRoom } from "./join_room_reducer.ts";
 export { JoinRoom };
+import { MarkMessagesRead } from "./mark_messages_read_reducer.ts";
+export { MarkMessagesRead };
 import { MoveUnit } from "./move_unit_reducer.ts";
 export { MoveUnit };
 import { ProcessRoundVotes } from "./process_round_votes_reducer.ts";
@@ -62,8 +70,22 @@ import { PurchaseGuarantee } from "./purchase_guarantee_reducer.ts";
 export { PurchaseGuarantee };
 import { QueueUnitTask } from "./queue_unit_task_reducer.ts";
 export { QueueUnitTask };
+import { RebuyIntoGame } from "./rebuy_into_game_reducer.ts";
+export { RebuyIntoGame };
+import { RejectFriendRequest } from "./reject_friend_request_reducer.ts";
+export { RejectFriendRequest };
+import { RemoveFriend } from "./remove_friend_reducer.ts";
+export { RemoveFriend };
+import { RemoveVoteFromSale } from "./remove_vote_from_sale_reducer.ts";
+export { RemoveVoteFromSale };
+import { ResetTestData } from "./reset_test_data_reducer.ts";
+export { ResetTestData };
 import { SendChatMessage } from "./send_chat_message_reducer.ts";
 export { SendChatMessage };
+import { SendDirectMessage } from "./send_direct_message_reducer.ts";
+export { SendDirectMessage };
+import { SendFriendRequest } from "./send_friend_request_reducer.ts";
+export { SendFriendRequest };
 import { SendMessage } from "./send_message_reducer.ts";
 export { SendMessage };
 import { SetChatPermission } from "./set_chat_permission_reducer.ts";
@@ -76,6 +98,8 @@ import { SetUnitVoteColor } from "./set_unit_vote_color_reducer.ts";
 export { SetUnitVoteColor };
 import { SetVoteColor } from "./set_vote_color_reducer.ts";
 export { SetVoteColor };
+import { SetVoteForSale } from "./set_vote_for_sale_reducer.ts";
+export { SetVoteForSale };
 import { StartGame } from "./start_game_reducer.ts";
 export { StartGame };
 import { ToggleReady } from "./toggle_ready_reducer.ts";
@@ -84,18 +108,34 @@ import { TradeUnitVote } from "./trade_unit_vote_reducer.ts";
 export { TradeUnitVote };
 import { TransferResources } from "./transfer_resources_reducer.ts";
 export { TransferResources };
+import { TransferToBank } from "./transfer_to_bank_reducer.ts";
+export { TransferToBank };
 import { TransferVoteOwnership } from "./transfer_vote_ownership_reducer.ts";
 export { TransferVoteOwnership };
+import { UnblockUser } from "./unblock_user_reducer.ts";
+export { UnblockUser };
 import { UpgradeUnit } from "./upgrade_unit_reducer.ts";
 export { UpgradeUnit };
+import { WithdrawFromBank } from "./withdraw_from_bank_reducer.ts";
+export { WithdrawFromBank };
 
 // Import and reexport all table handle types
+import { BlockedUserTableHandle } from "./blocked_user_table.ts";
+export { BlockedUserTableHandle };
 import { ChatMessageTableHandle } from "./chat_message_table.ts";
 export { ChatMessageTableHandle };
 import { ChatPermissionTableHandle } from "./chat_permission_table.ts";
 export { ChatPermissionTableHandle };
 import { ChatRoomTableHandle } from "./chat_room_table.ts";
 export { ChatRoomTableHandle };
+import { DirectMessageTableHandle } from "./direct_message_table.ts";
+export { DirectMessageTableHandle };
+import { DirectMessageConversationTableHandle } from "./direct_message_conversation_table.ts";
+export { DirectMessageConversationTableHandle };
+import { FriendRequestTableHandle } from "./friend_request_table.ts";
+export { FriendRequestTableHandle };
+import { FriendshipTableHandle } from "./friendship_table.ts";
+export { FriendshipTableHandle };
 import { GameEventTableHandle } from "./game_event_table.ts";
 export { GameEventTableHandle };
 import { GameRoomTableHandle } from "./game_room_table.ts";
@@ -128,12 +168,22 @@ import { VoteTableHandle } from "./vote_table.ts";
 export { VoteTableHandle };
 
 // Import and reexport all types
+import { BlockedUser } from "./blocked_user_type.ts";
+export { BlockedUser };
 import { ChatMessage } from "./chat_message_type.ts";
 export { ChatMessage };
 import { ChatPermission } from "./chat_permission_type.ts";
 export { ChatPermission };
 import { ChatRoom } from "./chat_room_type.ts";
 export { ChatRoom };
+import { DirectMessage } from "./direct_message_type.ts";
+export { DirectMessage };
+import { DirectMessageConversation } from "./direct_message_conversation_type.ts";
+export { DirectMessageConversation };
+import { FriendRequest } from "./friend_request_type.ts";
+export { FriendRequest };
+import { Friendship } from "./friendship_type.ts";
+export { Friendship };
 import { GameEvent } from "./game_event_type.ts";
 export { GameEvent };
 import { GameRoom } from "./game_room_type.ts";
@@ -169,6 +219,11 @@ export { Vote };
 
 const REMOTE_MODULE = {
   tables: {
+    blocked_user: {
+      tableName: "blocked_user",
+      rowType: BlockedUser.getTypeScriptAlgebraicType(),
+      primaryKey: "id",
+    },
     chat_message: {
       tableName: "chat_message",
       rowType: ChatMessage.getTypeScriptAlgebraicType(),
@@ -182,6 +237,26 @@ const REMOTE_MODULE = {
     chat_room: {
       tableName: "chat_room",
       rowType: ChatRoom.getTypeScriptAlgebraicType(),
+      primaryKey: "id",
+    },
+    direct_message: {
+      tableName: "direct_message",
+      rowType: DirectMessage.getTypeScriptAlgebraicType(),
+      primaryKey: "id",
+    },
+    direct_message_conversation: {
+      tableName: "direct_message_conversation",
+      rowType: DirectMessageConversation.getTypeScriptAlgebraicType(),
+      primaryKey: "id",
+    },
+    friend_request: {
+      tableName: "friend_request",
+      rowType: FriendRequest.getTypeScriptAlgebraicType(),
+      primaryKey: "id",
+    },
+    friendship: {
+      tableName: "friendship",
+      rowType: Friendship.getTypeScriptAlgebraicType(),
       primaryKey: "id",
     },
     game_event: {
@@ -260,6 +335,18 @@ const REMOTE_MODULE = {
     },
   },
   reducers: {
+    accept_friend_request: {
+      reducerName: "accept_friend_request",
+      argsType: AcceptFriendRequest.getTypeScriptAlgebraicType(),
+    },
+    block_user: {
+      reducerName: "block_user",
+      argsType: BlockUser.getTypeScriptAlgebraicType(),
+    },
+    cancel_friend_request: {
+      reducerName: "cancel_friend_request",
+      argsType: CancelFriendRequest.getTypeScriptAlgebraicType(),
+    },
     cancel_unit_task: {
       reducerName: "cancel_unit_task",
       argsType: CancelUnitTask.getTypeScriptAlgebraicType(),
@@ -304,6 +391,10 @@ const REMOTE_MODULE = {
       reducerName: "join_room",
       argsType: JoinRoom.getTypeScriptAlgebraicType(),
     },
+    mark_messages_read: {
+      reducerName: "mark_messages_read",
+      argsType: MarkMessagesRead.getTypeScriptAlgebraicType(),
+    },
     move_unit: {
       reducerName: "move_unit",
       argsType: MoveUnit.getTypeScriptAlgebraicType(),
@@ -320,9 +411,37 @@ const REMOTE_MODULE = {
       reducerName: "queue_unit_task",
       argsType: QueueUnitTask.getTypeScriptAlgebraicType(),
     },
+    rebuy_into_game: {
+      reducerName: "rebuy_into_game",
+      argsType: RebuyIntoGame.getTypeScriptAlgebraicType(),
+    },
+    reject_friend_request: {
+      reducerName: "reject_friend_request",
+      argsType: RejectFriendRequest.getTypeScriptAlgebraicType(),
+    },
+    remove_friend: {
+      reducerName: "remove_friend",
+      argsType: RemoveFriend.getTypeScriptAlgebraicType(),
+    },
+    remove_vote_from_sale: {
+      reducerName: "remove_vote_from_sale",
+      argsType: RemoveVoteFromSale.getTypeScriptAlgebraicType(),
+    },
+    reset_test_data: {
+      reducerName: "reset_test_data",
+      argsType: ResetTestData.getTypeScriptAlgebraicType(),
+    },
     send_chat_message: {
       reducerName: "send_chat_message",
       argsType: SendChatMessage.getTypeScriptAlgebraicType(),
+    },
+    send_direct_message: {
+      reducerName: "send_direct_message",
+      argsType: SendDirectMessage.getTypeScriptAlgebraicType(),
+    },
+    send_friend_request: {
+      reducerName: "send_friend_request",
+      argsType: SendFriendRequest.getTypeScriptAlgebraicType(),
     },
     send_message: {
       reducerName: "send_message",
@@ -348,6 +467,10 @@ const REMOTE_MODULE = {
       reducerName: "set_vote_color",
       argsType: SetVoteColor.getTypeScriptAlgebraicType(),
     },
+    set_vote_for_sale: {
+      reducerName: "set_vote_for_sale",
+      argsType: SetVoteForSale.getTypeScriptAlgebraicType(),
+    },
     start_game: {
       reducerName: "start_game",
       argsType: StartGame.getTypeScriptAlgebraicType(),
@@ -364,13 +487,25 @@ const REMOTE_MODULE = {
       reducerName: "transfer_resources",
       argsType: TransferResources.getTypeScriptAlgebraicType(),
     },
+    transfer_to_bank: {
+      reducerName: "transfer_to_bank",
+      argsType: TransferToBank.getTypeScriptAlgebraicType(),
+    },
     transfer_vote_ownership: {
       reducerName: "transfer_vote_ownership",
       argsType: TransferVoteOwnership.getTypeScriptAlgebraicType(),
     },
+    unblock_user: {
+      reducerName: "unblock_user",
+      argsType: UnblockUser.getTypeScriptAlgebraicType(),
+    },
     upgrade_unit: {
       reducerName: "upgrade_unit",
       argsType: UpgradeUnit.getTypeScriptAlgebraicType(),
+    },
+    withdraw_from_bank: {
+      reducerName: "withdraw_from_bank",
+      argsType: WithdrawFromBank.getTypeScriptAlgebraicType(),
     },
   },
   // Constructors which are used by the DbConnectionImpl to
@@ -399,6 +534,9 @@ const REMOTE_MODULE = {
 
 // A type representing all the possible variants of a reducer.
 export type Reducer = never
+| { name: "AcceptFriendRequest", args: AcceptFriendRequest }
+| { name: "BlockUser", args: BlockUser }
+| { name: "CancelFriendRequest", args: CancelFriendRequest }
 | { name: "CancelUnitTask", args: CancelUnitTask }
 | { name: "ClientConnected", args: ClientConnected }
 | { name: "CreateChatRoom", args: CreateChatRoom }
@@ -410,27 +548,87 @@ export type Reducer = never
 | { name: "GatherResource", args: GatherResource }
 | { name: "IdentityDisconnected", args: IdentityDisconnected }
 | { name: "JoinRoom", args: JoinRoom }
+| { name: "MarkMessagesRead", args: MarkMessagesRead }
 | { name: "MoveUnit", args: MoveUnit }
 | { name: "ProcessRoundVotes", args: ProcessRoundVotes }
 | { name: "PurchaseGuarantee", args: PurchaseGuarantee }
 | { name: "QueueUnitTask", args: QueueUnitTask }
+| { name: "RebuyIntoGame", args: RebuyIntoGame }
+| { name: "RejectFriendRequest", args: RejectFriendRequest }
+| { name: "RemoveFriend", args: RemoveFriend }
+| { name: "RemoveVoteFromSale", args: RemoveVoteFromSale }
+| { name: "ResetTestData", args: ResetTestData }
 | { name: "SendChatMessage", args: SendChatMessage }
+| { name: "SendDirectMessage", args: SendDirectMessage }
+| { name: "SendFriendRequest", args: SendFriendRequest }
 | { name: "SendMessage", args: SendMessage }
 | { name: "SetChatPermission", args: SetChatPermission }
 | { name: "SetName", args: SetName }
 | { name: "SetUnitTask", args: SetUnitTask }
 | { name: "SetUnitVoteColor", args: SetUnitVoteColor }
 | { name: "SetVoteColor", args: SetVoteColor }
+| { name: "SetVoteForSale", args: SetVoteForSale }
 | { name: "StartGame", args: StartGame }
 | { name: "ToggleReady", args: ToggleReady }
 | { name: "TradeUnitVote", args: TradeUnitVote }
 | { name: "TransferResources", args: TransferResources }
+| { name: "TransferToBank", args: TransferToBank }
 | { name: "TransferVoteOwnership", args: TransferVoteOwnership }
+| { name: "UnblockUser", args: UnblockUser }
 | { name: "UpgradeUnit", args: UpgradeUnit }
+| { name: "WithdrawFromBank", args: WithdrawFromBank }
 ;
 
 export class RemoteReducers {
   constructor(private connection: DbConnectionImpl, private setCallReducerFlags: SetReducerFlags) {}
+
+  acceptFriendRequest(requestId: number) {
+    const __args = { requestId };
+    let __writer = new BinaryWriter(1024);
+    AcceptFriendRequest.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("accept_friend_request", __argsBuffer, this.setCallReducerFlags.acceptFriendRequestFlags);
+  }
+
+  onAcceptFriendRequest(callback: (ctx: ReducerEventContext, requestId: number) => void) {
+    this.connection.onReducer("accept_friend_request", callback);
+  }
+
+  removeOnAcceptFriendRequest(callback: (ctx: ReducerEventContext, requestId: number) => void) {
+    this.connection.offReducer("accept_friend_request", callback);
+  }
+
+  blockUser(userId: Identity) {
+    const __args = { userId };
+    let __writer = new BinaryWriter(1024);
+    BlockUser.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("block_user", __argsBuffer, this.setCallReducerFlags.blockUserFlags);
+  }
+
+  onBlockUser(callback: (ctx: ReducerEventContext, userId: Identity) => void) {
+    this.connection.onReducer("block_user", callback);
+  }
+
+  removeOnBlockUser(callback: (ctx: ReducerEventContext, userId: Identity) => void) {
+    this.connection.offReducer("block_user", callback);
+  }
+
+  cancelFriendRequest(requestId: number) {
+    const __args = { requestId };
+    let __writer = new BinaryWriter(1024);
+    CancelFriendRequest.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("cancel_friend_request", __argsBuffer, this.setCallReducerFlags.cancelFriendRequestFlags);
+  }
+
+  onCancelFriendRequest(callback: (ctx: ReducerEventContext, requestId: number) => void) {
+    this.connection.onReducer("cancel_friend_request", callback);
+  }
+
+  removeOnCancelFriendRequest(callback: (ctx: ReducerEventContext, requestId: number) => void) {
+    this.connection.offReducer("cancel_friend_request", callback);
+  }
 
   cancelUnitTask(taskId: number) {
     const __args = { taskId };
@@ -592,6 +790,22 @@ export class RemoteReducers {
     this.connection.offReducer("join_room", callback);
   }
 
+  markMessagesRead(conversationId: string) {
+    const __args = { conversationId };
+    let __writer = new BinaryWriter(1024);
+    MarkMessagesRead.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("mark_messages_read", __argsBuffer, this.setCallReducerFlags.markMessagesReadFlags);
+  }
+
+  onMarkMessagesRead(callback: (ctx: ReducerEventContext, conversationId: string) => void) {
+    this.connection.onReducer("mark_messages_read", callback);
+  }
+
+  removeOnMarkMessagesRead(callback: (ctx: ReducerEventContext, conversationId: string) => void) {
+    this.connection.offReducer("mark_messages_read", callback);
+  }
+
   moveUnit(unitId: number, targetPosition: Vector2) {
     const __args = { unitId, targetPosition };
     let __writer = new BinaryWriter(1024);
@@ -656,6 +870,86 @@ export class RemoteReducers {
     this.connection.offReducer("queue_unit_task", callback);
   }
 
+  rebuyIntoGame(roomId: number) {
+    const __args = { roomId };
+    let __writer = new BinaryWriter(1024);
+    RebuyIntoGame.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("rebuy_into_game", __argsBuffer, this.setCallReducerFlags.rebuyIntoGameFlags);
+  }
+
+  onRebuyIntoGame(callback: (ctx: ReducerEventContext, roomId: number) => void) {
+    this.connection.onReducer("rebuy_into_game", callback);
+  }
+
+  removeOnRebuyIntoGame(callback: (ctx: ReducerEventContext, roomId: number) => void) {
+    this.connection.offReducer("rebuy_into_game", callback);
+  }
+
+  rejectFriendRequest(requestId: number) {
+    const __args = { requestId };
+    let __writer = new BinaryWriter(1024);
+    RejectFriendRequest.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("reject_friend_request", __argsBuffer, this.setCallReducerFlags.rejectFriendRequestFlags);
+  }
+
+  onRejectFriendRequest(callback: (ctx: ReducerEventContext, requestId: number) => void) {
+    this.connection.onReducer("reject_friend_request", callback);
+  }
+
+  removeOnRejectFriendRequest(callback: (ctx: ReducerEventContext, requestId: number) => void) {
+    this.connection.offReducer("reject_friend_request", callback);
+  }
+
+  removeFriend(friendId: Identity) {
+    const __args = { friendId };
+    let __writer = new BinaryWriter(1024);
+    RemoveFriend.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("remove_friend", __argsBuffer, this.setCallReducerFlags.removeFriendFlags);
+  }
+
+  onRemoveFriend(callback: (ctx: ReducerEventContext, friendId: Identity) => void) {
+    this.connection.onReducer("remove_friend", callback);
+  }
+
+  removeOnRemoveFriend(callback: (ctx: ReducerEventContext, friendId: Identity) => void) {
+    this.connection.offReducer("remove_friend", callback);
+  }
+
+  removeVoteFromSale(voteId: number) {
+    const __args = { voteId };
+    let __writer = new BinaryWriter(1024);
+    RemoveVoteFromSale.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("remove_vote_from_sale", __argsBuffer, this.setCallReducerFlags.removeVoteFromSaleFlags);
+  }
+
+  onRemoveVoteFromSale(callback: (ctx: ReducerEventContext, voteId: number) => void) {
+    this.connection.onReducer("remove_vote_from_sale", callback);
+  }
+
+  removeOnRemoveVoteFromSale(callback: (ctx: ReducerEventContext, voteId: number) => void) {
+    this.connection.offReducer("remove_vote_from_sale", callback);
+  }
+
+  resetTestData(confirmation: string) {
+    const __args = { confirmation };
+    let __writer = new BinaryWriter(1024);
+    ResetTestData.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("reset_test_data", __argsBuffer, this.setCallReducerFlags.resetTestDataFlags);
+  }
+
+  onResetTestData(callback: (ctx: ReducerEventContext, confirmation: string) => void) {
+    this.connection.onReducer("reset_test_data", callback);
+  }
+
+  removeOnResetTestData(callback: (ctx: ReducerEventContext, confirmation: string) => void) {
+    this.connection.offReducer("reset_test_data", callback);
+  }
+
   sendChatMessage(roomId: string, text: string, roundNumber: number | undefined) {
     const __args = { roomId, text, roundNumber };
     let __writer = new BinaryWriter(1024);
@@ -670,6 +964,38 @@ export class RemoteReducers {
 
   removeOnSendChatMessage(callback: (ctx: ReducerEventContext, roomId: string, text: string, roundNumber: number | undefined) => void) {
     this.connection.offReducer("send_chat_message", callback);
+  }
+
+  sendDirectMessage(toUser: Identity, text: string) {
+    const __args = { toUser, text };
+    let __writer = new BinaryWriter(1024);
+    SendDirectMessage.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("send_direct_message", __argsBuffer, this.setCallReducerFlags.sendDirectMessageFlags);
+  }
+
+  onSendDirectMessage(callback: (ctx: ReducerEventContext, toUser: Identity, text: string) => void) {
+    this.connection.onReducer("send_direct_message", callback);
+  }
+
+  removeOnSendDirectMessage(callback: (ctx: ReducerEventContext, toUser: Identity, text: string) => void) {
+    this.connection.offReducer("send_direct_message", callback);
+  }
+
+  sendFriendRequest(toUser: Identity) {
+    const __args = { toUser };
+    let __writer = new BinaryWriter(1024);
+    SendFriendRequest.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("send_friend_request", __argsBuffer, this.setCallReducerFlags.sendFriendRequestFlags);
+  }
+
+  onSendFriendRequest(callback: (ctx: ReducerEventContext, toUser: Identity) => void) {
+    this.connection.onReducer("send_friend_request", callback);
+  }
+
+  removeOnSendFriendRequest(callback: (ctx: ReducerEventContext, toUser: Identity) => void) {
+    this.connection.offReducer("send_friend_request", callback);
   }
 
   sendMessage(text: string) {
@@ -768,6 +1094,22 @@ export class RemoteReducers {
     this.connection.offReducer("set_vote_color", callback);
   }
 
+  setVoteForSale(voteId: number, price: number) {
+    const __args = { voteId, price };
+    let __writer = new BinaryWriter(1024);
+    SetVoteForSale.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("set_vote_for_sale", __argsBuffer, this.setCallReducerFlags.setVoteForSaleFlags);
+  }
+
+  onSetVoteForSale(callback: (ctx: ReducerEventContext, voteId: number, price: number) => void) {
+    this.connection.onReducer("set_vote_for_sale", callback);
+  }
+
+  removeOnSetVoteForSale(callback: (ctx: ReducerEventContext, voteId: number, price: number) => void) {
+    this.connection.offReducer("set_vote_for_sale", callback);
+  }
+
   startGame(roomId: number) {
     const __args = { roomId };
     let __writer = new BinaryWriter(1024);
@@ -832,6 +1174,22 @@ export class RemoteReducers {
     this.connection.offReducer("transfer_resources", callback);
   }
 
+  transferToBank(amount: number) {
+    const __args = { amount };
+    let __writer = new BinaryWriter(1024);
+    TransferToBank.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("transfer_to_bank", __argsBuffer, this.setCallReducerFlags.transferToBankFlags);
+  }
+
+  onTransferToBank(callback: (ctx: ReducerEventContext, amount: number) => void) {
+    this.connection.onReducer("transfer_to_bank", callback);
+  }
+
+  removeOnTransferToBank(callback: (ctx: ReducerEventContext, amount: number) => void) {
+    this.connection.offReducer("transfer_to_bank", callback);
+  }
+
   transferVoteOwnership(voteId: number, buyerId: string, price: number) {
     const __args = { voteId, buyerId, price };
     let __writer = new BinaryWriter(1024);
@@ -846,6 +1204,22 @@ export class RemoteReducers {
 
   removeOnTransferVoteOwnership(callback: (ctx: ReducerEventContext, voteId: number, buyerId: string, price: number) => void) {
     this.connection.offReducer("transfer_vote_ownership", callback);
+  }
+
+  unblockUser(userId: Identity) {
+    const __args = { userId };
+    let __writer = new BinaryWriter(1024);
+    UnblockUser.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("unblock_user", __argsBuffer, this.setCallReducerFlags.unblockUserFlags);
+  }
+
+  onUnblockUser(callback: (ctx: ReducerEventContext, userId: Identity) => void) {
+    this.connection.onReducer("unblock_user", callback);
+  }
+
+  removeOnUnblockUser(callback: (ctx: ReducerEventContext, userId: Identity) => void) {
+    this.connection.offReducer("unblock_user", callback);
   }
 
   upgradeUnit(unitId: number, upgradeType: string) {
@@ -864,9 +1238,40 @@ export class RemoteReducers {
     this.connection.offReducer("upgrade_unit", callback);
   }
 
+  withdrawFromBank(amount: number) {
+    const __args = { amount };
+    let __writer = new BinaryWriter(1024);
+    WithdrawFromBank.getTypeScriptAlgebraicType().serialize(__writer, __args);
+    let __argsBuffer = __writer.getBuffer();
+    this.connection.callReducer("withdraw_from_bank", __argsBuffer, this.setCallReducerFlags.withdrawFromBankFlags);
+  }
+
+  onWithdrawFromBank(callback: (ctx: ReducerEventContext, amount: number) => void) {
+    this.connection.onReducer("withdraw_from_bank", callback);
+  }
+
+  removeOnWithdrawFromBank(callback: (ctx: ReducerEventContext, amount: number) => void) {
+    this.connection.offReducer("withdraw_from_bank", callback);
+  }
+
 }
 
 export class SetReducerFlags {
+  acceptFriendRequestFlags: CallReducerFlags = 'FullUpdate';
+  acceptFriendRequest(flags: CallReducerFlags) {
+    this.acceptFriendRequestFlags = flags;
+  }
+
+  blockUserFlags: CallReducerFlags = 'FullUpdate';
+  blockUser(flags: CallReducerFlags) {
+    this.blockUserFlags = flags;
+  }
+
+  cancelFriendRequestFlags: CallReducerFlags = 'FullUpdate';
+  cancelFriendRequest(flags: CallReducerFlags) {
+    this.cancelFriendRequestFlags = flags;
+  }
+
   cancelUnitTaskFlags: CallReducerFlags = 'FullUpdate';
   cancelUnitTask(flags: CallReducerFlags) {
     this.cancelUnitTaskFlags = flags;
@@ -912,6 +1317,11 @@ export class SetReducerFlags {
     this.joinRoomFlags = flags;
   }
 
+  markMessagesReadFlags: CallReducerFlags = 'FullUpdate';
+  markMessagesRead(flags: CallReducerFlags) {
+    this.markMessagesReadFlags = flags;
+  }
+
   moveUnitFlags: CallReducerFlags = 'FullUpdate';
   moveUnit(flags: CallReducerFlags) {
     this.moveUnitFlags = flags;
@@ -932,9 +1342,44 @@ export class SetReducerFlags {
     this.queueUnitTaskFlags = flags;
   }
 
+  rebuyIntoGameFlags: CallReducerFlags = 'FullUpdate';
+  rebuyIntoGame(flags: CallReducerFlags) {
+    this.rebuyIntoGameFlags = flags;
+  }
+
+  rejectFriendRequestFlags: CallReducerFlags = 'FullUpdate';
+  rejectFriendRequest(flags: CallReducerFlags) {
+    this.rejectFriendRequestFlags = flags;
+  }
+
+  removeFriendFlags: CallReducerFlags = 'FullUpdate';
+  removeFriend(flags: CallReducerFlags) {
+    this.removeFriendFlags = flags;
+  }
+
+  removeVoteFromSaleFlags: CallReducerFlags = 'FullUpdate';
+  removeVoteFromSale(flags: CallReducerFlags) {
+    this.removeVoteFromSaleFlags = flags;
+  }
+
+  resetTestDataFlags: CallReducerFlags = 'FullUpdate';
+  resetTestData(flags: CallReducerFlags) {
+    this.resetTestDataFlags = flags;
+  }
+
   sendChatMessageFlags: CallReducerFlags = 'FullUpdate';
   sendChatMessage(flags: CallReducerFlags) {
     this.sendChatMessageFlags = flags;
+  }
+
+  sendDirectMessageFlags: CallReducerFlags = 'FullUpdate';
+  sendDirectMessage(flags: CallReducerFlags) {
+    this.sendDirectMessageFlags = flags;
+  }
+
+  sendFriendRequestFlags: CallReducerFlags = 'FullUpdate';
+  sendFriendRequest(flags: CallReducerFlags) {
+    this.sendFriendRequestFlags = flags;
   }
 
   sendMessageFlags: CallReducerFlags = 'FullUpdate';
@@ -967,6 +1412,11 @@ export class SetReducerFlags {
     this.setVoteColorFlags = flags;
   }
 
+  setVoteForSaleFlags: CallReducerFlags = 'FullUpdate';
+  setVoteForSale(flags: CallReducerFlags) {
+    this.setVoteForSaleFlags = flags;
+  }
+
   startGameFlags: CallReducerFlags = 'FullUpdate';
   startGame(flags: CallReducerFlags) {
     this.startGameFlags = flags;
@@ -987,9 +1437,19 @@ export class SetReducerFlags {
     this.transferResourcesFlags = flags;
   }
 
+  transferToBankFlags: CallReducerFlags = 'FullUpdate';
+  transferToBank(flags: CallReducerFlags) {
+    this.transferToBankFlags = flags;
+  }
+
   transferVoteOwnershipFlags: CallReducerFlags = 'FullUpdate';
   transferVoteOwnership(flags: CallReducerFlags) {
     this.transferVoteOwnershipFlags = flags;
+  }
+
+  unblockUserFlags: CallReducerFlags = 'FullUpdate';
+  unblockUser(flags: CallReducerFlags) {
+    this.unblockUserFlags = flags;
   }
 
   upgradeUnitFlags: CallReducerFlags = 'FullUpdate';
@@ -997,10 +1457,19 @@ export class SetReducerFlags {
     this.upgradeUnitFlags = flags;
   }
 
+  withdrawFromBankFlags: CallReducerFlags = 'FullUpdate';
+  withdrawFromBank(flags: CallReducerFlags) {
+    this.withdrawFromBankFlags = flags;
+  }
+
 }
 
 export class RemoteTables {
   constructor(private connection: DbConnectionImpl) {}
+
+  get blockedUser(): BlockedUserTableHandle {
+    return new BlockedUserTableHandle(this.connection.clientCache.getOrCreateTable<BlockedUser>(REMOTE_MODULE.tables.blocked_user));
+  }
 
   get chatMessage(): ChatMessageTableHandle {
     return new ChatMessageTableHandle(this.connection.clientCache.getOrCreateTable<ChatMessage>(REMOTE_MODULE.tables.chat_message));
@@ -1012,6 +1481,22 @@ export class RemoteTables {
 
   get chatRoom(): ChatRoomTableHandle {
     return new ChatRoomTableHandle(this.connection.clientCache.getOrCreateTable<ChatRoom>(REMOTE_MODULE.tables.chat_room));
+  }
+
+  get directMessage(): DirectMessageTableHandle {
+    return new DirectMessageTableHandle(this.connection.clientCache.getOrCreateTable<DirectMessage>(REMOTE_MODULE.tables.direct_message));
+  }
+
+  get directMessageConversation(): DirectMessageConversationTableHandle {
+    return new DirectMessageConversationTableHandle(this.connection.clientCache.getOrCreateTable<DirectMessageConversation>(REMOTE_MODULE.tables.direct_message_conversation));
+  }
+
+  get friendRequest(): FriendRequestTableHandle {
+    return new FriendRequestTableHandle(this.connection.clientCache.getOrCreateTable<FriendRequest>(REMOTE_MODULE.tables.friend_request));
+  }
+
+  get friendship(): FriendshipTableHandle {
+    return new FriendshipTableHandle(this.connection.clientCache.getOrCreateTable<Friendship>(REMOTE_MODULE.tables.friendship));
   }
 
   get gameEvent(): GameEventTableHandle {
