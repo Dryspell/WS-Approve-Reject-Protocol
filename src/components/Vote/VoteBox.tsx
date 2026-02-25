@@ -179,28 +179,12 @@ const VoteBox: Component = () => {
       });
     });
 
-    // Listen for createRoom reducer results (success and errors)
-    connection.reducers.onCreateRoom((ctx) => {
-      console.log("📝 createRoom reducer completed:", ctx);
-      if (ctx.event.status.tag === "Failed") {
-        console.error("❌ createRoom failed:", ctx.event.status.value);
-        showToast({
-          title: "Error Creating Room",
-          description: ctx.event.status.value || "Unknown error",
-          variant: "error",
-          duration: DEFAULT_TOAST_DURATION,
-        });
-      } else {
-        console.log("✅ createRoom succeeded");
-      }
-    });
-
     // Mark subscriptions as set up
     setSubscriptionsSet(true);
     console.log("✅ All VoteBox subscriptions set up!");
   });
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     const connection = conn();
     const roomName = newRoomName() || `Game Room ${Object.keys(rooms()).length + 1}`;
 
@@ -227,30 +211,26 @@ const VoteBox: Component = () => {
     try {
       console.log("Calling createRoom with name:", roomName);
       
-      // Generate a unique room ID
       const roomId = createId();
       const creatorId = identity()?.toHexString() || "anonymous";
       
-      // Call the reducer - it's fire-and-forget, the onInsert callback will update the list
-      connection.reducers.createRoom(roomId, roomName, creatorId, buyinAmount());
+      await connection.reducers.createRoom(roomId, roomName, creatorId, buyinAmount());
       
-      // Clear input and hide form immediately
       setNewRoomName("");
-      setBuyinAmount(10); // Reset to default
+      setBuyinAmount(10);
       setShowCreateRoom(false);
       
-      // Show feedback - the room will appear in the list when created
       showToast({
         title: "Room Created",
         description: `"${roomName}" will appear in the list shortly`,
         duration: DEFAULT_TOAST_DURATION,
       });
       
-      console.log("createRoom called, waiting for room to appear in list");
+      console.log("createRoom succeeded");
     } catch (error) {
       console.error("Failed to create room:", error);
       showToast({
-        title: "Error",
+        title: "Error Creating Room",
         description: error instanceof Error ? error.message : "Failed to create room",
         variant: "error",
         duration: DEFAULT_TOAST_DURATION,

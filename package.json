@@ -28,7 +28,7 @@
     "sql:cloud": "spacetime sql socket-signals"
   },
   "dependencies": {
-    "@clockworklabs/spacetimedb-sdk": "^1.1.0",
+    "@clockworklabs/spacetimedb-sdk": "^2.0.0",
     "@corvu/resizable": "^0.2.5",
     "@fontsource/inter": "^5.2.5",
     "@kobalte/core": "^0.13.9",

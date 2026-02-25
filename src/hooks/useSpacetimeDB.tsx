@@ -119,7 +119,7 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
     // Create the connection
     const builder = DbConnectionClass.builder()
       .withUri(host)
-      .withModuleName(moduleName)
+      .withDatabaseName(moduleName)
       .onConnect(onConnect)
       .onDisconnect(onDisconnect)
       .onConnectError(onConnectError);

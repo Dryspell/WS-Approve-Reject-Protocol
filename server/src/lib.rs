@@ -1,8 +1,11 @@
 #![allow(unused)]
 
 #[macro_use]
-use spacetimedb::{reducer, table, Identity, ReducerContext, Table, Timestamp, rand, SpacetimeType};
+use spacetimedb::{reducer, table, Identity, ReducerContext, Table, Timestamp, rand, SpacetimeType, CaseConversionPolicy};
 use rand::Rng;
+
+#[spacetimedb::settings]
+const CASE_CONVERSION_POLICY: CaseConversionPolicy = CaseConversionPolicy::None;
 
 // Game-related types
 #[derive(SpacetimeType, Clone, Debug)]
@@ -12,7 +15,7 @@ pub struct Vector2 {
 }
 
 // Chat-related types
-#[table(name = chat_room, public)]
+#[table(accessor = chat_room, public)]
 #[derive(Clone, Debug)]
 pub struct ChatRoom {
     #[primary_key]
@@ -21,7 +24,7 @@ pub struct ChatRoom {
     pub created_at: i64,
 }
 
-#[table(name = chat_message, public)]
+#[table(accessor = chat_message, public)]
 #[derive(Clone, Debug)]
 pub struct ChatMessage {
     #[primary_key]
@@ -33,7 +36,7 @@ pub struct ChatMessage {
     pub round_number: Option<i32>,
 }
 
-#[table(name = chat_permission, public)]
+#[table(accessor = chat_permission, public)]
 #[derive(Clone, Debug)]
 pub struct ChatPermission {
     #[primary_key]
@@ -43,7 +46,7 @@ pub struct ChatPermission {
 }
 
 // Social system: Friends & Direct Messaging
-#[table(name = friend_request, public)]
+#[table(accessor = friend_request, public)]
 #[derive(Clone, Debug)]
 pub struct FriendRequest {
     #[primary_key]
@@ -55,7 +58,7 @@ pub struct FriendRequest {
     pub created_at: Timestamp,
 }
 
-#[table(name = friendship, public)]
+#[table(accessor = friendship, public)]
 #[derive(Clone, Debug)]
 pub struct Friendship {
     #[primary_key]
@@ -66,7 +69,7 @@ pub struct Friendship {
     pub created_at: Timestamp,
 }
 
-#[table(name = direct_message_conversation, public)]
+#[table(accessor = direct_message_conversation, public)]
 #[derive(Clone, Debug)]
 pub struct DirectMessageConversation {
     #[primary_key]
@@ -77,7 +80,7 @@ pub struct DirectMessageConversation {
     pub created_at: i64,
 }
 
-#[table(name = direct_message, public)]
+#[table(accessor = direct_message, public)]
 #[derive(Clone, Debug)]
 pub struct DirectMessage {
     #[primary_key]
@@ -90,7 +93,7 @@ pub struct DirectMessage {
     pub is_read: bool,
 }
 
-#[table(name = blocked_user, public)]
+#[table(accessor = blocked_user, public)]
 #[derive(Clone, Debug)]
 pub struct BlockedUser {
     #[primary_key]
@@ -102,7 +105,7 @@ pub struct BlockedUser {
 }
 
 // Game tables
-#[table(name = user, public)]
+#[table(accessor = user, public)]
 #[derive(Clone)]
 pub struct User {
     #[primary_key]
@@ -115,14 +118,14 @@ pub struct User {
     total_profit_loss: f64,   // Lifetime profit/loss tracking
 }
 
-#[table(name = message, public)]
+#[table(accessor = message, public)]
 pub struct Message {
     sender: Identity,
     sent: Timestamp,
     text: String,
 }
 
-#[table(name = game_room, public)]
+#[table(accessor = game_room, public)]
 #[derive(Clone)]
 pub struct GameRoom {
     #[primary_key]
@@ -142,7 +145,7 @@ pub struct GameRoom {
     eliminated_players: Vec<String>, // Players eliminated in previous rounds
 }
 
-#[table(name = unit, public)]
+#[table(accessor = unit, public)]
 #[derive(Clone)]
 pub struct Unit {
     #[primary_key]
@@ -166,7 +169,7 @@ pub struct Unit {
     is_storage: bool, // Whether this unit is a storage building
 }
 
-#[table(name = game_event, public)]
+#[table(accessor = game_event, public)]
 pub struct GameEvent {
     #[primary_key]
     id: String,
@@ -178,7 +181,7 @@ pub struct GameEvent {
     timestamp: i64,
 }
 
-#[table(name = ready_state, public)]
+#[table(accessor = ready_state, public)]
 pub struct ReadyState {
     #[primary_key]
     room_id: String,
@@ -187,7 +190,7 @@ pub struct ReadyState {
 }
 
 // Game resource types
-#[table(name = resource, public)]
+#[table(accessor = resource, public)]
 #[derive(Clone, Debug)]
 pub struct Resource {
     #[primary_key]
@@ -202,7 +205,7 @@ pub struct Resource {
     depletion_threshold: i32, // Amount at which resource is considered depleted
 }
 
-#[table(name = unit_stats, public)]
+#[table(accessor = unit_stats, public)]
 pub struct UnitStats {
     #[primary_key]
     unit_id: i32,
@@ -215,7 +218,7 @@ pub struct UnitStats {
     craft_rate: i32,
 }
 
-#[table(name = unit_inventory, public)]
+#[table(accessor = unit_inventory, public)]
 #[derive(Clone)]
 pub struct UnitInventory {
     #[primary_key]
@@ -246,7 +249,7 @@ pub struct UnitInventory {
 #[reducer]
 pub fn set_name(ctx: &ReducerContext, name: String) -> Result<(), String> {
     let name = validate_name(name)?;
-    if let Some(user) = ctx.db.user().identity().find(ctx.sender) {
+    if let Some(user) = ctx.db.user().identity().find(ctx.sender()) {
         ctx.db.user().identity().update(User {
             name: Some(name),
             ..user
@@ -262,7 +265,7 @@ pub fn send_message(ctx: &ReducerContext, text: String) -> Result<(), String> {
     let text = validate_message(text)?;
     log::info!("{}", text);
     ctx.db.message().insert(Message {
-        sender: ctx.sender,
+        sender: ctx.sender(),
         text,
         sent: ctx.timestamp,
     });
@@ -728,7 +731,7 @@ fn validate_message(text: String) -> Result<String, String> {
 // Client connection handlers
 #[reducer(client_connected)]
 pub fn client_connected(ctx: &ReducerContext) {
-    if let Some(user) = ctx.db.user().identity().find(ctx.sender) {
+    if let Some(user) = ctx.db.user().identity().find(ctx.sender()) {
         ctx.db.user().identity().update(User {
             online: true,
             ..user
@@ -736,7 +739,7 @@ pub fn client_connected(ctx: &ReducerContext) {
     } else {
         ctx.db.user().insert(User {
             name: None,
-            identity: ctx.sender,
+            identity: ctx.sender(),
             online: true,
             wallet_balance: 100.0,    // Starting wallet
             bank_account: 0.0,
@@ -747,7 +750,7 @@ pub fn client_connected(ctx: &ReducerContext) {
 
 #[reducer(client_disconnected)]
 pub fn identity_disconnected(ctx: &ReducerContext) {
-    if let Some(user) = ctx.db.user().identity().find(ctx.sender) {
+    if let Some(user) = ctx.db.user().identity().find(ctx.sender()) {
         ctx.db.user().identity().update(User {
             online: false,
             ..user
@@ -755,7 +758,7 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
     } else {
         log::warn!(
             "Disconnect event for unknown user with identity {:?}",
-            ctx.sender
+            ctx.sender()
         );
     }
 }
@@ -763,7 +766,7 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
 // Chat-related reducers
 #[reducer]
 pub fn create_chat_room(ctx: &ReducerContext, name: String) -> Result<(), String> {
-    log::info!("🎯 create_chat_room CALLED! Name: {}, Sender: {:?}", name, ctx.sender);
+    log::info!("🎯 create_chat_room CALLED! Name: {}, Sender: {:?}", name, ctx.sender());
     
     let room_id = format!("room_{}", ctx.timestamp.to_micros_since_unix_epoch());
     log::info!("📦 Generated room_id: {}", room_id);
@@ -778,10 +781,10 @@ pub fn create_chat_room(ctx: &ReducerContext, name: String) -> Result<(), String
     // Give creator full permissions
     ctx.db.chat_permission().insert(ChatPermission {
         room_id: room_id.clone(),
-        user_id: ctx.sender,
+        user_id: ctx.sender(),
         permission: "write".to_string(),
     });
-    log::info!("🔐 Inserted chat_permission for user {:?}", ctx.sender);
+    log::info!("🔐 Inserted chat_permission for user {:?}", ctx.sender());
 
     log::info!("🎉 create_chat_room COMPLETED successfully!");
     Ok(())
@@ -796,7 +799,7 @@ pub fn send_chat_message(
 ) -> Result<(), String> {
     // Check if user has permission to send messages
     let permissions = ctx.db.chat_permission().iter()
-        .filter(|p| p.room_id == room_id && p.user_id == ctx.sender)
+        .filter(|p| p.room_id == room_id && p.user_id == ctx.sender())
         .collect::<Vec<_>>();
     
     if permissions.is_empty() || permissions[0].permission != "write" {
@@ -808,7 +811,7 @@ pub fn send_chat_message(
     ctx.db.chat_message().insert(ChatMessage {
         id: message_id,
         room_id,
-        sender: ctx.sender,
+        sender: ctx.sender(),
         text,
         timestamp: ctx.timestamp,
         round_number,
@@ -843,7 +846,7 @@ pub fn set_chat_permission(
 }
 
 // Vote Exchange: Vote tracking with ownership
-#[table(name = vote, public)]
+#[table(accessor = vote, public)]
 pub struct Vote {
     #[primary_key]
     #[auto_inc]
@@ -859,7 +862,7 @@ pub struct Vote {
 }
 
 // Vote Exchange: Transaction tracking
-#[table(name = transaction, public)]
+#[table(accessor = transaction, public)]
 pub struct Transaction {
     #[primary_key]
     #[auto_inc]
@@ -875,7 +878,7 @@ pub struct Transaction {
 }
 
 // Vote Exchange: Guarantee system
-#[table(name = guarantee, public)]
+#[table(accessor = guarantee, public)]
 pub struct Guarantee {
     #[primary_key]
     #[auto_inc]
@@ -891,7 +894,7 @@ pub struct Guarantee {
 }
 
 // Vote Exchange: Guarantee purchases
-#[table(name = guarantee_purchase, public)]
+#[table(accessor = guarantee_purchase, public)]
 pub struct GuaranteePurchase {
     #[primary_key]
     #[auto_inc]
@@ -1025,7 +1028,7 @@ pub fn set_vote_for_sale(
 ) -> Result<(), String> {
     if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
         // Verify caller owns the vote
-        let caller_id = ctx.sender.to_string();
+        let caller_id = ctx.sender().to_string();
         if vote.player_id != caller_id {
             return Err("You don't own this vote".to_string());
         }
@@ -1052,7 +1055,7 @@ pub fn remove_vote_from_sale(
 ) -> Result<(), String> {
     if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
         // Verify caller owns the vote
-        let caller_id = ctx.sender.to_string();
+        let caller_id = ctx.sender().to_string();
         if vote.player_id != caller_id {
             return Err("You don't own this vote".to_string());
         }
@@ -1091,7 +1094,7 @@ pub fn create_guarantee(
         id: 0,
         room_id,
         round_number,
-        seller_id: ctx.sender.to_string(),
+        seller_id: ctx.sender().to_string(),
         color,
         price,
         guarantee_type,
@@ -1113,7 +1116,7 @@ pub fn purchase_guarantee(
             return Err("Guarantee no longer active".to_string());
         }
         
-        let buyer_id = ctx.sender.to_string();
+        let buyer_id = ctx.sender().to_string();
         let seller_id = guarantee.seller_id.clone();
         let price = guarantee.price;
         let room_id = guarantee.room_id;
@@ -1187,7 +1190,7 @@ pub fn set_vote_color(
     
     if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
         // Check if sender owns this vote
-        if vote.player_id != ctx.sender.to_string() {
+        if vote.player_id != ctx.sender().to_string() {
             return Err("You don't own this vote".to_string());
         }
         
@@ -1321,7 +1324,7 @@ pub fn process_round_votes(
     Ok(())
 }
 
-#[table(name = game_tick_timer, scheduled(game_tick))]
+#[table(accessor = game_tick_timer, scheduled(game_tick))]
 pub struct GameTickTimer {
     #[primary_key]
     #[auto_inc]
@@ -1329,7 +1332,7 @@ pub struct GameTickTimer {
     scheduled_at: spacetimedb::ScheduleAt,
 }
 
-#[table(name = unit_task_queue, public)]
+#[table(accessor = unit_task_queue, public)]
 #[derive(Clone)]
 pub struct UnitTaskQueue {
     #[primary_key]
@@ -1389,7 +1392,7 @@ pub fn cancel_unit_task(
 // Vote Exchange: Bank account management
 #[reducer]
 pub fn transfer_to_bank(ctx: &ReducerContext, amount: f64) -> Result<(), String> {
-    if let Some(mut user) = ctx.db.user().identity().find(ctx.sender) {
+    if let Some(mut user) = ctx.db.user().identity().find(ctx.sender()) {
         if amount <= 0.0 {
             return Err("Amount must be positive".to_string());
         }
@@ -1410,7 +1413,7 @@ pub fn transfer_to_bank(ctx: &ReducerContext, amount: f64) -> Result<(), String>
 
 #[reducer]
 pub fn withdraw_from_bank(ctx: &ReducerContext, amount: f64) -> Result<(), String> {
-    if let Some(mut user) = ctx.db.user().identity().find(ctx.sender) {
+    if let Some(mut user) = ctx.db.user().identity().find(ctx.sender()) {
         if amount <= 0.0 {
             return Err("Amount must be positive".to_string());
         }
@@ -1432,7 +1435,7 @@ pub fn withdraw_from_bank(ctx: &ReducerContext, amount: f64) -> Result<(), Strin
 // Vote Exchange: Post-elimination re-buy
 #[reducer]
 pub fn rebuy_into_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
-    let player_id = ctx.sender.to_hex().to_string();
+    let player_id = ctx.sender().to_hex().to_string();
     
     if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
         // Check if game is active
@@ -1449,7 +1452,7 @@ pub fn rebuy_into_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String>
         let rebuy_cost = room.buyin_amount * 3.0;
         let current_round = room.current_round;
         
-        if let Some(mut user) = ctx.db.user().identity().find(ctx.sender) {
+        if let Some(mut user) = ctx.db.user().identity().find(ctx.sender()) {
             if user.wallet_balance < rebuy_cost {
                 return Err(format!("Insufficient funds. Re-buy costs ${:.2}", rebuy_cost));
             }
@@ -1659,7 +1662,7 @@ pub fn create_storage_building(
     let storage = Unit {
         id: 0, // Will be auto-incremented
         room_id,
-        owner_id: ctx.sender.to_string(),
+        owner_id: ctx.sender().to_string(),
         unit_type: "storage".to_string(),
         position,
         dimensions: Vector2 { x: 40.0, y: 40.0 }, // Larger than regular units
@@ -1851,7 +1854,7 @@ fn are_friends(ctx: &ReducerContext, user1: Identity, user2: Identity) -> bool {
 /// Send a friend request to another user
 #[reducer]
 pub fn send_friend_request(ctx: &ReducerContext, to_user: Identity) -> Result<(), String> {
-    let from_user = ctx.sender;
+    let from_user = ctx.sender();
     
     // Can't send request to yourself
     if from_user == to_user {
@@ -1908,7 +1911,7 @@ pub fn accept_friend_request(ctx: &ReducerContext, request_id: i32) -> Result<()
         .ok_or("Friend request not found")?;
     
     // Only the recipient can accept
-    if request.to_user != ctx.sender {
+    if request.to_user != ctx.sender() {
         return Err("You can only accept requests sent to you".to_string());
     }
     
@@ -1943,7 +1946,7 @@ pub fn reject_friend_request(ctx: &ReducerContext, request_id: i32) -> Result<()
         .ok_or("Friend request not found")?;
     
     // Only the recipient can reject
-    if request.to_user != ctx.sender {
+    if request.to_user != ctx.sender() {
         return Err("You can only reject requests sent to you".to_string());
     }
     
@@ -1968,7 +1971,7 @@ pub fn cancel_friend_request(ctx: &ReducerContext, request_id: i32) -> Result<()
         .ok_or("Friend request not found")?;
     
     // Only the sender can cancel
-    if request.from_user != ctx.sender {
+    if request.from_user != ctx.sender() {
         return Err("You can only cancel requests you sent".to_string());
     }
     
@@ -1987,7 +1990,7 @@ pub fn cancel_friend_request(ctx: &ReducerContext, request_id: i32) -> Result<()
 /// Remove a friend
 #[reducer]
 pub fn remove_friend(ctx: &ReducerContext, friend_id: Identity) -> Result<(), String> {
-    let (user1, user2) = get_sorted_identities(ctx.sender, friend_id);
+    let (user1, user2) = get_sorted_identities(ctx.sender(), friend_id);
     
     // Find the friendship
     let friendship = ctx.db.friendship().iter()
@@ -2004,7 +2007,7 @@ pub fn remove_friend(ctx: &ReducerContext, friend_id: Identity) -> Result<(), St
 /// Send a direct message to a friend
 #[reducer]
 pub fn send_direct_message(ctx: &ReducerContext, to_user: Identity, text: String) -> Result<(), String> {
-    let from_user = ctx.sender;
+    let from_user = ctx.sender();
     
     // Validate message
     if text.trim().is_empty() {
@@ -2064,7 +2067,7 @@ pub fn send_direct_message(ctx: &ReducerContext, to_user: Identity, text: String
 /// Mark all messages in a conversation as read (for the current user)
 #[reducer]
 pub fn mark_messages_read(ctx: &ReducerContext, conversation_id: String) -> Result<(), String> {
-    let current_user = ctx.sender;
+    let current_user = ctx.sender();
     
     // Verify conversation exists and user is a participant
     let conversation = ctx.db.direct_message_conversation().id().find(&conversation_id)
@@ -2094,7 +2097,7 @@ pub fn mark_messages_read(ctx: &ReducerContext, conversation_id: String) -> Resu
 /// Block a user
 #[reducer]
 pub fn block_user(ctx: &ReducerContext, user_id: Identity) -> Result<(), String> {
-    let blocker = ctx.sender;
+    let blocker = ctx.sender();
     
     // Can't block yourself
     if blocker == user_id {
@@ -2141,7 +2144,7 @@ pub fn block_user(ctx: &ReducerContext, user_id: Identity) -> Result<(), String>
 /// Unblock a user
 #[reducer]
 pub fn unblock_user(ctx: &ReducerContext, user_id: Identity) -> Result<(), String> {
-    let blocker = ctx.sender;
+    let blocker = ctx.sender();
     
     // Find the block record
     let block = ctx.db.blocked_user().iter()
