@@ -1,7 +1,6 @@
 import { Accessor, createSignal } from "solid-js";
 import { SetStoreFunction } from "solid-js/store";
-import type { GameRoom } from "~/module_bindings/game_room_type";
-import type { ReadyState } from "~/module_bindings/ready_state_type";
+import type { GameRoom, ReadyState } from "~/module_bindings/types";
 import type { Identity } from "~/module_bindings/index";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { showToast } from "../ui/toast";
@@ -82,7 +81,7 @@ export default function GamePreStartInteractions(props: {
       });
 
       // Call the reducer with SpacetimeDB identity, NOT local user.id
-      connection.reducers.toggleReady(room.id, identityHex);
+      connection.reducers.toggleReady({ roomId: room.id, userId: identityHex });
 
       showToast({
         title: wasReady ? "Unreadied" : "Readied Up",

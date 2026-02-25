@@ -3,61 +3,14 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-export type SetVoteColor = {
-  voteId: number,
-  color: string,
+export default {
+  voteId: __t.i32(),
+  color: __t.string(),
 };
-
-/**
- * A namespace for generated helper functions.
- */
-export namespace SetVoteColor {
-  /**
-  * A function which returns this type represented as an AlgebraicType.
-  * This function is derived from the AlgebraicType used to generate this type.
-  */
-  export function getTypeScriptAlgebraicType(): AlgebraicType {
-    return AlgebraicType.createProductType([
-      new ProductTypeElement("voteId", AlgebraicType.createI32Type()),
-      new ProductTypeElement("color", AlgebraicType.createStringType()),
-    ]);
-  }
-
-  export function serialize(writer: BinaryWriter, value: SetVoteColor): void {
-    SetVoteColor.getTypeScriptAlgebraicType().serialize(writer, value);
-  }
-
-  export function deserialize(reader: BinaryReader): SetVoteColor {
-    return SetVoteColor.getTypeScriptAlgebraicType().deserialize(reader);
-  }
-
-}
-

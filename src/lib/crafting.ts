@@ -1,5 +1,4 @@
-import { UnitInventory } from '~/module_bindings/unit_inventory_type';
-import { UnitStats } from '~/module_bindings/unit_stats_type';
+import { UnitInventory, UnitStats } from '~/module_bindings/types';
 
 // Item quality tiers
 export enum ItemQuality {

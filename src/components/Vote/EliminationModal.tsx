@@ -1,11 +1,10 @@
-import { Component, For, Show, createSignal } from "solid-js";
+import { Component, For, Show, createSignal, onMount } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import RebuyModal from "../game/RebuyModal";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
-import type { User } from "~/module_bindings/user_type";
-import type { GameRoom } from "~/module_bindings/game_room_type";
+import type { User, GameRoom } from "~/module_bindings/types";
 
 interface EliminationModalProps {
   roundNumber: number;
@@ -20,8 +19,22 @@ interface EliminationModalProps {
 }
 
 const EliminationModal: Component<EliminationModalProps> = (props) => {
-  const { identity } = useSpacetimeDB();
+  const { conn, identity } = useSpacetimeDB();
   const [showRebuy, setShowRebuy] = createSignal(false);
+  const [activeGuaranteeCount, setActiveGuaranteeCount] = createSignal(0);
+  
+  onMount(() => {
+    const connection = conn();
+    if (!connection) return;
+
+    const guarantees = Array.from(connection.db.guarantee.iter())
+      .filter(g => g.roomId === props.room.id && g.roundNumber === props.roundNumber);
+    const purchases = Array.from(connection.db.guarantee_purchase.iter());
+    const count = guarantees.filter(g => 
+      purchases.some(p => p.guaranteeId === g.id)
+    ).length;
+    setActiveGuaranteeCount(count);
+  });
   
   const isTie = () => props.redVotes === props.blueVotes;
   const isCurrentUserEliminated = () => {
@@ -146,9 +159,16 @@ const EliminationModal: Component<EliminationModalProps> = (props) => {
             </div>
           </Show>
 
+          {/* Guarantee Info */}
+          <Show when={activeGuaranteeCount() > 0}>
+            <div class="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+              🔒 {activeGuaranteeCount()} guarantee{activeGuaranteeCount() !== 1 ? 's were' : ' was'} enforced this round
+            </div>
+          </Show>
+
           {/* Action Buttons */}
           <div class="space-y-2">
-            <Show when={isCurrentUserEliminated()}>
+            <Show when={isCurrentUserEliminated() && props.room.allowRebuy}>
               <Button
                 class="w-full py-6 text-lg font-semibold"
                 variant="default"

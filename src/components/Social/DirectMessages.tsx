@@ -1,5 +1,5 @@
 import { Component, createSignal, createMemo, createEffect, For, Show, onMount } from "solid-js";
-import { Identity } from "@clockworklabs/spacetimedb-sdk";
+import { Identity } from "spacetimedb";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
@@ -7,9 +7,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
-import type { DirectMessageConversation } from "~/module_bindings/direct_message_conversation_type";
-import type { DirectMessage } from "~/module_bindings/direct_message_type";
-import type { User } from "~/module_bindings/user_type";
+import type { DirectMessageConversation, DirectMessage, User } from "~/module_bindings/types";
 
 interface DirectMessagesProps {
   initialConversationWith?: Identity;
@@ -38,10 +36,10 @@ const DirectMessages: Component<DirectMessagesProps> = (props) => {
     if (!connection || !connected() || subscriptionsSet()) return;
 
     // Load initial data
-    const initialConversations = Array.from(connection.db.directMessageConversation.iter());
+    const initialConversations = Array.from(connection.db.direct_message_conversation.iter());
     setConversations(initialConversations);
 
-    const initialMessages = Array.from(connection.db.directMessage.iter());
+    const initialMessages = Array.from(connection.db.direct_message.iter());
     setMessages(initialMessages);
 
     const userMap = new Map<string, User>();
@@ -51,21 +49,21 @@ const DirectMessages: Component<DirectMessagesProps> = (props) => {
     setUsers(userMap);
 
     // Listen for conversation changes
-    connection.db.directMessageConversation.onInsert((ctx, conversation) => {
+    connection.db.direct_message_conversation.onInsert((ctx, conversation) => {
       setConversations(prev => {
         if (prev.find(c => c.id === conversation.id)) return prev;
         return [...prev, conversation];
       });
     });
 
-    connection.db.directMessageConversation.onUpdate((ctx, oldConv, newConv) => {
+    connection.db.direct_message_conversation.onUpdate((ctx, oldConv, newConv) => {
       setConversations(prev =>
         prev.map(c => c.id === newConv.id ? newConv : c)
       );
     });
 
     // Listen for new messages
-    connection.db.directMessage.onInsert((ctx, message) => {
+    connection.db.direct_message.onInsert((ctx, message) => {
       setMessages(prev => {
         if (prev.find(m => m.id === message.id)) return prev;
         return [...prev, message];
@@ -76,7 +74,7 @@ const DirectMessages: Component<DirectMessagesProps> = (props) => {
       }
     });
 
-    connection.db.directMessage.onUpdate((ctx, oldMsg, newMsg) => {
+    connection.db.direct_message.onUpdate((ctx, oldMsg, newMsg) => {
       setMessages(prev =>
         prev.map(m => m.id === newMsg.id ? newMsg : m)
       );
@@ -200,7 +198,7 @@ const DirectMessages: Component<DirectMessagesProps> = (props) => {
     if (!connection || !connected() || !text || !targetUser) return;
 
     try {
-      connection.reducers.sendDirectMessage(targetUser.identity, text);
+      connection.reducers.sendDirectMessage({ toUser: targetUser.identity, text });
       setMessageInput("");
     } catch (error) {
       showToast({
@@ -217,7 +215,7 @@ const DirectMessages: Component<DirectMessagesProps> = (props) => {
     if (!connection || !connected()) return;
 
     try {
-      connection.reducers.markMessagesRead(conversationId);
+      connection.reducers.markMessagesRead({ conversationId });
     } catch (error) {
       console.error("Failed to mark messages as read:", error);
     }

@@ -6,7 +6,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    // setupFiles: ['./tests/setup.ts'], // Disabled - requires SpacetimeDB connection
+    include: ['tests/**/*.test.ts'],
+    exclude: ['tests/db-http.test.ts', 'tests/setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -17,4 +18,4 @@ export default defineConfig({
       '~': path.resolve(__dirname, './src')
     }
   }
-}); 
+});

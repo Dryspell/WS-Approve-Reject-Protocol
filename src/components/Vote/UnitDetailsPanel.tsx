@@ -1,6 +1,5 @@
 import { Component, Show, For } from "solid-js";
-import type { Unit } from "~/module_bindings/unit_type";
-import type { UnitTaskQueue } from "~/module_bindings/unit_task_queue_type";
+import type { Unit, UnitTaskQueue } from "~/module_bindings/types";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";

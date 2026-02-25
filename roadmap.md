@@ -13,171 +13,158 @@ SocketSignal is a **market-based voting game** (The Vote Exchange) where players
 
 ---
 
-## Current State (January 2026)
+## Current State (February 2026)
 
-### ✅ Completed (95% Feature Complete)
+### Implemented
 
-**Core Vote Exchange**:
-- Binary voting (Red/Blue) with minority wins
-- Vote trading marketplace
-- Multiple votes per player with vote splitting
-- Public & private guarantee system (with bluffing)
-- Wallet & bank account management
-- Buy-in and pot distribution
-- Player elimination and multi-round gameplay
-- Transaction tracking
-- Tie handling
+The core Vote Exchange game loop is functional:
 
-**Social Features**:
-- Real-time chat system
-- Leaderboards (all-time, season, weekly)
-- Player profiles with achievements
-- Game replay viewer
+- Binary voting (Red/Blue) with minority wins and majority elimination
+- Vote trading marketplace (list, buy, cancel)
+- Multiple votes per player (acquired via trading; start with 1)
+- Public and private guarantee system (create, purchase)
+- Wallet and bank account management (transfer between wallet/bank)
+- Buy-in system and pot distribution to winners
+- Player elimination across multiple rounds
+- Post-elimination re-buy (3x buy-in, 80% to pot)
+- Real-time chat system (game rooms + general)
+- Friend system (requests, accept/reject, remove)
+- Direct messaging (conversation-based DMs)
+- User blocking (with automatic friendship/request cleanup)
 - Room presets (Quick/Standard/Strategic/High Stakes)
+- Sound effects, animations, loading states
+- Debug and admin panels (localhost only)
+- Leaderboard UI (rankings display)
+- Player profiles with stats
+- Replay viewer UI
+- SpacetimeDB 2.0 integration with auto-generated TypeScript bindings
 
-**Polish & Tools**:
-- Sound effects (13 unique sounds)
-- Animations and loading states
-- Error boundaries
-- Debug and admin panels
+### Partially Implemented (Has Gaps)
 
-**Infrastructure**:
-- SpacetimeDB integration with official SDK
-- Type-safe Rust → TypeScript bindings
-- 24 unit tests passing
+- **Guarantee tracking**: Guarantees can be created and purchased, but `process_round_votes` never checks whether the seller honored or broke their promise. No outcome is recorded.
+- **Tie handling**: Server ends the game on any tie and splits pot. Per rules.md, ties should result in no eliminations and the game continuing. Pot split should only happen on tie in the final round (2 players).
+- **Leaderboard filtering**: UI has weekly/season/all-time tabs, but all tabs return the same unfiltered data.
+- **Player profile editing**: Name field displays but is not wired to the `set_name` reducer.
+- **Transaction history**: Server records all transactions, but no client UI component renders the history.
+- **Vote split semantics**: Drag-and-drop UI lets players split votes across colors, but server doesn't distinctly handle a player who voted on both sides (they should always survive as they're guaranteed minority).
+- **Colony Builder prototype**: Units, resources, crafting, storage buildings exist on the `/canvas` route but are completely disconnected from the Vote Exchange.
+- **E2E testing**: 8 Playwright spec files exist with ~116 test cases, but many are smoke tests. Several reference features that don't fully work.
 
-See [docs/development-history.md](./docs/development-history.md) for detailed sprint summaries.
+### Not Implemented
+
+- ~~Leave room / disconnect handling~~ Implemented
+- ~~Transaction fees~~ Implemented (1% via TRANSACTION_FEE_RATE)
+- ~~Counter-offers / negotiation system~~ Implemented (trade offers in ChatPanel)
+- ~~Multiple starting votes per player~~ Implemented (STARTING_VOTES_PER_PLAYER = 5)
+- Side-betting for spectators/eliminated players
+- Wallet limits / spending caps
+- Per-round partial pot distribution
+- Vote-on-voting trigger (alternative to timer)
+- Dual currency system (MT + MBLS)
+- Real-money integration / cryptocurrency
+- SaaS platform / API for third-party integration
+- Colony Builder integration with Vote Exchange (laborers as voters)
+- Multi-timeframe server hierarchy
+- Mobile-optimized layout
 
 ---
 
-## Phase 1: Mobile Optimization 📱 (Current)
+## Phase 1: Documentation & Accuracy
 
-**Priority**: HIGH | **Status**: In Progress
+**Priority**: CRITICAL | **Status**: Complete (Feb 25, 2026)
 
 ### Goals
-- Make The Vote Exchange fully playable on mobile devices
-- Progressive Web App for installable experience
+- Establish an accurate baseline of what exists, what's broken, and what's aspirational
+- Prevent anything from being lost or misrepresented as we implement fixes
 
 ### Tasks
-- [ ] Responsive layouts (3-column → stacked/tabbed for mobile)
-- [ ] Touch-optimized drag-and-drop
-- [ ] PWA setup (manifest, service worker, install prompt)
-- [ ] Performance optimization (lazy loading, virtual scrolling)
-- [ ] Cross-device testing (iOS Safari, Android Chrome)
+- [x] Update `development-history.md` with honest feature coverage
+- [x] Rewrite `roadmap.md` (this file) with accurate status
+- [x] Rewrite `todos.md` to reflect actual backlog
+- [x] Create `GAME_CONSTANTS.md` documenting all hardcoded values
+- [x] Create `STATUS.md` mapping design docs to implementation status
+- [x] Update `README.md` to remove false status claims
 
 ---
 
-## Phase 2: Beta Launch & Iteration
+## Phase 2: Game-Breaking Bug Fixes
 
-**Priority**: HIGH | **Timeline**: After Mobile
-
-### Goals
-- Launch beta testing with real users
-- Gather feedback and iterate
+**Priority**: CRITICAL | **Status**: Complete (Feb 25, 2026)
 
 ### Tasks
-- [ ] Beta launch announcement
-- [ ] Feedback collection system
-- [ ] Bug fix sprints based on user reports
-- [ ] Balance tuning (buy-ins, round times)
-- [ ] Tutorial/onboarding flow
+- [x] ~~Fix tie handling~~ Confirmed: ties ending game is intended behavior
+- [x] Add guarantee outcome tracking in `process_round_votes`
+- [x] Add `leave_room` reducer with mid-game departure handling
 
 ---
 
-## Phase 3: Advanced Game Modes
+## Phase 3: Core Feature Completion
 
-**Priority**: MEDIUM | **Timeline**: Post-Beta
+**Priority**: HIGH | **Status**: Complete (Feb 25, 2026)
 
-### Continuous Game Mode
-- Per-round pot distribution (e.g., 50% each round)
-- Mid-game join/leave
-- Eternal games without fixed end
-
-### Tournament Mode
-- Elimination brackets
-- Scheduled tournaments
-- Prizes and rankings
-
-### Custom Games
-- Variable initial votes per player
-- Wallet size limits
-- Transaction fees to pot
-- Vote-on-voting trigger (supermajority forces vote)
+### Tasks
+- [x] Wire PlayerProfile name editing to `set_name` reducer
+- [x] Implement Leaderboard timeframe filtering (weekly/season/all-time)
+- [x] Add transaction history panel in Vote Exchange UI (all transaction types)
+- [x] Implement ChatPanel trade-offer UI with server-side TradeOffer system
+- [x] Show guarantee honor/break results in EliminationModal
 
 ---
 
-## Phase 4: Monetization
+## Phase 4: Test Infrastructure
 
-**Priority**: MEDIUM | **Timeline**: Post-Beta
+**Priority**: HIGH | **Status**: Mostly Complete
 
-### In-Game Economy
-- Transaction fees (% of trades to pot)
-- Side-betting on vote outcomes
-- Premium cosmetics (avatars, themes)
-
-### Real Money Integration
-- Legal/compliance review required
-- Cryptocurrency integration exploration
-- Deposit/withdrawal system
-- KYC/AML compliance
-
----
-
-## Phase 5: Colony Builder Extension
-
-**Priority**: LOW | **Timeline**: Future
-
-The MMO/resource layer sits alongside The Vote Exchange. Players can focus on voting OR colony building OR both.
-
-### Already Implemented
-- Canvas-based unit visualization
-- Unit movement and selection
-- Resource gathering and inventory
-- Crafting system with recipes
-- Storage buildings
-
-### Future Work
-- [ ] Unit grouping and hotkeys
-- [ ] Enhanced unit AI
-- [ ] Crafting buildings (workshops, forges)
-- [ ] Resource market integration with Vote Exchange
-- [ ] Integration requirement: participate in Vote Exchange to access markets
+### Tasks
+- [x] Fix vitest config (exclude DB-dependent tests, enable pure unit tests)
+- [x] Full game simulation E2E (`e2e/full-game-simulation.spec.ts`) -- 4-player game, market flow, leave-room
+- [x] Headed browser testing (`headed-simulation` project with slowMo + video recording)
+- [x] Console log capture per player (`MultiPlayerHelper.attachLogCapture`)
+- [x] Run script (`scripts/run-e2e-headed.sh`) -- starts services, runs headed tests, captures all logs
+- [x] NPM scripts: `test:e2e:headed`, `test:e2e:simulate`
+- [ ] Add Rust integration tests for `process_round_votes` (requires running SpacetimeDB)
+- [ ] Fix any failing E2E tests (requires running dev server)
 
 ---
 
-## Phase 6: Advanced Social Features
+## Phase 5: Game Design Alignment
 
-**Priority**: LOW | **Timeline**: Future
+**Priority**: MEDIUM | **Status**: Partially Complete
 
-- [x] Friend system (friend requests, accept/reject, remove friends)
-- [x] Private messaging (conversation-based DMs)
-- [x] User blocking (block/unblock with automatic cleanup)
-- [ ] Clan/guild system
-- [ ] Spectator mode
-- [ ] Bot players for solo practice
-
----
-
-## Success Metrics
-
-### User Experience
-- First-time completion rate > 80%
-- Average session length > 30 minutes
-- Day 7 retention > 40%
-
-### Technical Performance
-- Canvas FPS > 30 for 100+ units
-- SpacetimeDB sync latency < 200ms
-- Initial load time < 3 seconds
-
-### Engagement
-- Trades per game > 5
-- Chat messages per session > 10
-- Return player rate > 60%
+### Tasks
+- [x] Transaction fees (1% `TRANSACTION_FEE_RATE` on all trades, added to pot)
+- [x] Extract hardcoded game constants to named constants
+- [ ] Configurable starting wallet limit (per-room or global cap)
+- [ ] Side-betting for eliminated/spectating players
 
 ---
 
-## Documentation
+## Phase 6: Stretch Goals
+
+**Priority**: LOW | **Status**: Future
+
+- Mobile responsive layout (keep in mind during all work)
+- Counter-offer / negotiation system
+- Per-round partial pot distribution option
+- Vote-on-voting trigger (alternative to timer)
+- Colony Builder integration with Vote Exchange
+- Tournament mode
+- Bot players for solo practice
+- Spectator mode
+- Clan/guild system
+
+---
+
+## Architectural Notes
+
+1. **Monolithic `lib.rs`** (~2,200 lines): Rust server contains both Vote Exchange and Colony Builder code. Consider splitting if Colony Builder grows.
+2. **Client-side round processing**: Every connected client calls `processRoundVotes` when timer hits zero. Should ideally be a server-side scheduled timer.
+3. **No server-side validation on round_number**: `processRoundVotes` accepts `round_number` from the client. Server should derive this from room state.
+4. **Dead code**: `server/src/auth.rs` is not referenced. Colony Builder components only used on `/canvas` route.
+
+---
+
+## Documentation Index
 
 - [Getting Started](./docs/getting-started.md) - Setup and how to play
 - [SpacetimeDB Guide](./docs/spacetimedb.md) - Database integration
@@ -185,9 +172,11 @@ The MMO/resource layer sits alongside The Vote Exchange. Players can focus on vo
 - [QA Testing Outline](./docs/qa-testing-outline.md) - Comprehensive QA test cases
 - [Deployment Guide](./docs/deployment.md) - Production deployment
 - [Development History](./docs/development-history.md) - Sprint summaries
+- [Game Constants](./docs/GAME_CONSTANTS.md) - All hardcoded values
+- [Implementation Status](./docs/STATUS.md) - Vision vs. reality mapping
 - [Game Rules](./game-design/rules.md) - Complete game mechanics
-- [TODOs](./todos.md) - Current sprint tasks
+- [TODOs](./todos.md) - Current backlog
 
 ---
 
-**Last Updated**: January 11, 2026
+**Last Updated**: February 25, 2026

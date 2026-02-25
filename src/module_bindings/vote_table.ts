@@ -3,104 +3,21 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { Vote } from "./vote_type";
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-/**
- * Table handle for the table `vote`.
- *
- * Obtain a handle from the [`vote`] property on [`RemoteTables`],
- * like `ctx.db.vote`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.vote.on_insert(...)`.
- */
-export class VoteTableHandle {
-  tableCache: TableCache<Vote>;
-
-  constructor(tableCache: TableCache<Vote>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<Vote> {
-    return this.tableCache.iter();
-  }
-  /**
-   * Access to the `id` unique index on the table `vote`,
-   * which allows point queries on the field of the same name
-   * via the [`VoteIdUnique.find`] method.
-   *
-   * Users are encouraged not to explicitly reference this type,
-   * but to directly chain method calls,
-   * like `ctx.db.vote.id().find(...)`.
-   *
-   * Get a handle on the `id` unique index on the table `vote`.
-   */
-  id = {
-    // Find the subscribed row whose `id` column value is equal to `col_val`,
-    // if such a row is present in the client cache.
-    find: (col_val: number): Vote | undefined => {
-      for (let row of this.tableCache.iter()) {
-        if (deepEqual(row.id, col_val)) {
-          return row;
-        }
-      }
-    },
-  };
-
-  onInsert = (cb: (ctx: EventContext, row: Vote) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: Vote) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: Vote) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: Vote) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-
-  // Updates are only defined for tables with primary keys.
-  onUpdate = (cb: (ctx: EventContext, oldRow: Vote, newRow: Vote) => void) => {
-    return this.tableCache.onUpdate(cb);
-  }
-
-  removeOnUpdate = (cb: (ctx: EventContext, onRow: Vote, newRow: Vote) => void) => {
-    return this.tableCache.removeOnUpdate(cb);
-  }}
+export default __t.row({
+  id: __t.i32().primaryKey(),
+  roomId: __t.i32().name("room_id"),
+  roundNumber: __t.i32().name("round_number"),
+  playerId: __t.string().name("player_id"),
+  originalOwner: __t.string().name("original_owner"),
+  color: __t.option(__t.string()),
+  isForSale: __t.bool().name("is_for_sale"),
+  salePrice: __t.option(__t.f64()).name("sale_price"),
+  timestamp: __t.timestamp(),
+});

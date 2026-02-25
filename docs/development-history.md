@@ -8,14 +8,14 @@ This document summarizes the development sprints for The Vote Exchange.
 
 | Sprint | Focus | Status |
 |--------|-------|--------|
-| Sprint 1 | UI Modernization | ✅ Complete |
-| Sprint 2 | Visual Polish | ✅ Complete |
-| Sprint 3 | Core Vote Exchange (Server) | ✅ Complete |
-| Sprint 4 | Game Flow Automation | ✅ Complete |
-| Sprint 5 | Polish & Developer Tools | ✅ Complete |
-| Sprint 6 | Social & Engagement Features | ✅ Complete |
-| Sprint 7 | Feature Completion | ✅ Complete |
-| Sprint 8 | Mobile Optimization | 🔄 In Progress |
+| Sprint 1 | UI Modernization | Complete |
+| Sprint 2 | Visual Polish | Complete |
+| Sprint 3 | Core Vote Exchange (Server) | Complete |
+| Sprint 4 | Game Flow Automation | Complete |
+| Sprint 5 | Polish & Developer Tools | Complete |
+| Sprint 6 | Social & Engagement Features | Complete |
+| Sprint 7 | Feature Completion | Complete |
+| Sprint 8 | Friends & Private Messaging | Complete |
 
 ---
 
@@ -31,6 +31,8 @@ This document summarizes the development sprints for The Vote Exchange.
   - `ResourcePanel.tsx`
 - Improved resource transfer UI with validation
 - Visual waypoint indicators for unit movement
+
+> **Note**: These components are part of the Colony Builder prototype (`/canvas` route), not the Vote Exchange (`/vote` route).
 
 ---
 
@@ -53,10 +55,16 @@ This document summarizes the development sprints for The Vote Exchange.
 **Goal**: Implement Vote Exchange game logic server-side
 
 **Completed**:
-- **6 Database Tables**: User (wallet), GameRoom (pot), Vote (ownership), Transaction, Guarantee, GuaranteePurchase
-- **8 Reducers**: vote trading, guarantees, vote tallying, game flow
-- **Core Mechanics**: Multiple votes, vote splitting, guarantees (public/private), bluffing, elimination, pot distribution
+- **Database Tables**: User (wallet), GameRoom (pot), Vote (ownership), Transaction, Guarantee, GuaranteePurchase
+- **Reducers**: vote trading, guarantees, vote tallying, game flow
+- **Core Mechanics**: Multiple votes, vote splitting, guarantees (public/private), elimination, pot distribution
 - Full TypeScript bindings generated
+
+**Known Gaps** (identified Feb 2026, partially addressed):
+- ~~`process_round_votes` does not check guarantee outcomes~~ Fixed: honor/break now tracked
+- Tie handling ends game (confirmed as intended behavior)
+- ~~No `leave_room` or disconnect handling~~ Fixed: `leave_room` reducer added
+- No transaction fees on trades (planned for Phase 5)
 
 ---
 
@@ -65,10 +73,12 @@ This document summarizes the development sprints for The Vote Exchange.
 **Goal**: Automate game flow and add testing
 
 **Completed**:
-- Auto-round processing when timer expires
+- Auto-round processing when timer expires (client-side interval)
 - Buy-in amount UI in room creation
 - `EliminationModal.tsx` with vote results and eliminations
 - 24 unit tests (crafting, spatial utils)
+
+> **Note**: The 24 unit tests are for the Colony Builder prototype (crafting costs, spatial utilities). There are no unit tests for Vote Exchange game logic (voting, trading, guarantees, round processing).
 
 ---
 
@@ -91,11 +101,16 @@ This document summarizes the development sprints for The Vote Exchange.
 **Goal**: Add social features for player retention
 
 **Completed**:
-- **Leaderboard**: Global rankings, multiple timeframes
+- **Leaderboard**: Global rankings (timeframe filtering UI exists but is not wired to filtered queries)
 - **Replay Viewer**: Playback controls, event timeline
 - **Chat System**: In-game messaging (UI)
-- **Player Profiles**: Stats, achievements (6 types)
+- **Player Profiles**: Stats display, achievements (6 types defined)
 - **Room Presets**: Quick/Standard/Strategic/High Stakes modes
+
+**Known Gaps**:
+- Leaderboard always shows all-time data regardless of filter selection
+- PlayerProfile name editing not wired to `set_name` reducer
+- Achievement tracking may not be fully functional
 
 ---
 
@@ -105,66 +120,77 @@ This document summarizes the development sprints for The Vote Exchange.
 
 **Completed**:
 - **Chat Backend Integration**: Real-time SpacetimeDB sync
-- **Bank Account Transfers**: Wallet ↔ Bank with full UI
-- **Post-Elimination Re-Buy**: 3x buy-in to re-enter (80% to pot)
+- **Bank Account Transfers**: Wallet-to-Bank with full UI
+- **Post-Elimination Re-Buy**: 3x buy-in to re-enter (80% to pot, 20% house fee)
 - New reducers: `transferToBank`, `withdrawFromBank`, `rebuyIntoGame`
 
 ---
 
-## Sprint 8: Mobile Optimization (Current)
+## Sprint 8: Friends & Private Messaging
 
-**Goal**: Make the game fully playable on mobile
+**Goal**: Add social connectivity between players
 
-**In Progress**:
-- Responsive layout (3-column → stacked/tabbed)
-- Touch interactions (drag-and-drop for mobile)
-- PWA setup (manifest, service worker, install prompt)
-- Performance optimization (lazy loading, virtual scrolling)
-- Cross-device testing
+**Completed**:
+- Friend requests (send/accept/reject/cancel)
+- Friendship management (remove friends)
+- Direct message conversations
+- User blocking functionality (block/unblock with automatic cleanup)
+- Social panel UI with tabs (Friends, Requests, Messages, Blocked)
 
 ---
 
 ## Project Statistics
 
 - **Total Components Created**: 27+
-- **Lines of Code**: ~8,000+
-- **Unit Tests**: 24 passing
-- **Backend Reducers**: 13
-- **Database Tables**: 6 (+ 3 chat tables)
+- **Lines of Rust Server Code**: ~2,200
+- **Unit Tests**: 24 passing (Colony Builder only -- no Vote Exchange tests)
+- **E2E Test Files**: 8 Playwright spec files (~116 test cases defined)
+- **Backend Reducers**: 30+
+- **Database Tables**: 6 Vote Exchange + 3 chat + 4 social + Colony Builder tables
 - **Sound Effects**: 13
 - **Animation Utilities**: 7
-- **Feature Coverage**: ~95%
 
 ---
 
-## Feature Coverage
+## Feature Coverage (Honest Assessment)
 
-| Feature (from rules.md) | Status |
-|-------------------------|--------|
-| Binary voting (Red/Blue) | ✅ 100% |
-| Minority wins | ✅ 100% |
-| Vote trading | ✅ 100% |
-| Multiple votes per player | ✅ 100% |
-| Public guarantees | ✅ 100% |
-| Private guarantees | ✅ 100% |
-| Wallet system | ✅ 100% |
-| Bank account | ✅ 100% |
-| Buy-in system | ✅ 100% |
-| Pot management | ✅ 100% |
-| Player elimination | ✅ 100% |
-| Multi-round gameplay | ✅ 100% |
-| Transaction tracking | ✅ 100% |
-| Tie handling | ✅ 100% |
-| Post-elimination re-buy | ✅ 100% |
-| Guarantee bluffing | ✅ 100% |
-| Chat system | ✅ 100% |
+| Feature (from rules.md) | Server | Client UI | Tested | Notes |
+|--------------------------|--------|-----------|--------|-------|
+| Binary voting (Red/Blue) | Yes | Yes | E2E smoke | Core loop works |
+| Minority wins, majority eliminated | Yes | Yes | No | Untested beyond manual |
+| Vote trading (buy/sell) | Yes | Yes | No | Works but no counter-offers |
+| Multiple votes per player | Yes | Yes | No | Via trading only (start with 1) |
+| Vote splitting (multi-color) | Partial | Yes (drag/drop) | No | Server doesn't validate split semantics |
+| Public guarantees | Yes | Yes | No | |
+| Private guarantees | Yes | Yes | No | |
+| Guarantee enforcement (per-vote) | Yes | Yes (GuaranteeMarket) | No | Server locks vote color when guarantee is purchased; per-vote model |
+| Wallet system | Yes | Yes | No | No wallet cap/limit |
+| Bank account | Yes | Yes | No | |
+| Buy-in system | Yes | Yes | No | |
+| Pot management | Yes | Yes | No | |
+| Player elimination | Yes | Yes | No | |
+| Multi-round gameplay | Yes | Yes | No | |
+| Transaction recording | Yes | Yes (History tab) | No | All transaction types shown in VoteMarketPanel |
+| Tie handling | Yes | Yes | No | Tie ends game and splits pot (intended) |
+| Post-elimination re-buy | Yes | Yes | No | 3x cost, 80% to pot |
+| Guarantee bluffing | Partial | Yes (warning text) | No | Bluffs not recorded/displayed |
+| Chat system | Yes | Yes | E2E smoke | |
+| Leave room / disconnect | Yes | No UI button yet | No | `leave_room` reducer handles mid-game departure |
+| Transaction fees | **No** | No | No | All trades are zero-fee |
+| Side-betting | **No** | No | No | |
+| Trade offers (negotiation) | Yes | Yes (ChatPanel) | No | Trade offer system via chat with accept/decline |
 
 ---
 
-## Future Considerations (Not in MVP)
+## Future Considerations (Not in current scope)
 
-- Transaction fees to pot
-- Side-betting system
-- Continuous game mode
-- Vote-on-voting trigger
-- Cryptocurrency integration
+- Dual currency system (MT + MBLS)
+- Cryptocurrency / blockchain integration
+- SaaS platform / API for third-party integration
+- Colony Builder integration with Vote Exchange (laborers as voters)
+- Multi-timeframe server hierarchy
+- Mobile-first responsive design (stretch goal)
+
+---
+
+**Last Updated**: February 25, 2026

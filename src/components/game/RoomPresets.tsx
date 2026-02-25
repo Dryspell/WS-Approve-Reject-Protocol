@@ -4,13 +4,16 @@ import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { TextField, TextFieldInput, TextFieldLabel } from "~/components/ui/text-field";
 
-interface RoomPreset {
+export interface RoomPreset {
   id: string;
   name: string;
   description: string;
   icon: string;
   buyinAmount: number;
-  roundDuration: number; // seconds
+  roundDuration: number;
+  votesPerPlayer: number;
+  allowRebuy: boolean;
+  allowMidgameJoin: boolean;
   recommended: boolean;
 }
 
@@ -21,7 +24,10 @@ const PRESETS: RoomPreset[] = [
     description: 'Fast-paced action. Perfect for a quick match.',
     icon: '⚡',
     buyinAmount: 5,
-    roundDuration: 120, // 2 minutes
+    roundDuration: 120,
+    votesPerPlayer: 3,
+    allowRebuy: true,
+    allowMidgameJoin: false,
     recommended: false,
   },
   {
@@ -30,7 +36,10 @@ const PRESETS: RoomPreset[] = [
     description: 'Balanced gameplay with time for strategy.',
     icon: '🎮',
     buyinAmount: 10,
-    roundDuration: 300, // 5 minutes
+    roundDuration: 300,
+    votesPerPlayer: 5,
+    allowRebuy: true,
+    allowMidgameJoin: false,
     recommended: true,
   },
   {
@@ -39,16 +48,22 @@ const PRESETS: RoomPreset[] = [
     description: 'Extended rounds for deep strategy and negotiation.',
     icon: '🧠',
     buyinAmount: 20,
-    roundDuration: 600, // 10 minutes
+    roundDuration: 600,
+    votesPerPlayer: 7,
+    allowRebuy: true,
+    allowMidgameJoin: false,
     recommended: false,
   },
   {
     id: 'high-stakes',
     name: 'High Stakes',
-    description: 'Big money, big pressure. For serious players.',
+    description: 'Big money, big pressure. No second chances.',
     icon: '💎',
     buyinAmount: 100,
-    roundDuration: 300, // 5 minutes
+    roundDuration: 300,
+    votesPerPlayer: 5,
+    allowRebuy: false,
+    allowMidgameJoin: false,
     recommended: false,
   },
 ];
@@ -60,6 +75,9 @@ interface RoomPresetsProps {
 export const RoomPresets: Component<RoomPresetsProps> = (props) => {
   const [customBuyin, setCustomBuyin] = createSignal(10);
   const [customDuration, setCustomDuration] = createSignal(300);
+  const [customVotes, setCustomVotes] = createSignal(5);
+  const [customRebuy, setCustomRebuy] = createSignal(true);
+  const [customMidgameJoin, setCustomMidgameJoin] = createSignal(false);
 
   const createCustomPreset = () => {
     const preset: RoomPreset = {
@@ -69,6 +87,9 @@ export const RoomPresets: Component<RoomPresetsProps> = (props) => {
       icon: '⚙️',
       buyinAmount: customBuyin(),
       roundDuration: customDuration(),
+      votesPerPlayer: customVotes(),
+      allowRebuy: customRebuy(),
+      allowMidgameJoin: customMidgameJoin(),
       recommended: false,
     };
     props.onSelectPreset(preset);
@@ -105,7 +126,7 @@ export const RoomPresets: Component<RoomPresetsProps> = (props) => {
                   <p class="mt-1 text-xs text-gray-600">
                     {preset.description}
                   </p>
-                  <div class="mt-3 flex gap-4 text-xs">
+                  <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                     <div>
                       <span class="text-gray-500">Buy-in:</span>{' '}
                       <span class="font-semibold">${preset.buyinAmount}</span>
@@ -116,6 +137,13 @@ export const RoomPresets: Component<RoomPresetsProps> = (props) => {
                         {preset.roundDuration / 60} min
                       </span>
                     </div>
+                    <div>
+                      <span class="text-gray-500">Votes:</span>{' '}
+                      <span class="font-semibold">{preset.votesPerPlayer}</span>
+                    </div>
+                    {!preset.allowRebuy && (
+                      <div class="text-red-600 font-medium">No Re-buy</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -130,9 +158,9 @@ export const RoomPresets: Component<RoomPresetsProps> = (props) => {
           <CardTitle class="text-base">⚙️ Custom Settings</CardTitle>
         </CardHeader>
         <CardContent class="space-y-4">
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-3 gap-4">
             <TextField>
-              <TextFieldLabel class="text-sm">Buy-in Amount ($)</TextFieldLabel>
+              <TextFieldLabel class="text-sm">Buy-in ($)</TextFieldLabel>
               <TextFieldInput
                 type="number"
                 min="0.01"
@@ -143,7 +171,7 @@ export const RoomPresets: Component<RoomPresetsProps> = (props) => {
             </TextField>
 
             <TextField>
-              <TextFieldLabel class="text-sm">Round Duration (minutes)</TextFieldLabel>
+              <TextFieldLabel class="text-sm">Round (minutes)</TextFieldLabel>
               <TextFieldInput
                 type="number"
                 min="1"
@@ -154,10 +182,43 @@ export const RoomPresets: Component<RoomPresetsProps> = (props) => {
                 }
               />
             </TextField>
+
+            <TextField>
+              <TextFieldLabel class="text-sm">Votes per Player</TextFieldLabel>
+              <TextFieldInput
+                type="number"
+                min="1"
+                max="20"
+                step="1"
+                value={customVotes()}
+                onInput={(e) => setCustomVotes(parseInt(e.currentTarget.value) || 5)}
+              />
+            </TextField>
+          </div>
+
+          <div class="flex gap-6">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={customRebuy()}
+                onChange={(e) => setCustomRebuy(e.currentTarget.checked)}
+                class="rounded"
+              />
+              Allow Re-buy
+            </label>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={customMidgameJoin()}
+                onChange={(e) => setCustomMidgameJoin(e.currentTarget.checked)}
+                class="rounded"
+              />
+              Allow Mid-game Join
+            </label>
           </div>
 
           <Button onClick={createCustomPreset} class="w-full">
-            Create Custom Game (${customBuyin()} • {customDuration() / 60} min)
+            Create Custom Game (${customBuyin()} | {customVotes()} votes | {customDuration() / 60} min)
           </Button>
         </CardContent>
       </Card>
@@ -166,10 +227,10 @@ export const RoomPresets: Component<RoomPresetsProps> = (props) => {
       <div class="rounded border border-green-200 bg-green-50 p-3 text-xs text-green-700">
         <p class="font-semibold">💡 Choosing a Game Mode:</p>
         <ul class="ml-4 mt-1 list-disc space-y-1">
-          <li><strong>Quick:</strong> Less time for trading, more instinctive plays</li>
-          <li><strong>Standard:</strong> Balanced for beginners and veterans</li>
-          <li><strong>Strategic:</strong> More time for complex deals and bluffs</li>
-          <li><strong>High Stakes:</strong> Same as standard but higher risk/reward</li>
+          <li><strong>Quick:</strong> 3 votes, short rounds, instinctive plays</li>
+          <li><strong>Standard:</strong> 5 votes, balanced for all skill levels</li>
+          <li><strong>Strategic:</strong> 7 votes, long rounds for complex deals</li>
+          <li><strong>High Stakes:</strong> 5 votes, no re-buy, high risk/reward</li>
         </ul>
       </div>
     </div>

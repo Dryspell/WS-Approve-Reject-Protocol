@@ -10,10 +10,7 @@ import ChatMessage from "./ChatMessage";
 import UserAvatarCard from "./UserAvatarCard";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
-import type { ChatRoom } from "~/module_bindings/chat_room_type";
-import type { ChatMessage as ChatMessageType } from "~/module_bindings/chat_message_type";
-import type { ChatPermission } from "~/module_bindings/chat_permission_type";
-import type { User } from "~/module_bindings/user_type";
+import type { ChatRoom, ChatMessage as ChatMessageType, ChatPermission, User } from "~/module_bindings/types";
 
 const SpacetimeChat: Component = () => {
   const [chatInput, setChatInput] = createSignal("");
@@ -50,22 +47,22 @@ const SpacetimeChat: Component = () => {
     console.log("Identity:", identity()?.toHexString());
 
     // Initial load of rooms from cache
-    const initialRooms = Array.from(connection.db.chatRoom.iter());
+    const initialRooms = Array.from(connection.db.chat_room.iter());
     console.log("📦 Initial rooms loaded:", initialRooms.length, initialRooms);
     setRooms(initialRooms);
 
     // Initial load of messages
-    const initialMessages = Array.from(connection.db.chatMessage.iter());
+    const initialMessages = Array.from(connection.db.chat_message.iter());
     console.log("💬 Initial messages loaded:", initialMessages.length);
     setAllMessages(initialMessages);
 
     // Initial load of permissions
-    const initialPermissions = Array.from(connection.db.chatPermission.iter());
+    const initialPermissions = Array.from(connection.db.chat_permission.iter());
     console.log("🔐 Initial permissions loaded:", initialPermissions.length);
     setAllPermissions(initialPermissions);
 
     // Listen for new chat rooms being inserted
-    connection.db.chatRoom.onInsert((ctx, room) => {
+    connection.db.chat_room.onInsert((ctx, room) => {
       console.log("🎉 New chat room inserted:", room);
       
       // Check if this is a room we already have (initial load) or a new one
@@ -79,7 +76,7 @@ const SpacetimeChat: Component = () => {
     });
 
     // Listen for new messages
-    connection.db.chatMessage.onInsert((ctx, message) => {
+    connection.db.chat_message.onInsert((ctx, message) => {
       console.log("💬 New chat message inserted:", message);
 
       // Only add if not already in our list (avoid duplicates from initial load)
@@ -90,7 +87,7 @@ const SpacetimeChat: Component = () => {
     });
 
     // Listen for new chat permissions being inserted
-    connection.db.chatPermission.onInsert((ctx, permission) => {
+    connection.db.chat_permission.onInsert((ctx, permission) => {
       console.log("🔐 New chat permission inserted:", permission);
 
       // Only add if not already in our list (avoid duplicates from initial load)
@@ -179,7 +176,7 @@ const SpacetimeChat: Component = () => {
 
     try {
       // Call the reducer via connection.reducers
-      connection.reducers.sendChatMessage(roomId, message, undefined);
+      connection.reducers.sendChatMessage({ roomId, text: message, roundNumber: undefined });
       setChatInput("");
     } catch (error) {
       showToast({
@@ -219,7 +216,7 @@ const SpacetimeChat: Component = () => {
       console.log("Calling createChatRoom with name:", name);
       
       // Call the reducer - it's fire-and-forget, the onInsert callback will update the list
-      connection.reducers.createChatRoom(name);
+      connection.reducers.createChatRoom({ name });
       
       // Clear input immediately
       setNewRoomName("");

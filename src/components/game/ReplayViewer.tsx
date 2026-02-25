@@ -4,8 +4,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Progress } from "~/components/ui/progress";
-import type { Transaction } from "~/module_bindings/transaction_type";
-import type { GameEvent } from "~/module_bindings/game_event_type";
+import type { Transaction, GameEvent } from "~/module_bindings/types";
 
 interface ReplayEvent {
   timestamp: number;

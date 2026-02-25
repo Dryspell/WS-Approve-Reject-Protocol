@@ -3,63 +3,15 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-export type SetUnitTask = {
-  unitId: number,
-  taskType: string,
-  targetId: string,
+export default {
+  unitId: __t.i32(),
+  taskType: __t.string(),
+  targetId: __t.string(),
 };
-
-/**
- * A namespace for generated helper functions.
- */
-export namespace SetUnitTask {
-  /**
-  * A function which returns this type represented as an AlgebraicType.
-  * This function is derived from the AlgebraicType used to generate this type.
-  */
-  export function getTypeScriptAlgebraicType(): AlgebraicType {
-    return AlgebraicType.createProductType([
-      new ProductTypeElement("unitId", AlgebraicType.createI32Type()),
-      new ProductTypeElement("taskType", AlgebraicType.createStringType()),
-      new ProductTypeElement("targetId", AlgebraicType.createStringType()),
-    ]);
-  }
-
-  export function serialize(writer: BinaryWriter, value: SetUnitTask): void {
-    SetUnitTask.getTypeScriptAlgebraicType().serialize(writer, value);
-  }
-
-  export function deserialize(reader: BinaryReader): SetUnitTask {
-    return SetUnitTask.getTypeScriptAlgebraicType().deserialize(reader);
-  }
-
-}
-

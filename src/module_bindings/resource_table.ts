@@ -3,106 +3,27 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { Resource } from "./resource_type";
-import { Vector2 as __Vector2 } from "./vector_2_type";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
+import {
+  Vector2,
+} from "./types";
 
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
 
-/**
- * Table handle for the table `resource`.
- *
- * Obtain a handle from the [`resource`] property on [`RemoteTables`],
- * like `ctx.db.resource`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.resource.on_insert(...)`.
- */
-export class ResourceTableHandle {
-  tableCache: TableCache<Resource>;
-
-  constructor(tableCache: TableCache<Resource>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<Resource> {
-    return this.tableCache.iter();
-  }
-  /**
-   * Access to the `id` unique index on the table `resource`,
-   * which allows point queries on the field of the same name
-   * via the [`ResourceIdUnique.find`] method.
-   *
-   * Users are encouraged not to explicitly reference this type,
-   * but to directly chain method calls,
-   * like `ctx.db.resource.id().find(...)`.
-   *
-   * Get a handle on the `id` unique index on the table `resource`.
-   */
-  id = {
-    // Find the subscribed row whose `id` column value is equal to `col_val`,
-    // if such a row is present in the client cache.
-    find: (col_val: string): Resource | undefined => {
-      for (let row of this.tableCache.iter()) {
-        if (deepEqual(row.id, col_val)) {
-          return row;
-        }
-      }
-    },
-  };
-
-  onInsert = (cb: (ctx: EventContext, row: Resource) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: Resource) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: Resource) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: Resource) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-
-  // Updates are only defined for tables with primary keys.
-  onUpdate = (cb: (ctx: EventContext, oldRow: Resource, newRow: Resource) => void) => {
-    return this.tableCache.onUpdate(cb);
-  }
-
-  removeOnUpdate = (cb: (ctx: EventContext, onRow: Resource, newRow: Resource) => void) => {
-    return this.tableCache.removeOnUpdate(cb);
-  }}
+export default __t.row({
+  id: __t.string().primaryKey(),
+  roomId: __t.i32().name("room_id"),
+  resourceType: __t.string().name("resource_type"),
+  get position() {
+    return Vector2;
+  },
+  amount: __t.i32(),
+  maxAmount: __t.i32().name("max_amount"),
+  regenerationRate: __t.i32().name("regeneration_rate"),
+  regenerationTimer: __t.i32().name("regeneration_timer"),
+  depletionThreshold: __t.i32().name("depletion_threshold"),
+});

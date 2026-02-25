@@ -6,8 +6,7 @@ import { TextField, TextFieldInput, TextFieldLabel } from "~/components/ui/text-
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
-import type { GameRoom } from "~/module_bindings/game_room_type";
-import type { User } from "~/module_bindings/user_type";
+import type { GameRoom, User } from "~/module_bindings/types";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 
@@ -26,7 +25,7 @@ export const AdminPanel: Component = () => {
     const connection = conn();
     if (!connection) return;
 
-    const allRooms = Array.from(connection.db.gameRoom.iter());
+    const allRooms = Array.from(connection.db.game_room.iter());
     setRooms(allRooms);
 
     const allUsers = Array.from(connection.db.user.iter());
@@ -34,12 +33,12 @@ export const AdminPanel: Component = () => {
   };
 
   // Force end round
-  const forceEndRound = (roomId: number) => {
+  const forceEndRound = (roomId: number, roundNumber: number) => {
     const connection = conn();
     if (!connection) return;
 
     try {
-      connection.reducers.processRoundVotes(roomId);
+      connection.reducers.processRoundVotes({ roomId, roundNumber });
       showToast({
         title: "Round Forced",
         description: `Processing votes for room ${roomId}`,
@@ -166,7 +165,7 @@ export const AdminPanel: Component = () => {
                                       size="sm"
                                       variant="outline"
                                       class="flex-1 text-xs"
-                                      onClick={() => forceEndRound(room.id)}
+                                      onClick={() => forceEndRound(room.id, room.currentRound)}
                                     >
                                       Force End Round
                                     </Button>

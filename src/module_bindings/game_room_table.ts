@@ -3,104 +3,29 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { GameRoom } from "./game_room_type";
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-/**
- * Table handle for the table `game_room`.
- *
- * Obtain a handle from the [`gameRoom`] property on [`RemoteTables`],
- * like `ctx.db.gameRoom`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.gameRoom.on_insert(...)`.
- */
-export class GameRoomTableHandle {
-  tableCache: TableCache<GameRoom>;
-
-  constructor(tableCache: TableCache<GameRoom>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<GameRoom> {
-    return this.tableCache.iter();
-  }
-  /**
-   * Access to the `id` unique index on the table `game_room`,
-   * which allows point queries on the field of the same name
-   * via the [`GameRoomIdUnique.find`] method.
-   *
-   * Users are encouraged not to explicitly reference this type,
-   * but to directly chain method calls,
-   * like `ctx.db.gameRoom.id().find(...)`.
-   *
-   * Get a handle on the `id` unique index on the table `game_room`.
-   */
-  id = {
-    // Find the subscribed row whose `id` column value is equal to `col_val`,
-    // if such a row is present in the client cache.
-    find: (col_val: number): GameRoom | undefined => {
-      for (let row of this.tableCache.iter()) {
-        if (deepEqual(row.id, col_val)) {
-          return row;
-        }
-      }
-    },
-  };
-
-  onInsert = (cb: (ctx: EventContext, row: GameRoom) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: GameRoom) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: GameRoom) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: GameRoom) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-
-  // Updates are only defined for tables with primary keys.
-  onUpdate = (cb: (ctx: EventContext, oldRow: GameRoom, newRow: GameRoom) => void) => {
-    return this.tableCache.onUpdate(cb);
-  }
-
-  removeOnUpdate = (cb: (ctx: EventContext, onRow: GameRoom, newRow: GameRoom) => void) => {
-    return this.tableCache.removeOnUpdate(cb);
-  }}
+export default __t.row({
+  id: __t.i32().primaryKey(),
+  name: __t.string(),
+  memberIds: __t.array(__t.string()).name("member_ids"),
+  ticketIds: __t.array(__t.string()).name("ticket_ids"),
+  offerIds: __t.array(__t.string()).name("offer_ids"),
+  startTime: __t.option(__t.i64()).name("start_time"),
+  currentRound: __t.i32().name("current_round"),
+  buyinAmount: __t.f64().name("buyin_amount"),
+  potSize: __t.f64().name("pot_size"),
+  roundDuration: __t.i32().name("round_duration"),
+  gameStatus: __t.string().name("game_status"),
+  eliminatedPlayers: __t.array(__t.string()).name("eliminated_players"),
+  votesPerPlayer: __t.i32().name("votes_per_player"),
+  minPlayers: __t.i32().name("min_players"),
+  maxPlayers: __t.option(__t.i32()).name("max_players"),
+  allowRebuy: __t.bool().name("allow_rebuy"),
+  allowMidgameJoin: __t.bool().name("allow_midgame_join"),
+});

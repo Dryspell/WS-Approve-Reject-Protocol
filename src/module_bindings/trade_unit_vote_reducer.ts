@@ -3,63 +3,15 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-export type TradeUnitVote = {
-  unitId: number,
-  buyerId: string,
-  price: number,
+export default {
+  unitId: __t.i32(),
+  buyerId: __t.string(),
+  price: __t.i32(),
 };
-
-/**
- * A namespace for generated helper functions.
- */
-export namespace TradeUnitVote {
-  /**
-  * A function which returns this type represented as an AlgebraicType.
-  * This function is derived from the AlgebraicType used to generate this type.
-  */
-  export function getTypeScriptAlgebraicType(): AlgebraicType {
-    return AlgebraicType.createProductType([
-      new ProductTypeElement("unitId", AlgebraicType.createI32Type()),
-      new ProductTypeElement("buyerId", AlgebraicType.createStringType()),
-      new ProductTypeElement("price", AlgebraicType.createI32Type()),
-    ]);
-  }
-
-  export function serialize(writer: BinaryWriter, value: TradeUnitVote): void {
-    TradeUnitVote.getTypeScriptAlgebraicType().serialize(writer, value);
-  }
-
-  export function deserialize(reader: BinaryReader): TradeUnitVote {
-    return TradeUnitVote.getTypeScriptAlgebraicType().deserialize(reader);
-  }
-
-}
-

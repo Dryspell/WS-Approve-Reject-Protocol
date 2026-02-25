@@ -1,10 +1,5 @@
 import { Component, onMount, createSignal, Show } from "solid-js";
-import type { Unit } from "~/module_bindings/unit_type";
-import type { Resource } from "~/module_bindings/resource_type";
-import type { UnitInventory } from "~/module_bindings/unit_inventory_type";
-import type { UnitTaskQueue } from "~/module_bindings/unit_task_queue_type";
-import type { UnitStats } from "~/module_bindings/unit_stats_type";
-import type { GameRoom } from "~/module_bindings/game_room_type";
+import type { Unit, Resource, UnitInventory, UnitTaskQueue, UnitStats, GameRoom } from "~/module_bindings/types";
 import { useVoteStore } from "~/stores/voteStore";
 import { showToast } from "../ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
@@ -161,7 +156,7 @@ const Game: Component<Props> = (props) => {
     });
 
     // Subscribe to task queue updates
-    connection.db.unitTaskQueue.onInsert((_ctx, task: UnitTaskQueue) => {
+    connection.db.unit_task_queue.onInsert((_ctx, task: UnitTaskQueue) => {
       if (!task) return;
       setTaskQueues(prev => {
         const unitTasks = [...(prev[task.unitId] || [])];
@@ -180,7 +175,7 @@ const Game: Component<Props> = (props) => {
       });
     });
 
-    connection.db.unitTaskQueue.onUpdate((_ctx, _oldTask: UnitTaskQueue, newTask: UnitTaskQueue) => {
+    connection.db.unit_task_queue.onUpdate((_ctx, _oldTask: UnitTaskQueue, newTask: UnitTaskQueue) => {
       if (!newTask) return;
       setTaskQueues(prev => {
         const unitTasks = [...(prev[newTask.unitId] || [])];
@@ -199,7 +194,7 @@ const Game: Component<Props> = (props) => {
       });
     });
 
-    connection.db.unitTaskQueue.onDelete((_ctx, task: UnitTaskQueue) => {
+    connection.db.unit_task_queue.onDelete((_ctx, task: UnitTaskQueue) => {
       if (!task) return;
       setTaskQueues(prev => {
         const unitTasks = (prev[task.unitId] || []).filter(t => t.id !== task.id);
@@ -211,7 +206,7 @@ const Game: Component<Props> = (props) => {
     });
 
     // Subscribe to inventory updates
-    connection.db.unitInventory.onInsert((_ctx, inventory: UnitInventory) => {
+    connection.db.unit_inventory.onInsert((_ctx, inventory: UnitInventory) => {
       if (!inventory) return;
       setInventories(prev => ({
         ...prev,
@@ -219,7 +214,7 @@ const Game: Component<Props> = (props) => {
       }));
     });
 
-    connection.db.unitInventory.onUpdate((_ctx, _oldInventory: UnitInventory, newInventory: UnitInventory) => {
+    connection.db.unit_inventory.onUpdate((_ctx, _oldInventory: UnitInventory, newInventory: UnitInventory) => {
       if (!newInventory) return;
       setInventories(prev => ({
         ...prev,
@@ -227,7 +222,7 @@ const Game: Component<Props> = (props) => {
       }));
     });
 
-    connection.db.unitInventory.onDelete((_ctx, inventory: UnitInventory) => {
+    connection.db.unit_inventory.onDelete((_ctx, inventory: UnitInventory) => {
       if (!inventory) return;
       setInventories(prev => {
         const { [inventory.unitId]: _, ...rest } = prev;
@@ -314,7 +309,7 @@ const Game: Component<Props> = (props) => {
           const newWaypoints: Record<number, { x: number; y: number }> = {};
           selectedUnits().forEach(unitId => {
             newWaypoints[unitId] = { x: mouseX, y: mouseY };
-            connection.reducers.queueUnitTask(unitId, "move", JSON.stringify({ x: mouseX, y: mouseY }));
+            connection.reducers.queueUnitTask({ unitId, taskType: "move", targetId: JSON.stringify({ x: mouseX, y: mouseY }) });
           });
           setWaypoints(prev => ({ ...prev, ...newWaypoints }));
           
@@ -603,7 +598,7 @@ const Game: Component<Props> = (props) => {
     if (!hoveredUnit()) return;
     const connection = conn();
     if (connection) {
-      connection.reducers.queueUnitTask(hoveredUnit()!.id, "gather", resource.id);
+      connection.reducers.queueUnitTask({ unitId: hoveredUnit()!.id, taskType: "gather", targetId: resource.id });
     }
   };
 
@@ -611,7 +606,7 @@ const Game: Component<Props> = (props) => {
     const connection = conn();
     if (connection && selectedUnits().size > 0) {
       selectedUnits().forEach(unitId => {
-        connection.reducers.queueUnitTask(unitId, "gather", resource.id);
+        connection.reducers.queueUnitTask({ unitId, taskType: "gather", targetId: resource.id });
       });
     }
   };
@@ -626,7 +621,7 @@ const Game: Component<Props> = (props) => {
 
     try {
       // Fire-and-forget reducer call
-      connection.reducers.createStorageBuilding(props.room.id, position, DEFAULT_STORAGE_CAPACITY);
+      connection.reducers.createStorageBuilding({ roomId: props.room.id, position, capacity: DEFAULT_STORAGE_CAPACITY });
       ToastHelper.buildingCreated("Storage Building");
     } catch (error) {
       console.error("Failed to create storage:", error);
@@ -654,7 +649,7 @@ const Game: Component<Props> = (props) => {
 
     try {
       // Fire-and-forget reducer call
-      connection.reducers.transferResources(sourceId, targetStorage.id, resourceType, amount);
+      connection.reducers.transferResources({ sourceId, targetId: targetStorage.id, resourceType, amount });
       ToastHelper.resourceTransferred(resourceType, amount);
     } catch (error) {
       console.error("Failed to transfer resources:", error);
@@ -669,7 +664,7 @@ const Game: Component<Props> = (props) => {
 
     try {
       // Fire-and-forget reducer call - server will handle crafting progress
-      connection.reducers.queueUnitTask(hoveredUnit()!.id, "craft", recipeId);
+      connection.reducers.queueUnitTask({ unitId: hoveredUnit()!.id, taskType: "craft", targetId: recipeId });
       ToastHelper.craftingStarted(recipeId, 10); // Would need actual recipe time
     } catch (error) {
       console.error("Failed to start crafting:", error);
@@ -680,7 +675,7 @@ const Game: Component<Props> = (props) => {
   const handleCancelTask = (taskId: number) => {
     const connection = conn();
     if (connection) {
-      connection.reducers.cancelUnitTask(taskId);
+      connection.reducers.cancelUnitTask({ taskId });
       ToastHelper.info("Task Cancelled", "Task removed from queue");
     }
   };

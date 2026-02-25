@@ -3,74 +3,15 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { Message } from "./message_type";
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-/**
- * Table handle for the table `message`.
- *
- * Obtain a handle from the [`message`] property on [`RemoteTables`],
- * like `ctx.db.message`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.message.on_insert(...)`.
- */
-export class MessageTableHandle {
-  tableCache: TableCache<Message>;
-
-  constructor(tableCache: TableCache<Message>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<Message> {
-    return this.tableCache.iter();
-  }
-
-  onInsert = (cb: (ctx: EventContext, row: Message) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: Message) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: Message) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: Message) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-}
+export default __t.row({
+  sender: __t.identity(),
+  sent: __t.timestamp(),
+  text: __t.string(),
+});

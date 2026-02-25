@@ -1,6 +1,5 @@
 import { Component, Show, createSignal } from "solid-js";
-import type { Unit } from "~/module_bindings/unit_type";
-import type { UnitInventory } from "~/module_bindings/unit_inventory_type";
+import type { Unit, UnitInventory } from "~/module_bindings/types";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { TextField, TextFieldLabel, TextFieldInput } from "~/components/ui/text-field";

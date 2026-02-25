@@ -3,104 +3,19 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { GameEvent } from "./game_event_type";
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-/**
- * Table handle for the table `game_event`.
- *
- * Obtain a handle from the [`gameEvent`] property on [`RemoteTables`],
- * like `ctx.db.gameEvent`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.gameEvent.on_insert(...)`.
- */
-export class GameEventTableHandle {
-  tableCache: TableCache<GameEvent>;
-
-  constructor(tableCache: TableCache<GameEvent>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<GameEvent> {
-    return this.tableCache.iter();
-  }
-  /**
-   * Access to the `id` unique index on the table `game_event`,
-   * which allows point queries on the field of the same name
-   * via the [`GameEventIdUnique.find`] method.
-   *
-   * Users are encouraged not to explicitly reference this type,
-   * but to directly chain method calls,
-   * like `ctx.db.gameEvent.id().find(...)`.
-   *
-   * Get a handle on the `id` unique index on the table `game_event`.
-   */
-  id = {
-    // Find the subscribed row whose `id` column value is equal to `col_val`,
-    // if such a row is present in the client cache.
-    find: (col_val: string): GameEvent | undefined => {
-      for (let row of this.tableCache.iter()) {
-        if (deepEqual(row.id, col_val)) {
-          return row;
-        }
-      }
-    },
-  };
-
-  onInsert = (cb: (ctx: EventContext, row: GameEvent) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: GameEvent) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: GameEvent) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: GameEvent) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-
-  // Updates are only defined for tables with primary keys.
-  onUpdate = (cb: (ctx: EventContext, oldRow: GameEvent, newRow: GameEvent) => void) => {
-    return this.tableCache.onUpdate(cb);
-  }
-
-  removeOnUpdate = (cb: (ctx: EventContext, onRow: GameEvent, newRow: GameEvent) => void) => {
-    return this.tableCache.removeOnUpdate(cb);
-  }}
+export default __t.row({
+  id: __t.string().primaryKey(),
+  roomId: __t.string().name("room_id"),
+  eventType: __t.string().name("event_type"),
+  sourceId: __t.string().name("source_id"),
+  targetId: __t.string().name("target_id"),
+  value: __t.i32(),
+  timestamp: __t.i64(),
+});

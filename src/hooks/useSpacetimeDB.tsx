@@ -2,7 +2,7 @@ import { createSignal, createContext, useContext, ParentComponent, onCleanup, on
 import { isServer } from "solid-js/web";
 
 // Types imported dynamically to avoid SSR issues
-type Identity = import("@clockworklabs/spacetimedb-sdk").Identity;
+type Identity = import("spacetimedb").Identity;
 type DbConnection = import("../module_bindings/index").DbConnection;
 
 type SpacetimeDBContextType = {
@@ -27,11 +27,11 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
     }
     
     // Dynamically import SDK and bindings to avoid SSR issues
-    const { Identity: IdentityClass } = await import("@clockworklabs/spacetimedb-sdk");
+    const { Identity: IdentityClass } = await import("spacetimedb");
     const { DbConnection: DbConnectionClass } = await import("../module_bindings/index");
     
-    // Get the host URL - for cloud it will be like "wss://testnet.spacetimedb.com"
-    const host = import.meta.env.VITE_SPACETIME_HOST || "ws://localhost:3000";
+    // Get the host URL - v2 SDK uses http:// (handles WS upgrade internally)
+    const host = import.meta.env.VITE_SPACETIME_HOST || "http://127.0.0.1:3000";
     const moduleName = import.meta.env.VITE_SPACETIME_MODULE_NAME || import.meta.env.VITE_SPACETIME_DATABASE || "game";
     const isLocalHost = host.includes('localhost') || host.includes('127.0.0.1');
     
@@ -86,6 +86,7 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
           'SELECT * FROM transaction',
           'SELECT * FROM guarantee',
           'SELECT * FROM guarantee_purchase',
+          'SELECT * FROM trade_offer',
           // Social system
           'SELECT * FROM friend_request',
           'SELECT * FROM friendship',

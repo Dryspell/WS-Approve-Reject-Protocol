@@ -35,10 +35,10 @@ See [docs/getting-started.md](./docs/getting-started.md) for detailed setup inst
 
 ## Project Status
 
-**Feature Complete**: 95% ✅  
-**Current Focus**: Mobile Optimization (Sprint 8)
+**Current Focus**: Fixing core game bugs and completing missing features  
+**Backend**: SpacetimeDB 2.0 (migrated Feb 2026)
 
-The Vote Exchange is fully playable on desktop with all core mechanics implemented.
+The Vote Exchange core loop is functional (vote, trade, eliminate, win), but has known issues with tie handling, guarantee tracking, and disconnect handling. See [STATUS.md](./docs/STATUS.md) for a detailed vision-vs-implementation mapping.
 
 ## Documentation
 
@@ -50,15 +50,18 @@ The Vote Exchange is fully playable on desktop with all core mechanics implement
 | [QA Testing Outline](./docs/qa-testing-outline.md) | Comprehensive QA test cases |
 | [Deployment Guide](./docs/deployment.md) | Production deployment |
 | [Development History](./docs/development-history.md) | Sprint summaries |
+| [Game Constants](./docs/GAME_CONSTANTS.md) | All hardcoded values |
+| [Implementation Status](./docs/STATUS.md) | Vision vs. reality mapping |
 | [Game Rules](./game-design/rules.md) | Complete game mechanics |
-| [TODOs](./todos.md) | Current sprint tasks |
+| [Roadmap](./roadmap.md) | Development phases and priorities |
+| [TODOs](./todos.md) | Current backlog |
 
 ## Tech Stack
 
 - **Frontend**: SolidJS, SolidStart, TailwindCSS, Solid-UI
 - **Backend**: SpacetimeDB (Rust)
 - **Real-time**: WebSocket via SpacetimeDB SDK
-- **Testing**: Vitest
+- **Testing**: Vitest (unit), Playwright (E2E)
 
 ## Project Structure
 

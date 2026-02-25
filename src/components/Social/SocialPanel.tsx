@@ -1,5 +1,5 @@
 import { Component, createSignal, Show } from "solid-js";
-import { Identity } from "@clockworklabs/spacetimedb-sdk";
+import { Identity } from "spacetimedb";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -9,8 +9,7 @@ import FriendRequests from "./FriendRequests";
 import DirectMessages from "./DirectMessages";
 import BlockedUsers from "./BlockedUsers";
 import { createMemo, createEffect } from "solid-js";
-import type { FriendRequest } from "~/module_bindings/friend_request_type";
-import type { DirectMessage } from "~/module_bindings/direct_message_type";
+import type { FriendRequest, DirectMessage } from "~/module_bindings/types";
 
 const SocialPanel: Component = () => {
   const { conn, connected, identity } = useSpacetimeDB();
@@ -32,12 +31,12 @@ const SocialPanel: Component = () => {
       const myHex = myId.toHexString();
 
       // Count pending incoming requests
-      const requests = Array.from(connection.db.friendRequest.iter())
+      const requests = Array.from(connection.db.friend_request.iter())
         .filter(r => r.toUser.toHexString() === myHex && r.status === "pending");
       setPendingRequests(requests.length);
 
       // Count unread messages
-      const messages = Array.from(connection.db.directMessage.iter())
+      const messages = Array.from(connection.db.direct_message.iter())
         .filter(m => m.sender.toHexString() !== myHex && !m.isRead);
       setUnreadMessages(messages.length);
     };
@@ -46,11 +45,11 @@ const SocialPanel: Component = () => {
     updateCounts();
 
     // Listen for changes
-    connection.db.friendRequest.onInsert(() => updateCounts());
-    connection.db.friendRequest.onUpdate(() => updateCounts());
-    connection.db.friendRequest.onDelete(() => updateCounts());
-    connection.db.directMessage.onInsert(() => updateCounts());
-    connection.db.directMessage.onUpdate(() => updateCounts());
+    connection.db.friend_request.onInsert(() => updateCounts());
+    connection.db.friend_request.onUpdate(() => updateCounts());
+    connection.db.friend_request.onDelete(() => updateCounts());
+    connection.db.direct_message.onInsert(() => updateCounts());
+    connection.db.direct_message.onUpdate(() => updateCounts());
 
     setSubscriptionsSet(true);
   });

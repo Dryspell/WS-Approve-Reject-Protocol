@@ -3,67 +3,18 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-export type CreateGuarantee = {
-  roomId: number,
-  roundNumber: number,
-  color: string,
-  price: number,
-  guaranteeType: string,
+export default {
+  roomId: __t.i32(),
+  roundNumber: __t.i32(),
+  voteId: __t.i32(),
+  color: __t.string(),
+  price: __t.f64(),
+  guaranteeType: __t.string(),
 };
-
-/**
- * A namespace for generated helper functions.
- */
-export namespace CreateGuarantee {
-  /**
-  * A function which returns this type represented as an AlgebraicType.
-  * This function is derived from the AlgebraicType used to generate this type.
-  */
-  export function getTypeScriptAlgebraicType(): AlgebraicType {
-    return AlgebraicType.createProductType([
-      new ProductTypeElement("roomId", AlgebraicType.createI32Type()),
-      new ProductTypeElement("roundNumber", AlgebraicType.createI32Type()),
-      new ProductTypeElement("color", AlgebraicType.createStringType()),
-      new ProductTypeElement("price", AlgebraicType.createF64Type()),
-      new ProductTypeElement("guaranteeType", AlgebraicType.createStringType()),
-    ]);
-  }
-
-  export function serialize(writer: BinaryWriter, value: CreateGuarantee): void {
-    CreateGuarantee.getTypeScriptAlgebraicType().serialize(writer, value);
-  }
-
-  export function deserialize(reader: BinaryReader): CreateGuarantee {
-    return CreateGuarantee.getTypeScriptAlgebraicType().deserialize(reader);
-  }
-
-}
-

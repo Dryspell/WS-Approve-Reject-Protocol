@@ -1,4 +1,4 @@
-import { Component, createSignal, onMount, onCleanup, Show } from "solid-js";
+import { Component, createSignal, onMount, onCleanup, Show, untrack } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Progress } from "~/components/ui/progress";
 import { Badge } from "~/components/ui/badge";
@@ -23,36 +23,38 @@ const RoundTimer: Component<RoundTimerProps> = (props) => {
   onMount(() => {
     // Update timer every second
     interval = setInterval(() => {
-      if (!props.roundStartTime) {
-        setTimeRemaining(duration());
-        return;
-      }
+      untrack(() => {
+        if (!props.roundStartTime) {
+          setTimeRemaining(duration());
+          return;
+        }
 
-      // Calculate time elapsed since round start
-      const now = BigInt(Date.now());
-      const elapsed = Number((now - props.roundStartTime) / 1000n); // Convert to seconds
-      const remaining = Math.max(0, duration() - elapsed);
-      
-      setTimeRemaining(remaining);
+        // Calculate time elapsed since round start
+        const now = BigInt(Date.now());
+        const elapsed = Number((now - props.roundStartTime) / 1000n); // Convert to seconds
+        const remaining = Math.max(0, duration() - elapsed);
+        
+        setTimeRemaining(remaining);
 
-      // Determine phase based on time remaining
-      const percentRemaining = (remaining / duration()) * 100;
-      if (percentRemaining > 66) {
-        setPhase("voting");
-      } else if (percentRemaining > 33) {
-        setPhase("action");
-      } else {
-        setPhase("resolution");
-      }
+        // Determine phase based on time remaining
+        const percentRemaining = (remaining / duration()) * 100;
+        if (percentRemaining > 66) {
+          setPhase("voting");
+        } else if (percentRemaining > 33) {
+          setPhase("action");
+        } else {
+          setPhase("resolution");
+        }
 
-      // Warning if less than 30 seconds
-      setIsWarning(remaining <= 30 && remaining > 0);
+        // Warning if less than 30 seconds
+        setIsWarning(remaining <= 30 && remaining > 0);
 
-      // Round ended
-      if (remaining === 0) {
-        props.onRoundEnd?.();
-        clearInterval(interval);
-      }
+        // Round ended
+        if (remaining === 0) {
+          props.onRoundEnd?.();
+          clearInterval(interval);
+        }
+      });
     }, 1000) as unknown as number;
   });
 

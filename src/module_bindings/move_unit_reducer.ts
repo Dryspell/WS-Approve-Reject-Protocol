@@ -3,63 +3,20 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-import { Vector2 as __Vector2 } from "./vector_2_type";
+import {
+  Vector2,
+} from "./types";
 
-export type MoveUnit = {
-  unitId: number,
-  targetPosition: __Vector2,
+export default {
+  unitId: __t.i32(),
+  get targetPosition() {
+    return Vector2;
+  },
 };
-
-/**
- * A namespace for generated helper functions.
- */
-export namespace MoveUnit {
-  /**
-  * A function which returns this type represented as an AlgebraicType.
-  * This function is derived from the AlgebraicType used to generate this type.
-  */
-  export function getTypeScriptAlgebraicType(): AlgebraicType {
-    return AlgebraicType.createProductType([
-      new ProductTypeElement("unitId", AlgebraicType.createI32Type()),
-      new ProductTypeElement("targetPosition", __Vector2.getTypeScriptAlgebraicType()),
-    ]);
-  }
-
-  export function serialize(writer: BinaryWriter, value: MoveUnit): void {
-    MoveUnit.getTypeScriptAlgebraicType().serialize(writer, value);
-  }
-
-  export function deserialize(reader: BinaryReader): MoveUnit {
-    return MoveUnit.getTypeScriptAlgebraicType().deserialize(reader);
-  }
-
-}
-

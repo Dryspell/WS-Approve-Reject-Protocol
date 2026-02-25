@@ -3,104 +3,20 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { UnitStats } from "./unit_stats_type";
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-/**
- * Table handle for the table `unit_stats`.
- *
- * Obtain a handle from the [`unitStats`] property on [`RemoteTables`],
- * like `ctx.db.unitStats`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.unitStats.on_insert(...)`.
- */
-export class UnitStatsTableHandle {
-  tableCache: TableCache<UnitStats>;
-
-  constructor(tableCache: TableCache<UnitStats>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<UnitStats> {
-    return this.tableCache.iter();
-  }
-  /**
-   * Access to the `unitId` unique index on the table `unit_stats`,
-   * which allows point queries on the field of the same name
-   * via the [`UnitStatsUnitIdUnique.find`] method.
-   *
-   * Users are encouraged not to explicitly reference this type,
-   * but to directly chain method calls,
-   * like `ctx.db.unitStats.unitId().find(...)`.
-   *
-   * Get a handle on the `unitId` unique index on the table `unit_stats`.
-   */
-  unitId = {
-    // Find the subscribed row whose `unitId` column value is equal to `col_val`,
-    // if such a row is present in the client cache.
-    find: (col_val: number): UnitStats | undefined => {
-      for (let row of this.tableCache.iter()) {
-        if (deepEqual(row.unitId, col_val)) {
-          return row;
-        }
-      }
-    },
-  };
-
-  onInsert = (cb: (ctx: EventContext, row: UnitStats) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: UnitStats) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: UnitStats) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: UnitStats) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-
-  // Updates are only defined for tables with primary keys.
-  onUpdate = (cb: (ctx: EventContext, oldRow: UnitStats, newRow: UnitStats) => void) => {
-    return this.tableCache.onUpdate(cb);
-  }
-
-  removeOnUpdate = (cb: (ctx: EventContext, onRow: UnitStats, newRow: UnitStats) => void) => {
-    return this.tableCache.removeOnUpdate(cb);
-  }}
+export default __t.row({
+  unitId: __t.i32().primaryKey().name("unit_id"),
+  health: __t.i32(),
+  maxHealth: __t.i32().name("max_health"),
+  attack: __t.i32(),
+  defense: __t.i32(),
+  speed: __t.i32(),
+  gatherRate: __t.i32().name("gather_rate"),
+  craftRate: __t.i32().name("craft_rate"),
+});

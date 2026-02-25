@@ -1,11 +1,8 @@
-import { Component, createSignal, For, Show, onMount, onCleanup, createEffect } from "solid-js";
+import { Component, createSignal, For, Show, onMount, onCleanup, createEffect, untrack } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import type { User } from "~/module_bindings/user_type";
-import type { GameRoom } from "~/module_bindings/game_room_type";
-import type { Vote } from "~/module_bindings/vote_type";
-import type { Transaction } from "~/module_bindings/transaction_type";
+import type { User, GameRoom, Vote, Transaction } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import RoundTimer from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
@@ -40,16 +37,18 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     if (!props.room.startTime || props.room.gameStatus !== "active") return;
 
     const checkRoundEnd = setInterval(() => {
-      const now = Date.now();
-      const roundStart = Number(props.room.startTime);
-      const elapsed = Math.floor((now - roundStart) / 1000);
-      const timeLeft = props.room.roundDuration - elapsed;
+      untrack(() => {
+        const now = Date.now();
+        const roundStart = Number(props.room.startTime);
+        const elapsed = Math.floor((now - roundStart) / 1000);
+        const timeLeft = props.room.roundDuration - elapsed;
 
-      // Trigger round processing when time is up (with 1 second buffer)
-      if (timeLeft <= 0 && !roundProcessing()) {
-        setRoundProcessing(true);
-        processRound();
-      }
+        // Trigger round processing when time is up (with 1 second buffer)
+        if (timeLeft <= 0 && !roundProcessing()) {
+          setRoundProcessing(true);
+          processRound();
+        }
+      });
     }, 1000); // Check every second
 
     onCleanup(() => clearInterval(checkRoundEnd));
@@ -61,7 +60,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
 
     try {
       console.log("⏰ Round time expired - processing votes...");
-      await connection.reducers.processRoundVotes(props.room.id);
+      await connection.reducers.processRoundVotes({ roomId: props.room.id, roundNumber: props.room.currentRound });
       ToastHelper.info("Round Processing", "Tallying votes and determining results...");
     } catch (error) {
       console.error("Failed to process round:", error);
@@ -101,7 +100,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     });
 
     // Subscribe to GameRoom updates to detect round changes
-    connection.db.gameRoom.onUpdate((ctx, oldRoom, newRoom) => {
+    connection.db.game_room.onUpdate((ctx, oldRoom, newRoom) => {
       // Check if a new round just started (round number increased)
       if (newRoom.id === props.room.id && newRoom.currentRound > lastProcessedRound()) {
         // Show elimination modal for the previous round
@@ -180,12 +179,23 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     if (!connection) return;
 
     try {
-      connection.reducers.setVoteColor(voteId, color);
+      connection.reducers.setVoteColor({ voteId, color });
       ToastHelper.voteColorChanged(voteId, color);
       sounds.voteSet(color as 'red' | 'blue');
     } catch (error) {
       ToastHelper.error("Failed to set vote color");
       sounds.error();
+    }
+  };
+
+  const handleLeaveRoom = async () => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      await connection.reducers.leaveRoom({ roomId: props.room.id });
+      ToastHelper.success("Left Room", "You have left the room");
+    } catch (error: any) {
+      ToastHelper.error(error?.message || "Failed to leave room");
     }
   };
 
@@ -256,6 +266,15 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               </div>
             </div>
             <SoundToggle />
+            <Button
+              size="sm"
+              variant="outline"
+              class="ml-2 text-red-600 hover:bg-red-50"
+              onClick={handleLeaveRoom}
+              title="Leave Room"
+            >
+              ✕
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -475,7 +494,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </div>
           
           <TabsContent value="chat" class="h-80 p-0">
-            <ChatPanel roomId={props.room.id} />
+            <ChatPanel roomId={props.room.id} roundNumber={props.room.currentRound} />
           </TabsContent>
           
           <TabsContent value="replay" class="h-80 overflow-auto p-4">

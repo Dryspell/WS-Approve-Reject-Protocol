@@ -3,104 +3,31 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { UnitInventory } from "./unit_inventory_type";
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-/**
- * Table handle for the table `unit_inventory`.
- *
- * Obtain a handle from the [`unitInventory`] property on [`RemoteTables`],
- * like `ctx.db.unitInventory`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.unitInventory.on_insert(...)`.
- */
-export class UnitInventoryTableHandle {
-  tableCache: TableCache<UnitInventory>;
-
-  constructor(tableCache: TableCache<UnitInventory>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<UnitInventory> {
-    return this.tableCache.iter();
-  }
-  /**
-   * Access to the `unitId` unique index on the table `unit_inventory`,
-   * which allows point queries on the field of the same name
-   * via the [`UnitInventoryUnitIdUnique.find`] method.
-   *
-   * Users are encouraged not to explicitly reference this type,
-   * but to directly chain method calls,
-   * like `ctx.db.unitInventory.unitId().find(...)`.
-   *
-   * Get a handle on the `unitId` unique index on the table `unit_inventory`.
-   */
-  unitId = {
-    // Find the subscribed row whose `unitId` column value is equal to `col_val`,
-    // if such a row is present in the client cache.
-    find: (col_val: number): UnitInventory | undefined => {
-      for (let row of this.tableCache.iter()) {
-        if (deepEqual(row.unitId, col_val)) {
-          return row;
-        }
-      }
-    },
-  };
-
-  onInsert = (cb: (ctx: EventContext, row: UnitInventory) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: UnitInventory) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: UnitInventory) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: UnitInventory) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-
-  // Updates are only defined for tables with primary keys.
-  onUpdate = (cb: (ctx: EventContext, oldRow: UnitInventory, newRow: UnitInventory) => void) => {
-    return this.tableCache.onUpdate(cb);
-  }
-
-  removeOnUpdate = (cb: (ctx: EventContext, onRow: UnitInventory, newRow: UnitInventory) => void) => {
-    return this.tableCache.removeOnUpdate(cb);
-  }}
+export default __t.row({
+  unitId: __t.i32().primaryKey().name("unit_id"),
+  wood: __t.i32(),
+  stone: __t.i32(),
+  metalOre: __t.i32().name("metal_ore"),
+  coal: __t.i32(),
+  gems: __t.i32(),
+  fiber: __t.i32(),
+  hide: __t.i32(),
+  sand: __t.i32(),
+  food: __t.i32(),
+  woodenPole: __t.i32().name("wooden_pole"),
+  lumber: __t.i32(),
+  cutStone: __t.i32().name("cut_stone"),
+  metalIngot: __t.i32().name("metal_ingot"),
+  cloth: __t.i32(),
+  rope: __t.i32(),
+  leather: __t.i32(),
+  glass: __t.i32(),
+  maxCapacity: __t.i32().name("max_capacity"),
+});

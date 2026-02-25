@@ -1,12 +1,11 @@
 import { Component, createSignal, createMemo, createEffect, For, Show } from "solid-js";
-import { Identity } from "@clockworklabs/spacetimedb-sdk";
+import { Identity } from "spacetimedb";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
-import type { Friendship } from "~/module_bindings/friendship_type";
-import type { User } from "~/module_bindings/user_type";
+import type { Friendship, User } from "~/module_bindings/types";
 
 interface FriendsListProps {
   onStartChat?: (friendId: Identity) => void;
@@ -108,7 +107,7 @@ const FriendsList: Component<FriendsListProps> = (props) => {
     }
 
     try {
-      connection.reducers.removeFriend(friendId);
+      connection.reducers.removeFriend({ friendId });
       showToast({
         title: "Friend Removed",
         description: "Friend has been removed from your list",
@@ -129,7 +128,7 @@ const FriendsList: Component<FriendsListProps> = (props) => {
     if (!connection || !connected()) return;
 
     try {
-      connection.reducers.blockUser(friendId);
+      connection.reducers.blockUser({ userId: friendId });
       showToast({
         title: "User Blocked",
         description: "User has been blocked",

@@ -2,7 +2,7 @@ import { Component } from "solid-js";
 import { Card } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import type { Vote } from "~/module_bindings/vote_type";
+import type { Vote } from "~/module_bindings/types";
 
 interface VoteCardProps {
   vote: Vote;

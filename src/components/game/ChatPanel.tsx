@@ -6,7 +6,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import type { Identity } from "~/module_bindings";
-import type { ChatMessage as DBChatMessage } from "~/module_bindings/chat_message_type";
+import type { ChatMessage as DBChatMessage } from "~/module_bindings/types";
 import { showToast } from "~/components/ui/toast";
 
 interface ChatMessage {
@@ -15,11 +15,16 @@ interface ChatMessage {
   senderName: string;
   message: string;
   timestamp: number;
-  type: 'player' | 'system';
+  type: 'player' | 'system' | 'trade-offer';
+  tradeOfferId?: number;
+  tradeOfferType?: string;
+  tradeOfferPrice?: number;
+  tradeOfferStatus?: string;
 }
 
 interface ChatPanelProps {
   roomId: number;
+  roundNumber?: number;
   minimized?: boolean;
   onToggleMinimize?: () => void;
 }
@@ -30,6 +35,9 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
   const [inputValue, setInputValue] = createSignal('');
   const [scrollAreaRef, setScrollAreaRef] = createSignal<HTMLDivElement>();
   const [chatRoomId, setChatRoomId] = createSignal<string>(`game_${props.roomId}`);
+  const [showTradeForm, setShowTradeForm] = createSignal(false);
+  const [tradeType, setTradeType] = createSignal<'sell_vote' | 'buy_vote'>('sell_vote');
+  const [tradePrice, setTradePrice] = createSignal(5);
 
   // Auto-scroll to bottom when new messages arrive
   createEffect(() => {
@@ -46,14 +54,14 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
     if (!connection) return;
 
     // Subscribe to chat messages
-    connection.db.chatMessage.onInsert((ctx, message) => {
+    connection.db.chat_message.onInsert((ctx, message) => {
       if (message.roomId === chatRoomId()) {
         addMessageFromDB(message);
       }
     });
 
     // Load existing messages
-    const existingMessages = Array.from(connection.db.chatMessage.iter())
+    const existingMessages = Array.from(connection.db.chat_message.iter())
       .filter(m => m.roomId === chatRoomId())
       .sort((a, b) => {
         const timeA = a.timestamp.seconds * 1000 + a.timestamp.nanoseconds / 1000000;
@@ -67,13 +75,36 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
     if (existingMessages.length === 0) {
       addSystemMessage('Welcome to the game chat! You can communicate with other players here.');
     }
+
+    // Subscribe to trade offers
+    connection.db.trade_offer.onInsert((ctx, offer) => {
+      if (offer.roomId === props.roomId) {
+        addTradeOfferMessage(offer);
+      }
+    });
+
+    connection.db.trade_offer.onUpdate((ctx, oldOffer, newOffer) => {
+      if (newOffer.roomId === props.roomId && newOffer.status !== oldOffer.status) {
+        setMessages(prev => prev.map(msg => {
+          if (msg.tradeOfferId === newOffer.id) {
+            return { ...msg, tradeOfferStatus: newOffer.status };
+          }
+          return msg;
+        }));
+      }
+    });
+
+    // Load existing trade offers
+    const existingOffers = Array.from(connection.db.trade_offer.iter())
+      .filter(o => o.roomId === props.roomId && o.status === 'open');
+    existingOffers.forEach(offer => addTradeOfferMessage(offer));
   });
 
   const addMessageFromDB = (dbMessage: DBChatMessage) => {
     const connection = conn();
     if (!connection) return;
 
-    const sender = connection.db.user.identity.get(dbMessage.sender);
+    const sender = Array.from(connection.db.user.iter()).find(u => u.identity.toHexString() === dbMessage.sender.toHexString());
     const timestamp = dbMessage.timestamp.seconds * 1000 + dbMessage.timestamp.nanoseconds / 1000000;
 
     const msg: ChatMessage = {
@@ -104,6 +135,82 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
     setMessages(prev => [...prev, msg]);
   };
 
+  const addTradeOfferMessage = (offer: any) => {
+    const connection = conn();
+    if (!connection) return;
+
+    const sender = Array.from(connection.db.user.iter()).find(
+      u => u.identity.toHexString() === offer.fromPlayer
+    );
+    const label = offer.offerType === 'sell_vote' ? 'selling a vote' : 'looking to buy a vote';
+
+    const msg: ChatMessage = {
+      id: `trade-${offer.id}`,
+      senderId: offer.fromPlayer,
+      senderName: sender?.name || 'Anonymous',
+      message: `${label} for $${offer.price.toFixed(2)}`,
+      timestamp: Number(offer.createdAt?.seconds ?? Date.now() / 1000) * 1000,
+      type: 'trade-offer',
+      tradeOfferId: offer.id,
+      tradeOfferType: offer.offerType,
+      tradeOfferPrice: offer.price,
+      tradeOfferStatus: offer.status,
+    };
+
+    setMessages(prev => {
+      if (prev.some(m => m.id === msg.id)) return prev;
+      return [...prev, msg];
+    });
+  };
+
+  const handleAcceptOffer = async (offerId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      await connection.reducers.acceptTradeOffer({ offerId });
+      showToast({ title: "Trade Accepted", description: "The trade has been completed!", variant: "success" });
+    } catch (error: any) {
+      showToast({ title: "Trade Failed", description: error?.message || "Could not complete trade", variant: "error" });
+    }
+  };
+
+  const handleDeclineOffer = async (offerId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      await connection.reducers.cancelTradeOffer({ offerId });
+    } catch {
+      // Only the creator can cancel; declining as a non-creator is just ignoring it
+    }
+  };
+
+  const handleCreateTradeOffer = async () => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      const voteId = tradeType() === 'sell_vote'
+        ? (() => {
+            const myVotes = Array.from(connection.db.vote.iter()).filter(
+              v => v.roomId === props.roomId && v.playerId === identity()?.toHexString()
+            );
+            return myVotes.length > 0 ? myVotes[0].id : null;
+          })()
+        : null;
+
+      await connection.reducers.createTradeOffer({
+        roomId: props.roomId,
+        roundNumber: props.roundNumber ?? 1,
+        offerType: tradeType(),
+        voteId,
+        price: tradePrice(),
+      });
+      setShowTradeForm(false);
+      showToast({ title: "Offer Posted", description: `Your ${tradeType() === 'sell_vote' ? 'sell' : 'buy'} offer has been posted`, variant: "success" });
+    } catch (error: any) {
+      showToast({ title: "Error", description: error?.message || "Failed to create offer", variant: "error" });
+    }
+  };
+
   const sendMessage = () => {
     const message = inputValue().trim();
     if (!message || !identity()) return;
@@ -113,7 +220,7 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
 
     try {
       // Send via SpacetimeDB reducer
-      connection.reducers.sendChatMessage(chatRoomId(), message, null);
+      connection.reducers.sendChatMessage({ roomId: chatRoomId(), text: message, roundNumber: null });
       setInputValue('');
     } catch (error) {
       console.error('Failed to send chat message:', error);
@@ -196,14 +303,45 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
                     </Show>
 
                     <Show when={msg.type === 'trade-offer'}>
-                      <Card class="bg-yellow-50 border-yellow-200">
+                      <Card class="border-yellow-200" classList={{
+                        "bg-yellow-50": msg.tradeOfferStatus === 'open',
+                        "bg-gray-50 opacity-60": msg.tradeOfferStatus !== 'open',
+                      }}>
                         <CardContent class="p-3 text-sm">
-                          <div class="font-semibold">🤝 Trade Offer</div>
-                          <div class="mt-1">{msg.message}</div>
-                          <div class="mt-2 flex gap-2">
-                            <Button size="sm" variant="outline">Accept</Button>
-                            <Button size="sm" variant="outline">Decline</Button>
+                          <div class="flex items-center justify-between">
+                            <div class="font-semibold">
+                              {msg.tradeOfferType === 'sell_vote' ? '📤 Selling Vote' : '📥 Buying Vote'}
+                            </div>
+                            <Badge variant="outline" class="text-xs font-bold">
+                              ${msg.tradeOfferPrice?.toFixed(2)}
+                            </Badge>
                           </div>
+                          <div class="mt-1 text-xs text-gray-600">
+                            {msg.senderName} is {msg.message}
+                          </div>
+                          <Show when={msg.tradeOfferStatus === 'open' && msg.senderId !== identity()?.toHexString()}>
+                            <div class="mt-2 flex gap-2">
+                              <Button size="sm" onClick={() => handleAcceptOffer(msg.tradeOfferId!)}>
+                                Accept
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => handleDeclineOffer(msg.tradeOfferId!)}>
+                                Ignore
+                              </Button>
+                            </div>
+                          </Show>
+                          <Show when={msg.tradeOfferStatus === 'open' && msg.senderId === identity()?.toHexString()}>
+                            <div class="mt-2">
+                              <Button size="sm" variant="outline" onClick={() => handleDeclineOffer(msg.tradeOfferId!)}>
+                                Cancel Offer
+                              </Button>
+                            </div>
+                          </Show>
+                          <Show when={msg.tradeOfferStatus === 'accepted'}>
+                            <div class="mt-2 text-xs font-semibold text-green-600">Trade completed</div>
+                          </Show>
+                          <Show when={msg.tradeOfferStatus === 'cancelled'}>
+                            <div class="mt-2 text-xs text-gray-500">Cancelled</div>
+                          </Show>
                         </CardContent>
                       </Card>
                     </Show>
@@ -212,6 +350,38 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
               </For>
             </div>
           </ScrollArea>
+
+          {/* Trade Offer Form */}
+          <Show when={showTradeForm()}>
+            <div class="border-t border-yellow-300 bg-yellow-50 p-3 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-semibold">Create Trade Offer</span>
+                <Button size="sm" variant="ghost" onClick={() => setShowTradeForm(false)}>✕</Button>
+              </div>
+              <div class="flex gap-2">
+                <select
+                  class="flex-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+                  value={tradeType()}
+                  onChange={(e) => setTradeType(e.currentTarget.value as 'sell_vote' | 'buy_vote')}
+                >
+                  <option value="sell_vote">Sell my vote</option>
+                  <option value="buy_vote">Buy a vote</option>
+                </select>
+                <TextField class="w-24">
+                  <TextFieldInput
+                    type="number"
+                    min="0.01"
+                    step="0.5"
+                    value={tradePrice()}
+                    onInput={(e) => setTradePrice(parseFloat(e.currentTarget.value) || 0)}
+                  />
+                </TextField>
+              </div>
+              <Button size="sm" class="w-full" onClick={handleCreateTradeOffer}>
+                Post Offer (${tradePrice().toFixed(2)})
+              </Button>
+            </div>
+          </Show>
 
           {/* Input */}
           <div class="border-t p-3">
@@ -225,12 +395,20 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
                   onKeyPress={handleKeyPress}
                 />
               </TextField>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowTradeForm(!showTradeForm())}
+                title="Trade Offer"
+              >
+                🤝
+              </Button>
               <Button data-testid="send-button" onClick={sendMessage} disabled={!inputValue().trim()}>
                 Send
               </Button>
             </div>
             <div class="mt-2 text-xs text-gray-500">
-              Press Enter to send • Shift+Enter for new line
+              Press Enter to send • 🤝 to post a trade offer
             </div>
           </div>
         </CardContent>

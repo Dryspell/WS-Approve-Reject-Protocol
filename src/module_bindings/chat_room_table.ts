@@ -3,104 +3,15 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { ChatRoom } from "./chat_room_type";
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-/**
- * Table handle for the table `chat_room`.
- *
- * Obtain a handle from the [`chatRoom`] property on [`RemoteTables`],
- * like `ctx.db.chatRoom`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.chatRoom.on_insert(...)`.
- */
-export class ChatRoomTableHandle {
-  tableCache: TableCache<ChatRoom>;
-
-  constructor(tableCache: TableCache<ChatRoom>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<ChatRoom> {
-    return this.tableCache.iter();
-  }
-  /**
-   * Access to the `id` unique index on the table `chat_room`,
-   * which allows point queries on the field of the same name
-   * via the [`ChatRoomIdUnique.find`] method.
-   *
-   * Users are encouraged not to explicitly reference this type,
-   * but to directly chain method calls,
-   * like `ctx.db.chatRoom.id().find(...)`.
-   *
-   * Get a handle on the `id` unique index on the table `chat_room`.
-   */
-  id = {
-    // Find the subscribed row whose `id` column value is equal to `col_val`,
-    // if such a row is present in the client cache.
-    find: (col_val: string): ChatRoom | undefined => {
-      for (let row of this.tableCache.iter()) {
-        if (deepEqual(row.id, col_val)) {
-          return row;
-        }
-      }
-    },
-  };
-
-  onInsert = (cb: (ctx: EventContext, row: ChatRoom) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: ChatRoom) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: ChatRoom) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: ChatRoom) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-
-  // Updates are only defined for tables with primary keys.
-  onUpdate = (cb: (ctx: EventContext, oldRow: ChatRoom, newRow: ChatRoom) => void) => {
-    return this.tableCache.onUpdate(cb);
-  }
-
-  removeOnUpdate = (cb: (ctx: EventContext, onRow: ChatRoom, newRow: ChatRoom) => void) => {
-    return this.tableCache.removeOnUpdate(cb);
-  }}
+export default __t.row({
+  id: __t.string().primaryKey(),
+  name: __t.string(),
+  createdAt: __t.i64().name("created_at"),
+});

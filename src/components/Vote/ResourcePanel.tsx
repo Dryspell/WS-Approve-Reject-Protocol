@@ -1,5 +1,5 @@
 import { Component, Show } from "solid-js";
-import type { Resource } from "~/module_bindings/resource_type";
+import type { Resource } from "~/module_bindings/types";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";

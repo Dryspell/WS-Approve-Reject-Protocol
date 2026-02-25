@@ -5,7 +5,7 @@ import { TextField, TextFieldInput, TextFieldLabel } from "~/components/ui/text-
 import { Badge } from "~/components/ui/badge";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "~/components/ui/toast";
-import type { User } from "~/module_bindings/user_type";
+import type { User } from "~/module_bindings/types";
 
 interface BankTransferModalProps {
   user: User;
@@ -55,14 +55,14 @@ export const BankTransferModal: Component<BankTransferModalProps> = (props) => {
 
     try {
       if (direction() === 'to-bank') {
-        await connection.reducers.transferToBank(transferAmount);
+        await connection.reducers.transferToBank({ amount: transferAmount });
         showToast({
           title: "Transfer Successful",
           description: `$${transferAmount.toFixed(2)} deposited to bank`,
           variant: "default",
         });
       } else {
-        await connection.reducers.withdrawFromBank(transferAmount);
+        await connection.reducers.withdrawFromBank({ amount: transferAmount });
         showToast({
           title: "Withdrawal Successful",
           description: `$${transferAmount.toFixed(2)} withdrawn to wallet`,

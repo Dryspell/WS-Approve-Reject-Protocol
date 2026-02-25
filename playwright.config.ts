@@ -59,21 +59,24 @@ export default defineConfig({
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
-        // Disable GPU for faster headless testing
         launchOptions: {
           args: ['--disable-gpu', '--disable-dev-shm-usage'],
         },
       },
     },
-    // Uncomment to test on more browsers:
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
+    {
+      name: 'headed-simulation',
+      testMatch: /full-game-simulation/,
+      use: {
+        ...devices['Desktop Chrome'],
+        headless: false,
+        video: 'on',
+        launchOptions: {
+          slowMo: 500,
+        },
+        actionTimeout: 15000,
+      },
+    },
   ],
 
   // Run local dev server before starting tests

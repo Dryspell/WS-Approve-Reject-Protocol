@@ -11,8 +11,7 @@ import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "../ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { createStore } from "solid-js/store";
-import type { GameRoom } from "~/module_bindings/game_room_type";
-import type { ReadyState } from "~/module_bindings/ready_state_type";
+import type { GameRoom, ReadyState } from "~/module_bindings/types";
 import { Badge } from "../ui/badge";
 
 /**
@@ -69,7 +68,10 @@ const VoteBox: Component = () => {
   const [roomsReadyState, setRoomsReadyState] = createStore<Record<string, ReadyState>>({});
   const [currentRoom, setCurrentRoom] = createSignal<string | undefined>(undefined);
   const [newRoomName, setNewRoomName] = createSignal("");
-  const [buyinAmount, setBuyinAmount] = createSignal<number>(10); // Default $10 buy-in
+  const [buyinAmount, setBuyinAmount] = createSignal<number>(10);
+  const [votesPerPlayer, setVotesPerPlayer] = createSignal<number>(5);
+  const [allowRebuy, setAllowRebuy] = createSignal(true);
+  const [allowMidgameJoin, setAllowMidgameJoin] = createSignal(false);
   const [showCreateRoom, setShowCreateRoom] = createSignal(false);
   const [subscriptionsSet, setSubscriptionsSet] = createSignal(false);
   const [currentUser, setCurrentUser] = createSignal<any>(null);
@@ -119,7 +121,7 @@ const VoteBox: Component = () => {
     console.log("Identity:", identity()?.toHexString());
 
     // Initial load of game rooms from cache
-    const initialRooms = Array.from(connection.db.gameRoom.iter());
+    const initialRooms = Array.from(connection.db.game_room.iter());
     console.log("🎮 Initial game rooms loaded:", initialRooms.length, initialRooms);
     const roomsObj: Record<string, GameRoom> = {};
     initialRooms.forEach(room => {
@@ -128,7 +130,7 @@ const VoteBox: Component = () => {
     setRooms(roomsObj);
 
     // Initial load of ready states
-    const initialReadyStates = Array.from(connection.db.readyState.iter());
+    const initialReadyStates = Array.from(connection.db.ready_state.iter());
     console.log("✅ Initial ready states loaded:", initialReadyStates.length);
     const readyStatesObj: Record<string, ReadyState> = {};
     initialReadyStates.forEach(state => {
@@ -137,7 +139,7 @@ const VoteBox: Component = () => {
     setRoomsReadyState(readyStatesObj);
 
     // Listen for new game rooms being inserted
-    connection.db.gameRoom.onInsert((ctx, room) => {
+    connection.db.game_room.onInsert((ctx, room) => {
       console.log("🎉 New game room inserted:", room);
       setRooms(prev => ({
         ...prev,
@@ -146,7 +148,7 @@ const VoteBox: Component = () => {
     });
 
     // Listen for game room updates
-    connection.db.gameRoom.onUpdate((ctx, oldRoom, newRoom) => {
+    connection.db.game_room.onUpdate((ctx, oldRoom, newRoom) => {
       console.log("🔄 Game room updated:", newRoom);
       setRooms(prev => ({
         ...prev,
@@ -155,7 +157,7 @@ const VoteBox: Component = () => {
     });
 
     // Listen for ready state insertions
-    connection.db.readyState.onInsert((ctx, readyState) => {
+    connection.db.ready_state.onInsert((ctx, readyState) => {
       console.log("✅ New ready state inserted:", {
         roomId: readyState.roomId,
         readyUserIds: readyState.readyUserIds,
@@ -167,7 +169,7 @@ const VoteBox: Component = () => {
     });
 
     // Listen for ready state updates
-    connection.db.readyState.onUpdate((ctx, oldState, newState) => {
+    connection.db.ready_state.onUpdate((ctx, oldState, newState) => {
       console.log("🔄 Ready state updated:", {
         roomId: newState.roomId,
         oldReadyUserIds: oldState.readyUserIds,
@@ -214,10 +216,23 @@ const VoteBox: Component = () => {
       const roomId = createId();
       const creatorId = identity()?.toHexString() || "anonymous";
       
-      await connection.reducers.createRoom(roomId, roomName, creatorId, buyinAmount());
+      await connection.reducers.createRoom({
+        roomId,
+        name: roomName,
+        creatorId,
+        buyinAmount: buyinAmount(),
+        votesPerPlayer: votesPerPlayer(),
+        minPlayers: 0,
+        maxPlayers: 0,
+        allowRebuy: allowRebuy(),
+        allowMidgameJoin: allowMidgameJoin(),
+      });
       
       setNewRoomName("");
       setBuyinAmount(10);
+      setVotesPerPlayer(5);
+      setAllowRebuy(true);
+      setAllowMidgameJoin(false);
       setShowCreateRoom(false);
       
       showToast({
@@ -261,13 +276,11 @@ const VoteBox: Component = () => {
       const roomIdNum = room?.id;
       
       if (room && roomIdNum !== undefined) {
-        // Check if user is already a member
         const isAlreadyMember = room.memberIds.includes(userIdentity);
         
         if (!isAlreadyMember) {
-          // Call the server's joinRoom reducer to add user to memberIds
           console.log("🚀 Joining room:", { roomId: roomIdNum, userIdentity });
-          connection.reducers.joinRoom(roomIdNum, userIdentity);
+          connection.reducers.joinRoom({ roomId: roomIdNum, userId: userIdentity });
         }
       }
     } catch (error) {
@@ -335,7 +348,7 @@ const VoteBox: Component = () => {
 
       {showCreateRoom() && (
         <div class="space-y-3 rounded-lg border bg-gray-50 p-4 mx-4">
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-3 gap-4">
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">
                 Room Name
@@ -356,7 +369,7 @@ const VoteBox: Component = () => {
             </div>
             <div>
               <label class="mb-1 block text-sm font-medium text-gray-700">
-                Buy-in Amount ($)
+                Buy-in ($)
               </label>
               <input
                 type="number"
@@ -369,9 +382,41 @@ const VoteBox: Component = () => {
                 class="w-full rounded border p-2 disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
+            <div>
+              <label class="mb-1 block text-sm font-medium text-gray-700">
+                Votes per Player
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="20"
+                step="1"
+                value={votesPerPlayer()}
+                onInput={e => setVotesPerPlayer(parseInt(e.currentTarget.value) || 5)}
+                disabled={!connected()}
+                class="w-full rounded border p-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
           </div>
-          <div class="rounded border border-blue-200 bg-blue-50 p-2 text-xs text-blue-700">
-            💡 <strong>Buy-in:</strong> Each player pays this amount to join. Winner(s) take the pot!
+          <div class="flex gap-6 px-1">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allowRebuy()}
+                onChange={e => setAllowRebuy(e.currentTarget.checked)}
+                class="rounded"
+              />
+              Allow Re-buy
+            </label>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allowMidgameJoin()}
+                onChange={e => setAllowMidgameJoin(e.currentTarget.checked)}
+                class="rounded"
+              />
+              Allow Mid-game Join
+            </label>
           </div>
           <div class="flex gap-2">
             <button
@@ -379,7 +424,7 @@ const VoteBox: Component = () => {
               disabled={!connected() || !newRoomName().trim() || buyinAmount() <= 0}
               class="flex-1 rounded bg-green-500 px-4 py-2 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Create Room (${buyinAmount().toFixed(2)} buy-in)
+              Create Room (${buyinAmount().toFixed(2)} | {votesPerPlayer()} votes)
             </button>
             <button
               onClick={() => setShowCreateRoom(false)}

@@ -1,12 +1,11 @@
 import { Component, createSignal, createMemo, createEffect, For, Show } from "solid-js";
-import { Identity } from "@clockworklabs/spacetimedb-sdk";
+import { Identity } from "spacetimedb";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
-import type { BlockedUser } from "~/module_bindings/blocked_user_type";
-import type { User } from "~/module_bindings/user_type";
+import type { BlockedUser, User } from "~/module_bindings/types";
 
 const BlockedUsers: Component = () => {
   const { conn, connected, identity } = useSpacetimeDB();
@@ -21,7 +20,7 @@ const BlockedUsers: Component = () => {
     if (!connection || !connected() || subscriptionsSet()) return;
 
     // Load initial data
-    const initialBlocked = Array.from(connection.db.blockedUser.iter());
+    const initialBlocked = Array.from(connection.db.blocked_user.iter());
     setBlockedUsers(initialBlocked);
 
     const userMap = new Map<string, User>();
@@ -31,14 +30,14 @@ const BlockedUsers: Component = () => {
     setUsers(userMap);
 
     // Listen for blocked user changes
-    connection.db.blockedUser.onInsert((ctx, blocked) => {
+    connection.db.blocked_user.onInsert((ctx, blocked) => {
       setBlockedUsers(prev => {
         if (prev.find(b => b.id === blocked.id)) return prev;
         return [...prev, blocked];
       });
     });
 
-    connection.db.blockedUser.onDelete((ctx, blocked) => {
+    connection.db.blocked_user.onDelete((ctx, blocked) => {
       setBlockedUsers(prev => prev.filter(b => b.id !== blocked.id));
     });
 
@@ -88,7 +87,7 @@ const BlockedUsers: Component = () => {
     }
 
     try {
-      connection.reducers.unblockUser(userId);
+      connection.reducers.unblockUser({ userId });
       showToast({
         title: "User Unblocked",
         description: "User has been unblocked",

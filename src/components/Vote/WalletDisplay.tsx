@@ -3,8 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Progress } from "~/components/ui/progress";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import type { User } from "~/module_bindings/user_type";
-import type { Transaction } from "~/module_bindings/transaction_type";
+import type { User, Transaction } from "~/module_bindings/types";
 import { Button } from "~/components/ui/button";
 import BankTransferModal from "../game/BankTransferModal";
 

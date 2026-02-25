@@ -1,5 +1,5 @@
 import { Component, createSignal, createMemo, createEffect, For, Show } from "solid-js";
-import { Identity } from "@clockworklabs/spacetimedb-sdk";
+import { Identity } from "spacetimedb";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
@@ -7,8 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
-import type { FriendRequest } from "~/module_bindings/friend_request_type";
-import type { User } from "~/module_bindings/user_type";
+import type { FriendRequest, User } from "~/module_bindings/types";
 
 const FriendRequests: Component = () => {
   const { conn, connected, identity } = useSpacetimeDB();
@@ -24,7 +23,7 @@ const FriendRequests: Component = () => {
     if (!connection || !connected() || subscriptionsSet()) return;
 
     // Load initial data
-    const initialRequests = Array.from(connection.db.friendRequest.iter());
+    const initialRequests = Array.from(connection.db.friend_request.iter());
     setFriendRequests(initialRequests);
 
     const userMap = new Map<string, User>();
@@ -34,20 +33,20 @@ const FriendRequests: Component = () => {
     setUsers(userMap);
 
     // Listen for friend request changes
-    connection.db.friendRequest.onInsert((ctx, request) => {
+    connection.db.friend_request.onInsert((ctx, request) => {
       setFriendRequests(prev => {
         if (prev.find(r => r.id === request.id)) return prev;
         return [...prev, request];
       });
     });
 
-    connection.db.friendRequest.onUpdate((ctx, oldRequest, newRequest) => {
+    connection.db.friend_request.onUpdate((ctx, oldRequest, newRequest) => {
       setFriendRequests(prev => 
         prev.map(r => r.id === newRequest.id ? newRequest : r)
       );
     });
 
-    connection.db.friendRequest.onDelete((ctx, request) => {
+    connection.db.friend_request.onDelete((ctx, request) => {
       setFriendRequests(prev => prev.filter(r => r.id !== request.id));
     });
 
@@ -137,7 +136,7 @@ const FriendRequests: Component = () => {
     }
 
     try {
-      connection.reducers.sendFriendRequest(toUser);
+      connection.reducers.sendFriendRequest({ toUser });
       showToast({
         title: "Request Sent",
         description: "Friend request sent successfully",
@@ -159,7 +158,7 @@ const FriendRequests: Component = () => {
     if (!connection || !connected()) return;
 
     try {
-      connection.reducers.acceptFriendRequest(requestId);
+      connection.reducers.acceptFriendRequest({ requestId });
       showToast({
         title: "Request Accepted",
         description: "You are now friends!",
@@ -180,7 +179,7 @@ const FriendRequests: Component = () => {
     if (!connection || !connected()) return;
 
     try {
-      connection.reducers.rejectFriendRequest(requestId);
+      connection.reducers.rejectFriendRequest({ requestId });
       showToast({
         title: "Request Rejected",
         description: "Friend request rejected",
@@ -201,7 +200,7 @@ const FriendRequests: Component = () => {
     if (!connection || !connected()) return;
 
     try {
-      connection.reducers.cancelFriendRequest(requestId);
+      connection.reducers.cancelFriendRequest({ requestId });
       showToast({
         title: "Request Cancelled",
         description: "Friend request cancelled",

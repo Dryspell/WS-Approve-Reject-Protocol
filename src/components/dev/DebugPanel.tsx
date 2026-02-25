@@ -3,9 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import type { GameRoom } from "~/module_bindings/game_room_type";
-import type { User } from "~/module_bindings/user_type";
-import type { Vote } from "~/module_bindings/vote_type";
+import type { GameRoom, User, Vote } from "~/module_bindings/types";
 
 interface DebugPanelProps {
   room?: GameRoom;

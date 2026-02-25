@@ -1,4 +1,6 @@
 import { Browser, BrowserContext, Page } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Helper for managing multiple players in E2E tests.
@@ -9,6 +11,7 @@ export class MultiPlayerHelper {
   private contexts: BrowserContext[] = [];
   private pages: Page[] = [];
   private browser: Browser;
+  private logStreams: Map<Page, fs.WriteStream> = new Map();
 
   constructor(browser: Browser) {
     this.browser = browser;
@@ -21,20 +24,41 @@ export class MultiPlayerHelper {
    */
   async createPlayer(name?: string): Promise<Page> {
     const context = await this.browser.newContext({
-      // Each context has isolated storage
       storageState: undefined,
     });
     
     const page = await context.newPage();
     
-    // Add player index for debugging
     const playerIndex = this.pages.length + 1;
-    console.log(`Created Player ${playerIndex}${name ? ` (${name})` : ''}`);
+    const playerName = name || `Player ${playerIndex}`;
+    console.log(`Created ${playerName}`);
     
     this.contexts.push(context);
     this.pages.push(page);
     
     return page;
+  }
+
+  /**
+   * Attach console log capture to all pages, writing to a shared log file
+   */
+  attachLogCapture(logDir: string): void {
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+
+    this.pages.forEach((page, i) => {
+      const logFile = path.join(logDir, `player-${i + 1}-${Date.now()}.log`);
+      const stream = fs.createWriteStream(logFile, { flags: 'a' });
+      this.logStreams.set(page, stream);
+
+      page.on('console', (msg) => {
+        stream.write(`[${new Date().toISOString()}] [${msg.type()}] ${msg.text()}\n`);
+      });
+      page.on('pageerror', (err) => {
+        stream.write(`[${new Date().toISOString()}] [PAGE_ERROR] ${err.message}\n`);
+      });
+    });
   }
 
   /**
@@ -93,9 +117,13 @@ export class MultiPlayerHelper {
   }
 
   /**
-   * Clean up all contexts and pages
+   * Clean up all contexts, pages, and log streams
    */
   async cleanup(): Promise<void> {
+    for (const stream of this.logStreams.values()) {
+      stream.end();
+    }
+    this.logStreams.clear();
     await Promise.all(this.contexts.map(context => context.close()));
     this.contexts = [];
     this.pages = [];

@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@clockworklabs/spacetimedb-sdk':
-        specifier: ^1.1.0
-        version: 1.1.0(undici@6.21.3)
       '@corvu/resizable':
         specifier: ^0.2.5
         version: 0.2.5(solid-js@1.9.7)
@@ -98,6 +95,9 @@ importers:
       solid-js:
         specifier: ^1.9.7
         version: 1.9.7
+      spacetimedb:
+        specifier: 2.0.1
+        version: 2.0.1
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.0
@@ -249,12 +249,6 @@ packages:
   '@bcoe/v8-coverage@1.0.2':
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
-
-  '@clockworklabs/spacetimedb-sdk@1.1.0':
-    resolution: {integrity: sha512-eFX53sP4+IEgsIx0xDbkv+oK3KEnyPBRRTBbIwLFpnPcEZO0d98up9v8GQyAdMNpZ1ptTyvhwdytAvXUdpQlTA==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      undici: ^6.19.2
 
   '@cloudflare/kv-asset-handler@0.4.0':
     resolution: {integrity: sha512-+tv3z+SPp+gqTIcImN9o0hqE9xyfQjI1XD9pL6NuKjua9B1y7mNYv0S9cP+QEbA4ppVgGZEmKOvHX5G5Ei1CVA==}
@@ -2807,6 +2801,9 @@ packages:
   hast-util-whitespace@3.0.0:
     resolution: {integrity: sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==}
 
+  headers-polyfill@4.0.3:
+    resolution: {integrity: sha512-IScLbePpkvO846sIwOtOTDjutRMWdXdJmXdMvk6gCBHxFO8d+QKOQedyZSxFTTFYRSmlgSTDtXqqq4pcenBXLQ==}
+
   hookable@5.5.3:
     resolution: {integrity: sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ==}
 
@@ -3774,6 +3771,9 @@ packages:
   pump@3.0.2:
     resolution: {integrity: sha512-tUPXtzlGM8FE3P0ZL6DVs/3P58k9nk8/jZeQCurTJylQA8qFYzHFfhBJkuqyE0FifOsQ0uKWekiZ5g8wtr28cw==}
 
+  pure-rand@7.0.1:
+    resolution: {integrity: sha512-oTUZM/NAZS8p7ANR3SHh30kXB+zK2r2BPcEn/awJIbOvq82WoMN4p62AWWp3Hhw50G0xMsw1mhIBLqHw64EcNQ==}
+
   qs@6.14.0:
     resolution: {integrity: sha512-YWWTjgABSKcvs/nWBi9PycY/JiPJqOD4JA6o9Sej2AtvSGarXxKC3OQSk4pAarbdQlKAh5D4FCQkJNkW+GAn3w==}
     engines: {node: '>=0.6'}
@@ -4083,6 +4083,29 @@ packages:
   space-separated-tokens@2.0.2:
     resolution: {integrity: sha512-PEGlAwrG8yXGXRjW32fGbg66JAlOAwbObuqVoJpv/mRgoWDQfgH1wDPvtzWyUSNAXBGSk8h755YDbbcEy3SH2Q==}
 
+  spacetimedb@2.0.1:
+    resolution: {integrity: sha512-19YkLz1P+JQDlYvlegDsn3YF4OsE2Pih31e5Xx/kobTExKwx/AtFWRUSA/EiRWvMV9jaIWzMhnsVfG+1fJ39Aw==}
+    peerDependencies:
+      '@angular/core': '>=17.0.0'
+      '@tanstack/react-query': ^5.0.0
+      react: ^18.0.0 || ^19.0.0-0 || ^19.0.0
+      svelte: ^4.0.0 || ^5.0.0
+      undici: ^6.19.2
+      vue: ^3.3.0
+    peerDependenciesMeta:
+      '@angular/core':
+        optional: true
+      '@tanstack/react-query':
+        optional: true
+      react:
+        optional: true
+      svelte:
+        optional: true
+      undici:
+        optional: true
+      vue:
+        optional: true
+
   spdx-correct@3.2.0:
     resolution: {integrity: sha512-kN9dJbvnySHULIluDHy32WHRUu3Og7B9sbY7tsFLctQkIqnMh3hErYgdMjTYuqmcXX+lK5T1lnUt3G7zNswmZA==}
 
@@ -4109,6 +4132,10 @@ packages:
 
   statuses@2.0.1:
     resolution: {integrity: sha512-RwNA9Z/7PrK06rYLIzFMlaF+l73iwpzsqRIFgbMLbTcLD6cOao82TaWefPXQvB2fOC4AjuYSEndS7N/mTCbkdQ==}
+    engines: {node: '>= 0.8'}
+
+  statuses@2.0.2:
+    resolution: {integrity: sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==}
     engines: {node: '>= 0.8'}
 
   std-env@3.9.0:
@@ -4354,10 +4381,6 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@6.21.3:
-    resolution: {integrity: sha512-gBLkYIlEnSp8pFbT64yFgGE6UIB9tAkhukC23PmMDCe5Nd+cRqKxSjw5y54MK2AZMgZfJWMaNE4nYUHgi1XEOw==}
-    engines: {node: '>=18.17'}
-
   unenv@1.10.0:
     resolution: {integrity: sha512-wY5bskBQFL9n3Eca5XnhH6KbUo/tfvkwm9OpcdCvLaeA7piBNbavbOKJySEwQ1V0RH6HvNlSAFRTpvTqgKRQXQ==}
 
@@ -4485,6 +4508,9 @@ packages:
 
   uqr@0.1.2:
     resolution: {integrity: sha512-MJu7ypHq6QasgF5YRTjqscSzQp/W11zoUk6kvmlH+fmWEs63Y0Eib13hYFwAzagRJcVY8WVnlV+eBDUGMJ5IbA==}
+
+  url-polyfill@1.1.14:
+    resolution: {integrity: sha512-p4f3TTAG6ADVF3mwbXw7hGw+QJyw5CnNGvYh5fCuQQZIiuKUswqcznyV3pGDP9j0TSmC4UvRKm8kl1QsX1diiQ==}
 
   urlpattern-polyfill@10.1.0:
     resolution: {integrity: sha512-IGjKp/o0NL3Bso1PymYURCJxMPNAf/ILOpendP9f5B6e1rTJgdgiOvgfoT8VxCAdY+Wisb9uhGaJJf3yZ2V9nw==}
@@ -4901,10 +4927,6 @@ snapshots:
       '@babel/helper-validator-identifier': 7.27.1
 
   '@bcoe/v8-coverage@1.0.2': {}
-
-  '@clockworklabs/spacetimedb-sdk@1.1.0(undici@6.21.3)':
-    dependencies:
-      undici: 6.21.3
 
   '@cloudflare/kv-asset-handler@0.4.0':
     dependencies:
@@ -7358,6 +7380,8 @@ snapshots:
     dependencies:
       '@types/hast': 3.0.4
 
+  headers-polyfill@4.0.3: {}
+
   hookable@5.5.3: {}
 
   hosted-git-info@7.0.2:
@@ -8293,6 +8317,8 @@ snapshots:
       end-of-stream: 1.4.4
       once: 1.4.0
 
+  pure-rand@7.0.1: {}
+
   qs@6.14.0:
     dependencies:
       side-channel: 1.1.0
@@ -8668,6 +8694,17 @@ snapshots:
 
   space-separated-tokens@2.0.2: {}
 
+  spacetimedb@2.0.1:
+    dependencies:
+      base64-js: 1.5.1
+      headers-polyfill: 4.0.3
+      object-inspect: 1.13.4
+      prettier: 3.5.3
+      pure-rand: 7.0.1
+      safe-stable-stringify: 2.5.0
+      statuses: 2.0.2
+      url-polyfill: 1.1.14
+
   spdx-correct@3.2.0:
     dependencies:
       spdx-expression-parse: 3.0.1
@@ -8691,6 +8728,8 @@ snapshots:
   standard-as-callback@2.1.0: {}
 
   statuses@2.0.1: {}
+
+  statuses@2.0.2: {}
 
   std-env@3.9.0: {}
 
@@ -8953,8 +8992,6 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@6.21.3: {}
-
   unenv@1.10.0:
     dependencies:
       consola: 3.4.2
@@ -9079,6 +9116,8 @@ snapshots:
       picocolors: 1.1.1
 
   uqr@0.1.2: {}
+
+  url-polyfill@1.1.14: {}
 
   urlpattern-polyfill@10.1.0: {}
 

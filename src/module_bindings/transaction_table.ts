@@ -3,104 +3,21 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { Transaction } from "./transaction_type";
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-/**
- * Table handle for the table `transaction`.
- *
- * Obtain a handle from the [`transaction`] property on [`RemoteTables`],
- * like `ctx.db.transaction`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.transaction.on_insert(...)`.
- */
-export class TransactionTableHandle {
-  tableCache: TableCache<Transaction>;
-
-  constructor(tableCache: TableCache<Transaction>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<Transaction> {
-    return this.tableCache.iter();
-  }
-  /**
-   * Access to the `id` unique index on the table `transaction`,
-   * which allows point queries on the field of the same name
-   * via the [`TransactionIdUnique.find`] method.
-   *
-   * Users are encouraged not to explicitly reference this type,
-   * but to directly chain method calls,
-   * like `ctx.db.transaction.id().find(...)`.
-   *
-   * Get a handle on the `id` unique index on the table `transaction`.
-   */
-  id = {
-    // Find the subscribed row whose `id` column value is equal to `col_val`,
-    // if such a row is present in the client cache.
-    find: (col_val: number): Transaction | undefined => {
-      for (let row of this.tableCache.iter()) {
-        if (deepEqual(row.id, col_val)) {
-          return row;
-        }
-      }
-    },
-  };
-
-  onInsert = (cb: (ctx: EventContext, row: Transaction) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: Transaction) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: Transaction) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: Transaction) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-
-  // Updates are only defined for tables with primary keys.
-  onUpdate = (cb: (ctx: EventContext, oldRow: Transaction, newRow: Transaction) => void) => {
-    return this.tableCache.onUpdate(cb);
-  }
-
-  removeOnUpdate = (cb: (ctx: EventContext, onRow: Transaction, newRow: Transaction) => void) => {
-    return this.tableCache.removeOnUpdate(cb);
-  }}
+export default __t.row({
+  id: __t.i32().primaryKey(),
+  roomId: __t.i32().name("room_id"),
+  fromPlayer: __t.string().name("from_player"),
+  toPlayer: __t.string().name("to_player"),
+  transactionType: __t.string().name("transaction_type"),
+  amount: __t.f64(),
+  voteId: __t.option(__t.i32()).name("vote_id"),
+  guaranteeId: __t.option(__t.i32()).name("guarantee_id"),
+  timestamp: __t.timestamp(),
+});

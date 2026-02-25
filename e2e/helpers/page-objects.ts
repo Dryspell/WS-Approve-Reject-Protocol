@@ -22,6 +22,9 @@ export class VoteGamePage {
   readonly createRoomButton: Locator;
   readonly roomNameInput: Locator;
   readonly buyinAmountInput: Locator;
+  readonly votesPerPlayerInput: Locator;
+  readonly allowRebuyCheckbox: Locator;
+  readonly allowMidgameJoinCheckbox: Locator;
   readonly submitCreateRoomButton: Locator;
   readonly cancelCreateRoomButton: Locator;
   
@@ -48,8 +51,11 @@ export class VoteGamePage {
     // Room management
     this.createRoomButton = page.locator('button:has-text("Create Room")').first();
     this.roomNameInput = page.locator('input[placeholder="My Game Room"]');
-    this.buyinAmountInput = page.locator('input[type="number"]');
-    this.submitCreateRoomButton = page.locator('button:has-text("Create Room ($")');
+    this.buyinAmountInput = page.locator('label:has-text("Buy-in") + input, label:has-text("Buy-in") ~ input').first();
+    this.votesPerPlayerInput = page.locator('label:has-text("Votes per Player") + input, label:has-text("Votes per Player") ~ input').first();
+    this.allowRebuyCheckbox = page.locator('label:has-text("Allow Re-buy") input[type="checkbox"]');
+    this.allowMidgameJoinCheckbox = page.locator('label:has-text("Allow Mid-game Join") input[type="checkbox"]');
+    this.submitCreateRoomButton = page.locator('button:has-text("Create Room")').last();
     this.cancelCreateRoomButton = page.locator('button:has-text("Cancel")');
     
     // Ready system - use specific text to avoid matching room tabs
@@ -80,15 +86,36 @@ export class VoteGamePage {
     );
   }
 
-  async createRoom(name: string, buyinAmount: number = 10) {
-    // Wait for button to be enabled (connection established)
+  async createRoom(name: string, options: {
+    buyinAmount?: number;
+    votesPerPlayer?: number;
+    allowRebuy?: boolean;
+    allowMidgameJoin?: boolean;
+  } = {}) {
+    const { buyinAmount = 10, votesPerPlayer = 5, allowRebuy = true, allowMidgameJoin = false } = options;
+
     await expect(this.createRoomButton).toBeEnabled({ timeout: 15000 });
     await this.createRoomButton.click();
     await this.roomNameInput.fill(name);
-    await this.buyinAmountInput.fill(buyinAmount.toString());
+
+    if (await this.buyinAmountInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await this.buyinAmountInput.fill(buyinAmount.toString());
+    }
+    if (await this.votesPerPlayerInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await this.votesPerPlayerInput.fill(votesPerPlayer.toString());
+    }
+
+    const rebuyChecked = await this.allowRebuyCheckbox.isChecked().catch(() => true);
+    if (rebuyChecked !== allowRebuy) {
+      await this.allowRebuyCheckbox.click();
+    }
+
+    const midgameChecked = await this.allowMidgameJoinCheckbox.isChecked().catch(() => false);
+    if (midgameChecked !== allowMidgameJoin) {
+      await this.allowMidgameJoinCheckbox.click();
+    }
+
     await this.submitCreateRoomButton.click();
-    
-    // Wait for room tab to appear (use first() to avoid strict mode issues with multiple matches)
     await expect(this.page.locator(`[role="tab"]:has-text("${name}")`).first()).toBeVisible({ timeout: 10000 });
   }
 

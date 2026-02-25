@@ -6,8 +6,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { TextField, TextFieldInput, TextFieldLabel } from "~/components/ui/text-field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
-import type { User } from "~/module_bindings/user_type";
-import type { Transaction } from "~/module_bindings/transaction_type";
+import type { User, Transaction } from "~/module_bindings/types";
 
 interface Achievement {
   id: string;
@@ -193,15 +192,17 @@ export const PlayerProfile: Component<PlayerProfileProps> = (props) => {
     setAchievements(allAchievements);
   };
 
-  const saveName = () => {
+  const saveName = async () => {
     const connection = conn();
     if (!connection || !newName().trim()) return;
 
-    // TODO: Call reducer to update name
-    // connection.call('updateUserName', newName());
-    
-    setIsEditingName(false);
-    loadProfile(); // Reload to show updated name
+    try {
+      await connection.reducers.setName({ name: newName().trim() });
+      setIsEditingName(false);
+      loadProfile();
+    } catch (error) {
+      console.error('Failed to update name:', error);
+    }
   };
 
   return (

@@ -3,104 +3,18 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
-import { User } from "./user_type";
-import { EventContext, Reducer, RemoteReducers, RemoteTables } from ".";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-/**
- * Table handle for the table `user`.
- *
- * Obtain a handle from the [`user`] property on [`RemoteTables`],
- * like `ctx.db.user`.
- *
- * Users are encouraged not to explicitly reference this type,
- * but to directly chain method calls,
- * like `ctx.db.user.on_insert(...)`.
- */
-export class UserTableHandle {
-  tableCache: TableCache<User>;
-
-  constructor(tableCache: TableCache<User>) {
-    this.tableCache = tableCache;
-  }
-
-  count(): number {
-    return this.tableCache.count();
-  }
-
-  iter(): Iterable<User> {
-    return this.tableCache.iter();
-  }
-  /**
-   * Access to the `identity` unique index on the table `user`,
-   * which allows point queries on the field of the same name
-   * via the [`UserIdentityUnique.find`] method.
-   *
-   * Users are encouraged not to explicitly reference this type,
-   * but to directly chain method calls,
-   * like `ctx.db.user.identity().find(...)`.
-   *
-   * Get a handle on the `identity` unique index on the table `user`.
-   */
-  identity = {
-    // Find the subscribed row whose `identity` column value is equal to `col_val`,
-    // if such a row is present in the client cache.
-    find: (col_val: Identity): User | undefined => {
-      for (let row of this.tableCache.iter()) {
-        if (deepEqual(row.identity, col_val)) {
-          return row;
-        }
-      }
-    },
-  };
-
-  onInsert = (cb: (ctx: EventContext, row: User) => void) => {
-    return this.tableCache.onInsert(cb);
-  }
-
-  removeOnInsert = (cb: (ctx: EventContext, row: User) => void) => {
-    return this.tableCache.removeOnInsert(cb);
-  }
-
-  onDelete = (cb: (ctx: EventContext, row: User) => void) => {
-    return this.tableCache.onDelete(cb);
-  }
-
-  removeOnDelete = (cb: (ctx: EventContext, row: User) => void) => {
-    return this.tableCache.removeOnDelete(cb);
-  }
-
-  // Updates are only defined for tables with primary keys.
-  onUpdate = (cb: (ctx: EventContext, oldRow: User, newRow: User) => void) => {
-    return this.tableCache.onUpdate(cb);
-  }
-
-  removeOnUpdate = (cb: (ctx: EventContext, onRow: User, newRow: User) => void) => {
-    return this.tableCache.removeOnUpdate(cb);
-  }}
+export default __t.row({
+  identity: __t.identity().primaryKey(),
+  name: __t.option(__t.string()),
+  online: __t.bool(),
+  walletBalance: __t.f64().name("wallet_balance"),
+  bankAccount: __t.f64().name("bank_account"),
+  totalProfitLoss: __t.f64().name("total_profit_loss"),
+});

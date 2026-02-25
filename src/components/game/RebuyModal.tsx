@@ -4,8 +4,7 @@ import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { showToast } from "~/components/ui/toast";
-import type { User } from "~/module_bindings/user_type";
-import type { GameRoom } from "~/module_bindings/game_room_type";
+import type { User, GameRoom } from "~/module_bindings/types";
 
 interface RebuyModalProps {
   user: User;
@@ -37,7 +36,7 @@ export const RebuyModal: Component<RebuyModalProps> = (props) => {
     setIsProcessing(true);
 
     try {
-      await connection.reducers.rebuyIntoGame(props.room.id);
+      await connection.reducers.rebuyIntoGame({ roomId: props.room.id });
       showToast({
         title: "Welcome Back!",
         description: `You've re-entered the game for $${rebuyCost().toFixed(2)}`,

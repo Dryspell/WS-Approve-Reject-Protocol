@@ -1,12 +1,11 @@
-import { Component, createSignal, For, Show, onMount } from "solid-js";
+import { Component, createSignal, For, Show, onMount, createEffect } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
-import type { User } from "~/module_bindings/user_type";
-import type { Transaction } from "~/module_bindings/transaction_type";
+import type { User, Transaction } from "~/module_bindings/types";
 
 interface PlayerStats {
   user: User;
@@ -28,28 +27,59 @@ export const Leaderboard: Component = () => {
     loadLeaderboardData();
   });
 
+  createEffect(() => {
+    timeframe();
+    loadLeaderboardData();
+  });
+
+  const getTimeframeCutoff = (tf: 'all-time' | 'season' | 'weekly'): number => {
+    const now = Date.now();
+    switch (tf) {
+      case 'weekly':
+        return now - 7 * 24 * 60 * 60 * 1000;
+      case 'season':
+        return now - 90 * 24 * 60 * 60 * 1000;
+      case 'all-time':
+      default:
+        return 0;
+    }
+  };
+
   const loadLeaderboardData = () => {
     const connection = conn();
     if (!connection) return;
 
-    // Load all users
     const allUsers = Array.from(connection.db.user.iter());
-    
-    // Load all transactions for game analysis
     const allTransactions = Array.from(connection.db.transaction.iter());
     setTransactions(allTransactions);
 
-    // Calculate stats for each player
+    const cutoff = getTimeframeCutoff(timeframe());
+
+    const filteredTransactions = cutoff > 0
+      ? allTransactions.filter((t) => {
+          const ts = Number(t.timestamp.seconds ?? t.timestamp) * 1000;
+          return ts >= cutoff;
+        })
+      : allTransactions;
+
     const playerStats = allUsers.map((user) => {
       const userId = user.identity.toHexString();
-      
-      // Find pot distribution transactions (wins)
-      const wins = allTransactions.filter(
+
+      const wins = filteredTransactions.filter(
         (t) => t.transactionType === 'pot_distribution' && t.toPlayer === userId
       );
 
-      // Estimate games played (very rough - would need better tracking)
-      const gamesPlayed = Math.max(1, Math.floor(Math.abs(user.totalProfitLoss) / 10) + wins.length);
+      const potWinnings = wins.reduce((sum, t) => sum + t.amount, 0);
+      const buyIns = filteredTransactions.filter(
+        (t) => (t.transactionType === 'rebuy' || t.transactionType === 'pot_distribution') && t.fromPlayer === userId
+      );
+      const totalSpent = buyIns.reduce((sum, t) => sum + t.amount, 0);
+
+      const profit = timeframe() === 'all-time'
+        ? user.totalProfitLoss
+        : potWinnings - totalSpent;
+
+      const gamesPlayed = Math.max(1, Math.floor(Math.abs(profit) / 10) + wins.length);
       const gamesWon = wins.length;
       const winRate = gamesPlayed > 0 ? (gamesWon / gamesPlayed) * 100 : 0;
 
@@ -58,13 +88,12 @@ export const Leaderboard: Component = () => {
         gamesPlayed,
         gamesWon,
         winRate,
-        totalProfit: user.totalProfitLoss,
-        averageProfit: user.totalProfitLoss / gamesPlayed,
-        rank: 0, // Will be calculated after sorting
+        totalProfit: profit,
+        averageProfit: profit / gamesPlayed,
+        rank: 0,
       };
     });
 
-    // Sort by total profit and assign ranks
     const sorted = playerStats
       .sort((a, b) => b.totalProfit - a.totalProfit)
       .map((player, index) => ({

@@ -3,10 +3,7 @@ import { createEffect } from "solid-js";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { withSpacetimeDBErrorHandling, withRetry, SpacetimeDBErrorCodes, SpacetimeDBError } from "~/lib/spacetime-errors";
 
-// Import types from their specific modules to avoid conflicts
-import type { Unit } from "~/module_bindings/unit_type";
-import type { Vote } from "~/module_bindings/vote_type";
-import type { GameRoom } from "~/module_bindings/game_room_type";
+import type { Unit, Vote, GameRoom } from "~/module_bindings/types";
 
 export interface VoteState {
   unitVotes: Record<number, {
@@ -102,7 +99,7 @@ export const useVoteStore = () => {
     }
 
     try {
-      connection.reducers.setUnitVoteColor(unitId, color);
+      connection.reducers.setUnitVoteColor({ unitId, color });
     } catch (error) {
       throw new SpacetimeDBError(
         "Failed to set unit vote color",
@@ -121,7 +118,7 @@ export const useVoteStore = () => {
     }
 
     try {
-      connection.reducers.tradeUnitVote(unitId, buyerId, price);
+      connection.reducers.tradeUnitVote({ unitId, buyerId, price });
     } catch (error) {
       throw new SpacetimeDBError(
         "Failed to trade unit vote",
@@ -140,7 +137,7 @@ export const useVoteStore = () => {
     }
 
     try {
-      connection.reducers.processRoundVotes(roomId, roundNumber);
+      connection.reducers.processRoundVotes({ roomId, roundNumber });
     } catch (error) {
       throw new SpacetimeDBError(
         "Failed to process round votes",

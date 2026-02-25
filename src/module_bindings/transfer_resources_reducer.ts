@@ -3,65 +3,16 @@
 
 /* eslint-disable */
 /* tslint:disable */
-// @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  CallReducerFlags,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  DbContext,
-  ErrorContextInterface,
-  Event,
-  EventContextInterface,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  ReducerEventContextInterface,
-  SubscriptionBuilderImpl,
-  SubscriptionEventContextInterface,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-} from "@clockworklabs/spacetimedb-sdk";
+  TypeBuilder as __TypeBuilder,
+  t as __t,
+  type AlgebraicTypeType as __AlgebraicTypeType,
+  type Infer as __Infer,
+} from "spacetimedb";
 
-export type TransferResources = {
-  sourceId: number,
-  targetId: number,
-  resourceType: string,
-  amount: number,
+export default {
+  sourceId: __t.i32(),
+  targetId: __t.i32(),
+  resourceType: __t.string(),
+  amount: __t.i32(),
 };
-
-/**
- * A namespace for generated helper functions.
- */
-export namespace TransferResources {
-  /**
-  * A function which returns this type represented as an AlgebraicType.
-  * This function is derived from the AlgebraicType used to generate this type.
-  */
-  export function getTypeScriptAlgebraicType(): AlgebraicType {
-    return AlgebraicType.createProductType([
-      new ProductTypeElement("sourceId", AlgebraicType.createI32Type()),
-      new ProductTypeElement("targetId", AlgebraicType.createI32Type()),
-      new ProductTypeElement("resourceType", AlgebraicType.createStringType()),
-      new ProductTypeElement("amount", AlgebraicType.createI32Type()),
-    ]);
-  }
-
-  export function serialize(writer: BinaryWriter, value: TransferResources): void {
-    TransferResources.getTypeScriptAlgebraicType().serialize(writer, value);
-  }
-
-  export function deserialize(reader: BinaryReader): TransferResources {
-    return TransferResources.getTypeScriptAlgebraicType().deserialize(reader);
-  }
-
-}
-

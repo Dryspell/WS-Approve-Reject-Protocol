@@ -1,6 +1,5 @@
 import { Component, createSignal, For, Show } from "solid-js";
-import type { Vote } from "~/module_bindings/vote_type";
-import type { Transaction } from "~/module_bindings/transaction_type";
+import type { Vote, Transaction } from "~/module_bindings/types";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Button } from "~/components/ui/button";
@@ -64,12 +63,32 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
     return props.votes.filter((v) => v.playerId === props.currentUserId && v.roomId === props.roomId);
   };
 
-  // Get trade history
+  // Get all transaction history for this room
   const recentTrades = () => {
     return props.transactions
-      .filter((t) => t.roomId === props.roomId && t.transactionType === "vote_sale")
+      .filter((t) => t.roomId === props.roomId)
       .sort((a, b) => Number(b.timestamp) - Number(a.timestamp))
-      .slice(0, 20);
+      .slice(0, 30);
+  };
+
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case "vote_sale": return "🎫";
+      case "guarantee_purchase": return "🛡️";
+      case "pot_distribution": return "🏆";
+      case "rebuy": return "🔄";
+      default: return "💰";
+    }
+  };
+
+  const getTransactionLabel = (type: string) => {
+    switch (type) {
+      case "vote_sale": return "Vote Sale";
+      case "guarantee_purchase": return "Guarantee Purchase";
+      case "pot_distribution": return "Pot Distribution";
+      case "rebuy": return "Re-Buy";
+      default: return type;
+    }
   };
 
   const handleBuyVote = async (voteId: number, price: number) => {
@@ -82,7 +101,7 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
     }
 
     try {
-      connection.reducers.transferVoteOwnership(voteId, props.currentUserId, price);
+      connection.reducers.transferVoteOwnership({ voteId, buyerId: props.currentUserId, price });
       ToastHelper.success("Vote Purchased", `You bought vote #${voteId} for $${price}`);
       sounds.tradeComplete();
       sounds.moneyReceived();
@@ -99,7 +118,7 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
     const price = priceInputs()[voteId];
     if (price && price > 0) {
       try {
-        connection.reducers.setVoteForSale(voteId, price);
+        connection.reducers.setVoteForSale({ voteId, price });
         ToastHelper.success("Vote Listed", `Vote #${voteId} is now listed for $${price}`);
       } catch (error) {
         ToastHelper.error("Failed to list vote");
@@ -112,7 +131,7 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
     if (!connection) return;
 
     try {
-      connection.reducers.removeVoteFromSale(voteId);
+      connection.reducers.removeVoteFromSale({ voteId });
       ToastHelper.success("Vote Unlisted", `Vote #${voteId} removed from market`);
     } catch (error) {
       ToastHelper.error("Failed to remove vote");
@@ -304,6 +323,7 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
               roundNumber={props.roundNumber}
               currentUserId={props.currentUserId}
               userWalletBalance={props.userWalletBalance}
+              myVotes={myVotes()}
             />
           </TabsContent>
 
@@ -315,25 +335,35 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                   each={recentTrades()}
                   fallback={
                     <div class="rounded border border-dashed p-8 text-center text-sm text-gray-500">
-                      No recent trades
+                      No transactions yet
                     </div>
                   }
                 >
                   {(trade) => {
-                    const isBuyer = trade.toPlayer === props.currentUserId;
-                    const isSeller = trade.fromPlayer === props.currentUserId;
+                    const isIncoming = trade.toPlayer === props.currentUserId;
+                    const isOutgoing = trade.fromPlayer === props.currentUserId;
                     
                     return (
                       <div class="rounded-lg border p-3">
                         <div class="flex items-center justify-between">
                           <div class="flex-1">
                             <div class="flex items-center gap-2">
-                              <span class="text-lg">🎫</span>
+                              <span class="text-lg">{getTransactionIcon(trade.transactionType)}</span>
                               <div>
                                 <div class="text-sm font-medium">
-                                  Vote Sale
-                                  {isBuyer && <Badge variant="default" class="ml-2 text-xs">You bought</Badge>}
-                                  {isSeller && <Badge variant="secondary" class="ml-2 text-xs">You sold</Badge>}
+                                  {getTransactionLabel(trade.transactionType)}
+                                  <Show when={isIncoming && trade.transactionType === "vote_sale"}>
+                                    <Badge variant="default" class="ml-2 text-xs">You bought</Badge>
+                                  </Show>
+                                  <Show when={isOutgoing && trade.transactionType === "vote_sale"}>
+                                    <Badge variant="secondary" class="ml-2 text-xs">You sold</Badge>
+                                  </Show>
+                                  <Show when={isIncoming && trade.transactionType === "pot_distribution"}>
+                                    <Badge variant="default" class="ml-2 text-xs bg-green-600">Won</Badge>
+                                  </Show>
+                                  <Show when={isOutgoing && trade.transactionType === "rebuy"}>
+                                    <Badge variant="secondary" class="ml-2 text-xs">Re-entry</Badge>
+                                  </Show>
                                 </div>
                                 <div class="text-xs text-gray-500">
                                   {new Date(Number(trade.timestamp) / 1000).toLocaleTimeString()}
@@ -341,9 +371,14 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                               </div>
                             </div>
                           </div>
-                          <Badge variant="outline" class="text-sm font-bold">
-                            ${trade.amount.toFixed(2)}
-                          </Badge>
+                          <div class="text-right">
+                            <Badge variant="outline" class="text-sm font-bold" classList={{
+                              "text-green-600": isIncoming,
+                              "text-red-600": isOutgoing && trade.transactionType !== "pot_distribution",
+                            }}>
+                              {isIncoming ? '+' : '-'}${trade.amount.toFixed(2)}
+                            </Badge>
+                          </div>
                         </div>
                       </div>
                     );
