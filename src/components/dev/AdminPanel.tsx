@@ -6,6 +6,7 @@ import { TextField, TextFieldInput, TextFieldLabel } from "~/components/ui/text-
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { resolvePlayerName } from "~/lib/game-utils";
 import type { GameRoom, User } from "~/module_bindings/types";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
@@ -212,7 +213,7 @@ export const AdminPanel: Component = () => {
                                       {user.name || 'Anonymous'}
                                     </div>
                                     <div class="text-xs text-gray-500 font-mono">
-                                      {user.identity.toHexString().slice(0, 16)}...
+                                      {resolvePlayerName(user.identity.toHexString(), conn())}
                                     </div>
                                   </div>
                                   <Badge variant={user.online ? 'default' : 'secondary'}>
@@ -307,7 +308,7 @@ export const AdminPanel: Component = () => {
                         <div class="flex justify-between">
                           <span>Identity:</span>
                           <span class="font-mono text-xs">
-                            {identity()?.toHexString().slice(0, 12)}...
+                            {identity() ? resolvePlayerName(identity()!.toHexString(), conn()) : ""}
                           </span>
                         </div>
                         <div class="flex justify-between">

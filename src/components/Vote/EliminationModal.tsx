@@ -5,6 +5,7 @@ import { Badge } from "~/components/ui/badge";
 import RebuyModal from "../game/RebuyModal";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import type { User, GameRoom } from "~/module_bindings/types";
+import { resolvePlayerName } from "~/lib/game-utils";
 
 interface EliminationModalProps {
   roundNumber: number;
@@ -107,7 +108,7 @@ const EliminationModal: Component<EliminationModalProps> = (props) => {
                     <For each={props.eliminatedPlayers}>
                       {(playerId) => (
                         <div class="text-sm text-red-800">
-                          • {playerId.slice(0, 12)}... (voted with majority)
+                          • {resolvePlayerName(playerId, conn())} (voted with majority)
                         </div>
                       )}
                     </For>
@@ -126,7 +127,7 @@ const EliminationModal: Component<EliminationModalProps> = (props) => {
                     <For each={props.survivingPlayers}>
                       {(playerId) => (
                         <div class="text-sm text-green-800">
-                          • {playerId.slice(0, 12)}... (voted with minority)
+                          • {resolvePlayerName(playerId, conn())} (voted with minority)
                         </div>
                       )}
                     </For>

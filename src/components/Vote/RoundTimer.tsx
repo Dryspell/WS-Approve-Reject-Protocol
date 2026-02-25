@@ -1,6 +1,4 @@
 import { Component, createSignal, onMount, onCleanup, Show, untrack } from "solid-js";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Progress } from "~/components/ui/progress";
 import { Badge } from "~/components/ui/badge";
 
 interface RoundTimerProps {
@@ -63,8 +61,9 @@ const RoundTimer: Component<RoundTimerProps> = (props) => {
   });
 
   const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const totalSecs = Math.floor(seconds);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
@@ -93,111 +92,42 @@ const RoundTimer: Component<RoundTimerProps> = (props) => {
   const progressPercent = () => (timeRemaining() / duration()) * 100;
 
   return (
-    <Card
-      class="transition-all"
-      classList={{
-        "border-red-500 shadow-lg shadow-red-500/20": isWarning(),
-      }}
-    >
-      <CardHeader class="pb-3">
-        <CardTitle class="flex items-center justify-between text-base">
-          <span>Round {props.roundNumber}</span>
-          <Badge variant={isWarning() ? "destructive" : "default"}>
-            {getPhaseLabel()}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent class="space-y-3">
-        {/* Circular Progress Representation */}
-        <div class="flex items-center justify-center">
-          <div class="relative h-32 w-32">
-            {/* Background circle */}
-            <svg class="h-full w-full -rotate-90 transform">
-              <circle
-                cx="64"
-                cy="64"
-                r="56"
-                stroke="currentColor"
-                stroke-width="8"
-                fill="none"
-                class="text-gray-200"
-              />
-              {/* Progress circle */}
-              <circle
-                cx="64"
-                cy="64"
-                r="56"
-                stroke="currentColor"
-                stroke-width="8"
-                fill="none"
-                stroke-linecap="round"
-                class={getPhaseColor()}
-                classList={{
-                  "text-red-500": isWarning(),
-                  "animate-pulse": isWarning(),
-                }}
-                style={{
-                  "stroke-dasharray": "351.86",
-                  "stroke-dashoffset": `${351.86 * (1 - progressPercent() / 100)}`,
-                  transition: "stroke-dashoffset 1s linear",
-                }}
-              />
-            </svg>
-            {/* Timer text in center */}
-            <div class="absolute inset-0 flex flex-col items-center justify-center">
-              <div
-                class="text-3xl font-bold"
-                classList={{
-                  "text-red-500": isWarning(),
-                  "animate-pulse": isWarning(),
-                }}
-              >
-                {formatTime(timeRemaining())}
-              </div>
-              <div class="text-xs text-gray-500">remaining</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Linear progress bar for additional visual feedback */}
-        <div>
-          <Progress
-            value={progressPercent()}
-            class="h-2"
-            classList={{
-              "[&>div]:bg-red-500": isWarning(),
+    <div class="flex items-center gap-2">
+      {/* Compact circular timer */}
+      <div class="relative h-10 w-10 flex-shrink-0">
+        <svg class="h-full w-full -rotate-90 transform">
+          <circle cx="20" cy="20" r="16" stroke="currentColor" stroke-width="3" fill="none" class="text-slate-200" />
+          <circle
+            cx="20" cy="20" r="16"
+            stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"
+            class={getPhaseColor()}
+            classList={{ "text-red-500": isWarning() }}
+            style={{
+              "stroke-dasharray": "100.53",
+              "stroke-dashoffset": `${100.53 * (1 - progressPercent() / 100)}`,
+              transition: "stroke-dashoffset 1s linear",
             }}
           />
+        </svg>
+      </div>
+      <div class="flex flex-col">
+        <div
+          class="text-lg font-bold leading-tight"
+          classList={{ "text-red-500 animate-pulse": isWarning() }}
+        >
+          {formatTime(timeRemaining())}
         </div>
-
-        {/* Phase descriptions */}
-        <div class="space-y-1 text-xs text-gray-600">
-          <Show when={phase() === "voting"}>
-            <p>⏰ Time to set vote colors and prepare strategy</p>
-          </Show>
-          <Show when={phase() === "action"}>
-            <p>⚡ Execute trades and unit actions</p>
-          </Show>
-          <Show when={phase() === "resolution"}>
-            <p>📊 Final moments - prepare for vote resolution!</p>
-          </Show>
-        </div>
-
-        {/* Warning message */}
-        <Show when={isWarning()}>
-          <div class="animate-pulse rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
-            ⚠️ Less than 30 seconds remaining!
-          </div>
-        </Show>
-
-        {/* Not started message */}
-        <Show when={!props.roundStartTime}>
-          <div class="rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-600">
-            ⏸️ Round not started yet
-          </div>
-        </Show>
-      </CardContent>
-    </Card>
+        <Badge
+          variant={isWarning() ? "destructive" : "outline"}
+          class="px-1 py-0 text-[10px] leading-tight"
+        >
+          {getPhaseLabel()}
+        </Badge>
+      </div>
+      <Show when={!props.roundStartTime}>
+        <span class="text-xs text-slate-400">Not started</span>
+      </Show>
+    </div>
   );
 };
 

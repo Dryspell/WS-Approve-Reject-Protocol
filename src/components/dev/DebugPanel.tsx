@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { resolvePlayerName } from "~/lib/game-utils";
 import type { GameRoom, User, Vote } from "~/module_bindings/types";
 
 interface DebugPanelProps {
@@ -13,6 +15,7 @@ interface DebugPanelProps {
 }
 
 export const DebugPanel: Component<DebugPanelProps> = (props) => {
+  const { conn } = useSpacetimeDB();
   const [isOpen, setIsOpen] = createSignal(false);
   const [activeTab, setActiveTab] = createSignal<'state' | 'network' | 'logs'>('state');
   const [logs, setLogs] = createSignal<Array<{ time: string; level: string; message: string }>>([]);
@@ -185,7 +188,7 @@ export const DebugPanel: Component<DebugPanelProps> = (props) => {
                                   <Badge>${player.walletBalance.toFixed(0)}</Badge>
                                 </div>
                                 <div class="text-xs text-gray-600">
-                                  {player.identity.toHexString().slice(0, 12)}...
+                                  {resolvePlayerName(player.identity.toHexString(), conn())}
                                 </div>
                               </div>
                             )}

@@ -474,7 +474,7 @@ pub fn start_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
         }
         
         room.pot_size = pot;
-        room.start_time = Some(ctx.timestamp.to_micros_since_unix_epoch() * 1000 + 5000); // 5 second countdown
+        room.start_time = Some(ctx.timestamp.to_micros_since_unix_epoch() / 1000 + 5000); // 5 second countdown (millis)
         room.current_round = 1;
         room.game_status = "active".to_string();
         ctx.db.game_room().id().update(room);
@@ -633,7 +633,7 @@ pub fn create_game_event(
         source_id,
         target_id,
         value,
-        timestamp: ctx.timestamp.to_micros_since_unix_epoch() * 1000,
+        timestamp: ctx.timestamp.to_micros_since_unix_epoch() / 1000,
     };
     ctx.db.game_event().insert(event);
     Ok(())

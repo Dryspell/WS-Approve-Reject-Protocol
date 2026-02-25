@@ -10,6 +10,7 @@ import ChatMessage from "./ChatMessage";
 import UserAvatarCard from "./UserAvatarCard";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { resolvePlayerName } from "~/lib/game-utils";
 import type { ChatRoom, ChatMessage as ChatMessageType, ChatPermission, User } from "~/module_bindings/types";
 
 const SpacetimeChat: Component = () => {
@@ -261,7 +262,7 @@ const SpacetimeChat: Component = () => {
                 <span class="mr-1">●</span> Connected
               </Badge>
               <span class="text-sm text-muted-foreground">
-                Identity: {identity()?.toHexString().slice(0, 12)}...
+                Identity: {identity() ? resolvePlayerName(identity()!.toHexString(), conn()) : ""}
               </span>
             </Show>
           </div>
@@ -382,7 +383,7 @@ const SpacetimeChat: Component = () => {
                         <UserAvatarCard
                           user={{
                             id: permission.userId.toHexString(),
-                            username: user?.name || permission.userId.toHexString().slice(0, 8),
+                            username: user?.name || resolvePlayerName(permission.userId.toHexString(), conn()),
                           }}
                         />
                       );
@@ -417,7 +418,7 @@ const SpacetimeChat: Component = () => {
                             message={message.text}
                             members={Array.from(users().values()).map(u => ({
                               id: u.identity.toHexString(),
-                              username: u.name || u.identity.toHexString().slice(0, 8),
+                              username: u.name || resolvePlayerName(u.identity.toHexString(), conn()),
                             }))}
                           />
                         );

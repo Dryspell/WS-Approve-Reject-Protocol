@@ -6,6 +6,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { TextField, TextFieldInput, TextFieldLabel } from "~/components/ui/text-field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { resolvePlayerName } from "~/lib/game-utils";
 import type { User, Transaction } from "~/module_bindings/types";
 
 interface Achievement {
@@ -251,7 +252,7 @@ export const PlayerProfile: Component<PlayerProfileProps> = (props) => {
               </Show>
 
               <div class="mt-1 text-sm text-gray-500">
-                ID: {user()?.identity.toHexString().slice(0, 16)}...
+                ID: {user() ? resolvePlayerName(user()!.identity.toHexString(), conn()) : ""}
               </div>
 
               {/* Quick Stats */}

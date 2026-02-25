@@ -216,338 +216,340 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     }
   };
 
+  const [chatOpen, setChatOpen] = createSignal(false);
+
   return (
     <ErrorBoundary>
-      <div class="flex h-screen flex-col gap-4 p-4">
-        {/* Dev Tools */}
+      <div class="flex h-screen flex-col bg-gradient-to-b from-slate-50 to-slate-100">
+        {/* Dev Tools (collapsed to corner) */}
+        <div class="absolute right-2 top-2 z-40 flex gap-1">
+          <AdminPanel />
+        </div>
         <DebugPanel
           room={props.room}
           user={props.currentUser}
           votes={votes()}
           players={allPlayers()}
         />
-        <AdminPanel />
-      {/* Top Bar: Pot, Timer, Wallet, Sound Toggle */}
-      <div class="flex items-center justify-between">
-        {/* Pot Display */}
-        <Card class="flex-1">
-          <CardContent class="flex items-center gap-4 p-4">
-            <div class="text-4xl">💰</div>
-            <div>
-              <div class="text-sm text-gray-500">Pot</div>
-              <div id="pot-amount" class="text-2xl font-bold animate-pulse">
-                ${props.room.potSize.toFixed(2)}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Round Timer */}
-        <div class="flex-1 px-4" data-testid="round-timer">
-          <RoundTimer
-            roundNumber={props.room.currentRound}
-            roundStartTime={props.room.startTime ? BigInt(props.room.startTime) : undefined}
-            roundDuration={props.room.roundDuration}
-          />
+        {/* ===== GAME HEADER BAR ===== */}
+        <div class="flex items-center gap-3 border-b bg-white px-4 py-2 shadow-sm" data-testid="game-header">
+          {/* Room Name + Round */}
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-slate-700">{props.room.name}</span>
+            <Badge variant="secondary" class="text-xs">
+              Round {props.room.currentRound}
+            </Badge>
+          </div>
+
+          <div class="mx-2 h-6 w-px bg-slate-200" />
+
+          {/* Compact Timer */}
+          <div class="flex items-center gap-2" data-testid="round-timer">
+            <RoundTimer
+              roundNumber={props.room.currentRound}
+              roundStartTime={props.room.startTime ? BigInt(props.room.startTime) : undefined}
+              roundDuration={props.room.roundDuration}
+            />
+          </div>
+
+          <div class="flex-1" />
+
+          {/* Pot */}
+          <div class="flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-1.5 border border-amber-200">
+            <span class="text-sm text-amber-700">Pot</span>
+            <span id="pot-amount" class="text-lg font-bold text-amber-900">
+              ${props.room.potSize.toFixed(2)}
+            </span>
+          </div>
+
+          {/* Wallet */}
+          <div class="flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 border border-emerald-200" data-testid="wallet-display">
+            <span class="text-sm text-emerald-700">Wallet</span>
+            <span class="text-lg font-bold text-emerald-900" data-testid="wallet-balance">
+              ${props.currentUser.walletBalance.toFixed(2)}
+            </span>
+            <span class="text-xs text-slate-400" data-testid="profit-loss">
+              ({props.currentUser.totalProfitLoss >= 0 ? "+" : ""}
+              ${props.currentUser.totalProfitLoss.toFixed(2)})
+            </span>
+          </div>
+
+          <SoundToggle />
+
+          <Button
+            size="sm"
+            variant="ghost"
+            class="text-red-500 hover:bg-red-50 hover:text-red-700"
+            onClick={handleLeaveRoom}
+            title="Leave Room"
+          >
+            Leave
+          </Button>
         </div>
 
-        {/* Wallet Display */}
-        <Card class="flex-1" data-testid="wallet-display">
-          <CardContent class="flex items-center gap-4 p-4">
-            <div class="text-4xl">💵</div>
-            <div class="flex-1">
-              <div class="text-sm text-gray-500">Your Wallet</div>
-              <div class="text-2xl font-bold" data-testid="wallet-balance">
-                ${props.currentUser.walletBalance.toFixed(2)}
-              </div>
-              <div class="text-xs text-gray-500" data-testid="profit-loss">
-                {props.currentUser.totalProfitLoss >= 0 ? "+" : ""}
-                ${props.currentUser.totalProfitLoss.toFixed(2)} lifetime
-              </div>
+        {/* ===== MAIN GAME AREA ===== */}
+        <div class="flex flex-1 gap-3 overflow-hidden p-3">
+          {/* LEFT SIDEBAR: Players */}
+          <div class="flex w-56 flex-shrink-0 flex-col gap-2 overflow-auto">
+            <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 px-1">
+              Players ({remainingPlayers().length})
             </div>
-            <SoundToggle />
-            <Button
-              size="sm"
-              variant="outline"
-              class="ml-2 text-red-600 hover:bg-red-50"
-              onClick={handleLeaveRoom}
-              title="Leave Room"
-            >
-              ✕
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Game Area */}
-      <div class="grid flex-1 grid-cols-3 gap-4">
-        {/* Left: Player List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Players ({remainingPlayers().length})</CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-2">
-            {/* Active Players */}
             <For each={remainingPlayers()}>
               {(player) => {
-                const playerVotes = votes().filter(
+                const playerVotes = () => votes().filter(
                   (v) => v.playerId === player.identity.toHexString()
                 );
                 const isCurrentUser = player.identity.isEqual(
                   props.currentUser.identity
                 );
+                const playerIndex = () => remainingPlayers().indexOf(player);
+                const borderColors = ["border-l-blue-500", "border-l-emerald-500", "border-l-violet-500", "border-l-amber-500", "border-l-rose-500", "border-l-cyan-500", "border-l-orange-500", "border-l-pink-500"];
 
                 return (
                   <div
-                    class="rounded border p-2"
+                    class="flex items-center gap-2 rounded-md border border-l-4 bg-white p-2 shadow-sm transition-all hover:shadow"
                     classList={{
-                      "border-blue-500 bg-blue-50": isCurrentUser,
+                      "ring-2 ring-blue-400 ring-offset-1": isCurrentUser,
+                      [borderColors[playerIndex() % borderColors.length]]: true,
                     }}
                   >
-                    <div class="flex items-center justify-between">
-                      <div class="flex items-center gap-2">
-                        <div class="text-lg">
-                          {isCurrentUser ? "👤" : "🧑"}
-                        </div>
-                        <div>
-                          <div class="font-medium">
-                            {player.name || "Anonymous"}
-                            {isCurrentUser && " (You)"}
-                          </div>
-                          <div class="text-xs text-gray-500">
-                            {playerVotes.length} vote{playerVotes.length !== 1 ? "s" : ""}
-                          </div>
-                        </div>
+                    <div class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+                      {(player.name || "A")[0].toUpperCase()}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="truncate text-sm font-medium">
+                        {player.name || "Anonymous"}
+                        {isCurrentUser && <span class="text-xs text-blue-500 ml-1">(you)</span>}
                       </div>
-                      <Badge variant="default">${player.walletBalance.toFixed(0)}</Badge>
+                      <div class="flex gap-1.5 text-xs text-slate-400">
+                        <span>{playerVotes().length}v</span>
+                        <span>${player.walletBalance.toFixed(0)}</span>
+                      </div>
                     </div>
                   </div>
                 );
               }}
             </For>
 
-            {/* Eliminated Players */}
             <Show when={eliminatedPlayers().length > 0}>
-              <div class="border-t pt-2">
-                <p class="mb-2 text-sm font-semibold text-gray-500">
-                  Eliminated ({eliminatedPlayers().length})
-                </p>
-                <For each={eliminatedPlayers()}>
-                  {(player) => (
-                    <div class="rounded border border-red-200 bg-red-50 p-2 opacity-60">
-                      <div class="flex items-center gap-2">
-                        <div class="text-lg">☠️</div>
-                        <div class="text-sm line-through">
-                          {player.name || "Anonymous"}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </For>
+              <div class="mt-2 text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">
+                Eliminated ({eliminatedPlayers().length})
               </div>
+              <For each={eliminatedPlayers()}>
+                {(player) => (
+                  <div class="flex items-center gap-2 rounded-md border border-red-100 bg-red-50/50 p-2 opacity-60">
+                    <span class="text-sm">☠️</span>
+                    <span class="text-xs line-through text-slate-500">
+                      {player.name || "Anonymous"}
+                    </span>
+                  </div>
+                )}
+              </For>
             </Show>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Center: Your Votes */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Votes ({myVotes().length})</CardTitle>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            {/* Unset Votes */}
-            <Show when={unsetVotes().length > 0}>
-              <div>
-                <p class="mb-2 text-sm font-semibold text-gray-700">
-                  Unset Votes ({unsetVotes().length})
-                </p>
-                <div class="space-y-2">
-                  <For each={unsetVotes()}>
-                    {(vote) => (
-                      <div
-                        draggable
-                        onDragStart={() => handleDragStart(vote)}
-                        class="cursor-move rounded border-2 border-dashed border-gray-300 bg-gray-50 p-3 text-center transition-all hover:border-gray-400 hover:bg-gray-100"
-                      >
-                        <div class="text-sm font-medium">Vote #{vote.id}</div>
-                        <div class="text-xs text-gray-500">
-                          Drag to Red or Blue
+          {/* CENTER: Vote Assignment */}
+          <div class="flex flex-1 flex-col gap-3 overflow-auto">
+            <Card class="flex-1">
+              <CardHeader class="pb-2">
+                <CardTitle class="flex items-center justify-between text-base">
+                  <span>Your Votes ({myVotes().length})</span>
+                  <div class="flex gap-1.5 text-xs">
+                    <Badge variant="destructive" class="px-2">
+                      {redVotes().length} Red
+                    </Badge>
+                    <Badge class="bg-blue-600 px-2">
+                      {blueVotes().length} Blue
+                    </Badge>
+                    <Show when={unsetVotes().length > 0}>
+                      <Badge variant="secondary" class="px-2">
+                        {unsetVotes().length} Unset
+                      </Badge>
+                    </Show>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent class="space-y-3">
+                {/* Compact Vote Grid */}
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <For each={myVotes()}>
+                    {(vote) => {
+                      const color = () => vote.color;
+                      const bgClass = () => {
+                        if (color() === "red") return "bg-red-100 border-red-400 text-red-800";
+                        if (color() === "blue") return "bg-blue-100 border-blue-400 text-blue-800";
+                        return "bg-slate-50 border-dashed border-slate-300 text-slate-500";
+                      };
+                      return (
+                        <div
+                          class={`relative flex flex-col items-center gap-1 rounded-lg border-2 p-2 transition-all hover:shadow-md ${bgClass()}`}
+                          draggable
+                          onDragStart={() => handleDragStart(vote)}
+                        >
+                          <div class="text-xs font-bold">#{vote.id}</div>
+                          <Show
+                            when={color()}
+                            fallback={
+                              <div class="flex gap-1">
+                                <button
+                                  class="rounded bg-red-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-red-600"
+                                  onClick={() => handleSetVoteColor(vote.id, "red")}
+                                  data-testid={`set-red-${vote.id}`}
+                                >
+                                  Red
+                                </button>
+                                <button
+                                  class="rounded bg-blue-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-blue-600"
+                                  onClick={() => handleSetVoteColor(vote.id, "blue")}
+                                  data-testid={`set-blue-${vote.id}`}
+                                >
+                                  Blue
+                                </button>
+                              </div>
+                            }
+                          >
+                            <button
+                              class="text-[10px] underline opacity-60 hover:opacity-100"
+                              onClick={() => handleSetVoteColor(vote.id, "")}
+                            >
+                              Unset
+                            </button>
+                          </Show>
                         </div>
-                      </div>
+                      );
+                    }}
+                  </For>
+                </div>
+
+                {/* Drop Zones (compact) */}
+                <div class="grid grid-cols-2 gap-2">
+                  <div
+                    data-testid="vote-red"
+                    data-color="red"
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop("red")}
+                    class="flex flex-col items-center gap-1 rounded-lg border-2 border-dashed border-red-300 bg-red-50/50 p-3 text-center transition-colors"
+                    classList={{ "border-red-500 bg-red-100": draggedVote() !== null }}
+                  >
+                    <span class="text-sm font-semibold text-red-700">
+                      Red ({redVotes().length})
+                    </span>
+                    <span class="text-xs text-red-400">Drop here</span>
+                  </div>
+                  <div
+                    data-testid="vote-blue"
+                    data-color="blue"
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop("blue")}
+                    class="flex flex-col items-center gap-1 rounded-lg border-2 border-dashed border-blue-300 bg-blue-50/50 p-3 text-center transition-colors"
+                    classList={{ "border-blue-500 bg-blue-100": draggedVote() !== null }}
+                  >
+                    <span class="text-sm font-semibold text-blue-700">
+                      Blue ({blueVotes().length})
+                    </span>
+                    <span class="text-xs text-blue-400">Drop here</span>
+                  </div>
+                </div>
+
+                <Show when={myVotes().length >= 2}>
+                  <div class="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
+                    Split your {myVotes().length} votes across colors to guarantee minority survival.
+                  </div>
+                </Show>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* RIGHT SIDEBAR: Market */}
+          <div class="w-72 flex-shrink-0 overflow-auto xl:w-80">
+            <VoteMarketPanel
+              votes={votes()}
+              transactions={transactions()}
+              roomId={props.room.id}
+              roundNumber={props.room.currentRound}
+              currentUserId={props.currentUser.identity.toHexString()}
+              userWalletBalance={props.currentUser.walletBalance}
+            />
+          </div>
+        </div>
+
+        {/* ===== BOTTOM CHAT DRAWER ===== */}
+        <div class="border-t bg-white shadow-lg" classList={{ "h-10": !chatOpen(), "h-80": chatOpen() }}>
+          <button
+            class="flex w-full items-center justify-between px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            onClick={() => setChatOpen(!chatOpen())}
+          >
+            <div class="flex items-center gap-2">
+              <span>Chat</span>
+            </div>
+            <span class="text-xs">{chatOpen() ? "▼ Collapse" : "▲ Expand"}</span>
+          </button>
+          <Show when={chatOpen()}>
+            <div class="h-[calc(100%-2.5rem)]">
+              <Tabs defaultValue="chat">
+                <div class="border-b px-4">
+                  <TabsList class="grid w-full max-w-xs grid-cols-2">
+                    <TabsTrigger value="chat">Chat</TabsTrigger>
+                    <TabsTrigger value="replay">Replay</TabsTrigger>
+                  </TabsList>
+                </div>
+                <TabsContent value="chat" class="h-[calc(100%-3rem)] p-0">
+                  <ChatPanel roomId={props.room.id} roundNumber={props.room.currentRound} />
+                </TabsContent>
+                <TabsContent value="replay" class="h-[calc(100%-3rem)] overflow-auto p-4">
+                  <ReplayViewer
+                    roomId={props.room.id}
+                    transactions={transactions()}
+                    gameEvents={[]}
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
+          </Show>
+        </div>
+
+        {/* Elimination Modal */}
+        <Show when={showEliminationModal()}>
+          <EliminationModal
+            roundNumber={props.room.currentRound - 1}
+            eliminatedPlayers={eliminatedPlayers().map(p => p.identity.toHexString())}
+            survivingPlayers={remainingPlayers().map(p => p.identity.toHexString())}
+            minorityColor={getVoteTotals().minority}
+            redVotes={getVoteTotals().red}
+            blueVotes={getVoteTotals().blue}
+            room={props.room}
+            currentUser={props.currentUser}
+            onClose={() => setShowEliminationModal(false)}
+          />
+        </Show>
+
+        {/* Game Over Modal */}
+        <Show when={props.room.gameStatus === "completed"}>
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <Card class="w-96 shadow-2xl">
+              <CardHeader>
+                <CardTitle class="text-center text-2xl">Game Over!</CardTitle>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div class="text-center">
+                  <p class="text-lg font-semibold">Winners:</p>
+                  <For each={remainingPlayers()}>
+                    {(player) => (
+                      <p class="text-xl font-bold">
+                        {player.name || "Anonymous"} - $
+                        {(props.room.potSize / remainingPlayers().length).toFixed(2)}
+                      </p>
                     )}
                   </For>
                 </div>
-              </div>
-            </Show>
-
-            {/* Red Drop Zone */}
-            <div
-              data-testid="vote-red"
-              data-color="red"
-              onDragOver={handleDragOver}
-              onDrop={() => handleDrop("red")}
-              class="min-h-32 rounded-lg border-2 border-red-300 bg-red-50 p-4"
-            >
-              <div class="mb-2 flex items-center justify-between">
-                <span class="font-semibold text-red-700">
-                  🔴 Red Votes ({redVotes().length})
-                </span>
-              </div>
-              <div class="space-y-2">
-                <For
-                  each={redVotes()}
-                  fallback={
-                    <p class="text-center text-sm text-gray-500">
-                      Drop votes here
-                    </p>
-                  }
-                >
-                  {(vote) => (
-                    <div class="rounded border-2 border-red-400 bg-white p-2 text-center">
-                      <div class="text-sm font-medium">Vote #{vote.id}</div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleSetVoteColor(vote.id, "")}
-                        class="mt-1 text-xs"
-                      >
-                        Unset
-                      </Button>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
-
-            {/* Blue Drop Zone */}
-            <div
-              data-testid="vote-blue"
-              data-color="blue"
-              onDragOver={handleDragOver}
-              onDrop={() => handleDrop("blue")}
-              class="min-h-32 rounded-lg border-2 border-blue-300 bg-blue-50 p-4"
-            >
-              <div class="mb-2 flex items-center justify-between">
-                <span class="font-semibold text-blue-700">
-                  🔵 Blue Votes ({blueVotes().length})
-                </span>
-              </div>
-              <div class="space-y-2">
-                <For
-                  each={blueVotes()}
-                  fallback={
-                    <p class="text-center text-sm text-gray-500">
-                      Drop votes here
-                    </p>
-                  }
-                >
-                  {(vote) => (
-                    <div class="rounded border-2 border-blue-400 bg-white p-2 text-center">
-                      <div class="text-sm font-medium">Vote #{vote.id}</div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleSetVoteColor(vote.id, "")}
-                        class="mt-1 text-xs"
-                      >
-                        Unset
-                      </Button>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
-
-            {/* Vote Strategy Tip */}
-            <Show when={myVotes().length >= 2}>
-              <div class="rounded border border-green-200 bg-green-50 p-3 text-xs text-green-700">
-                💡 <strong>Pro tip:</strong> With {myVotes().length} votes, you can
-                split them (e.g., {Math.floor(myVotes().length / 2)} red,{" "}
-                {Math.ceil(myVotes().length / 2)} blue) to guarantee you're in the
-                minority!
-              </div>
-            </Show>
-          </CardContent>
-        </Card>
-
-        {/* Right: Market Panel */}
-        <div class="overflow-auto">
-          <VoteMarketPanel
-            votes={votes()}
-            transactions={transactions()}
-            roomId={props.room.id}
-            roundNumber={props.room.currentRound}
-            currentUserId={props.currentUser.identity.toHexString()}
-            userWalletBalance={props.currentUser.walletBalance}
-          />
-        </div>
-      </div>
-
-      {/* Bottom Panel: Chat & Replay Viewer */}
-      <Card class="max-h-96">
-        <Tabs defaultValue="chat">
-          <div class="border-b px-4 pt-3">
-            <TabsList class="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="chat">💬 Chat</TabsTrigger>
-              <TabsTrigger value="replay">🎬 Replay</TabsTrigger>
-            </TabsList>
+                <Button class="w-full" onClick={() => window.location.reload()}>
+                  Return to Lobby
+                </Button>
+              </CardContent>
+            </Card>
           </div>
-          
-          <TabsContent value="chat" class="h-80 p-0">
-            <ChatPanel roomId={props.room.id} roundNumber={props.room.currentRound} />
-          </TabsContent>
-          
-          <TabsContent value="replay" class="h-80 overflow-auto p-4">
-            <ReplayViewer
-              roomId={props.room.id}
-              transactions={transactions()}
-              gameEvents={[]}
-            />
-          </TabsContent>
-        </Tabs>
-      </Card>
-
-      {/* Elimination Modal */}
-      <Show when={showEliminationModal()}>
-        <EliminationModal
-          roundNumber={props.room.currentRound - 1}
-          eliminatedPlayers={eliminatedPlayers().map(p => p.identity.toHexString())}
-          survivingPlayers={remainingPlayers().map(p => p.identity.toHexString())}
-          minorityColor={getVoteTotals().minority}
-          redVotes={getVoteTotals().red}
-          blueVotes={getVoteTotals().blue}
-          room={props.room}
-          currentUser={props.currentUser}
-          onClose={() => setShowEliminationModal(false)}
-        />
-      </Show>
-
-      {/* Game Status Messages */}
-      <Show when={props.room.gameStatus === "completed"}>
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <Card class="w-96">
-            <CardHeader>
-              <CardTitle class="text-center text-2xl">🎉 Game Over!</CardTitle>
-            </CardHeader>
-            <CardContent class="space-y-4">
-              <div class="text-center">
-                <p class="text-lg font-semibold">Winners:</p>
-                <For each={remainingPlayers()}>
-                  {(player) => (
-                    <p class="text-xl">
-                      {player.name || "Anonymous"} - $
-                      {(props.room.potSize / remainingPlayers().length).toFixed(2)}
-                    </p>
-                  )}
-                </For>
-              </div>
-              <Button class="w-full" onClick={() => window.location.reload()}>
-                Return to Lobby
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </Show>
+        </Show>
       </div>
     </ErrorBoundary>
   );

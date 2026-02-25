@@ -5,6 +5,7 @@ import { Button } from "~/components/ui/button";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { resolvePlayerName } from "~/lib/game-utils";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import type { DirectMessageConversation, DirectMessage, User } from "~/module_bindings/types";
@@ -150,7 +151,7 @@ const DirectMessages: Component<DirectMessagesProps> = (props) => {
         return {
           conversation: c,
           otherUserId,
-          name: user?.name || otherHex.slice(0, 8),
+          name: user?.name || resolvePlayerName(otherHex, conn()),
           online: user?.online ?? false,
           unreadCount,
           lastMessage: lastMessage?.text.slice(0, 30) + (lastMessage?.text.length > 30 ? "..." : "") || "",
@@ -185,7 +186,7 @@ const DirectMessages: Component<DirectMessagesProps> = (props) => {
 
     return {
       identity: otherUserId,
-      name: user?.name || otherUserId.toHexString().slice(0, 8),
+      name: user?.name || resolvePlayerName(otherUserId.toHexString(), conn()),
       online: user?.online ?? false,
     };
   });

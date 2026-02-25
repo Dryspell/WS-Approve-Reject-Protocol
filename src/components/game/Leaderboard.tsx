@@ -5,6 +5,7 @@ import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { resolvePlayerName } from "~/lib/game-utils";
 import type { User, Transaction } from "~/module_bindings/types";
 
 interface PlayerStats {
@@ -177,7 +178,7 @@ export const Leaderboard: Component = () => {
                               )}
                             </div>
                             <div class="text-xs text-gray-500">
-                              {player.user.identity.toHexString().slice(0, 12)}...
+                              {resolvePlayerName(player.user.identity.toHexString(), conn())}
                             </div>
                           </div>
 

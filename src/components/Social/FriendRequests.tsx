@@ -5,6 +5,7 @@ import { Button } from "~/components/ui/button";
 import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { resolvePlayerName } from "~/lib/game-utils";
 import { showToast } from "~/components/ui/toast";
 import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import type { FriendRequest, User } from "~/module_bindings/types";
@@ -241,7 +242,7 @@ const FriendRequests: Component = () => {
                     </div>
                     <div>
                       <div class="text-sm font-medium">
-                        {user.name || user.identity.toHexString().slice(0, 12)}
+                        {user.name || resolvePlayerName(user.identity.toHexString(), conn())}
                       </div>
                       <div class="text-xs text-muted-foreground">
                         {user.online ? "Online" : "Offline"}

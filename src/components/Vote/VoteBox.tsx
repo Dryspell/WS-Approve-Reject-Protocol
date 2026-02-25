@@ -1,10 +1,8 @@
-import { Component, createSignal, For, createEffect, Show, onMount, Accessor, Setter } from "solid-js";
+import { Component, createSignal, For, createEffect, Show, Accessor, Setter } from "solid-js";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import { randAnimal } from "@ngneat/falso";
 import { createId } from "@paralleldrive/cuid2";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { Resizable, ResizableHandle, ResizablePanel } from "../ui/resizable";
-import UserAvatarCard from "../Chat/UserAvatarCard";
+import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import VotingInterface from "./VotingInterface";
 import GamePreStartInteractions from "./GamePreStartInteractions";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
@@ -13,6 +11,8 @@ import { DEFAULT_TOAST_DURATION } from "~/lib/timeout-constants";
 import { createStore } from "solid-js/store";
 import type { GameRoom, ReadyState } from "~/module_bindings/types";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { resolvePlayerName } from "~/lib/game-utils";
 
 /**
  * Check if multiuser mode is enabled via URL parameter.
@@ -295,223 +295,179 @@ const VoteBox: Component = () => {
   };
 
   return (
-    <div class="flex h-full flex-col gap-4">
-      {/* Connection Status Indicator */}
-      <div class="border-b bg-background p-2">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <Show
-              when={connected() && subscribed()}
-              fallback={
-                <Show
-                  when={connected()}
-                  fallback={
-                    <>
-                      <Badge variant="destructive" data-testid="connection-status">
-                        <span class="mr-1">●</span> Disconnected
-                      </Badge>
-                      <span class="text-sm text-muted-foreground">Connecting to SpacetimeDB...</span>
-                    </>
-                  }
-                >
-                  <Badge variant="secondary" data-testid="connection-status">
-                    <span class="mr-1">●</span> Syncing
+    <div class="flex h-full flex-col bg-slate-50">
+      {/* Top Bar */}
+      <div class="flex items-center justify-between border-b bg-white px-4 py-2 shadow-sm">
+        <div class="flex items-center gap-3">
+          <h1 class="text-lg font-bold text-slate-800">Vote Exchange</h1>
+          <Show
+            when={connected() && subscribed()}
+            fallback={
+              <Show
+                when={connected()}
+                fallback={
+                  <Badge variant="destructive" data-testid="connection-status" class="text-xs">
+                    Disconnected
                   </Badge>
-                  <span class="text-sm text-muted-foreground">Loading game data...</span>
-                </Show>
-              }
-            >
-              <Badge variant="default" data-testid="connection-status">
-                <span class="mr-1">●</span> Connected
-              </Badge>
-              <span class="text-sm text-muted-foreground" data-testid="identity-display">
-                Identity: {identity()?.toHexString().slice(0, 12)}...
-              </span>
-            </Show>
-          </div>
-          <div class="text-xs text-muted-foreground">
-            {Object.keys(rooms()).length} room{Object.keys(rooms()).length !== 1 ? "s" : ""} available
-          </div>
+                }
+              >
+                <Badge variant="secondary" data-testid="connection-status" class="text-xs">
+                  Syncing...
+                </Badge>
+              </Show>
+            }
+          >
+            <Badge variant="default" data-testid="connection-status" class="text-xs">
+              Connected
+            </Badge>
+            <span class="text-xs text-slate-500" data-testid="identity-display">
+              {resolvePlayerName(identity()?.toHexString() || "", conn())}
+            </span>
+          </Show>
         </div>
-      </div>
-
-      <div class="flex items-center justify-between px-4">
-        <h2 class="text-xl font-bold">Game Rooms</h2>
-        <button
+        <Button
+          size="sm"
           onClick={() => setShowCreateRoom(true)}
           disabled={!connected()}
-          class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Create Room
-        </button>
+          + New Room
+        </Button>
       </div>
 
-      {showCreateRoom() && (
-        <div class="space-y-3 rounded-lg border bg-gray-50 p-4 mx-4">
-          <div class="grid grid-cols-3 gap-4">
-            <div>
-              <label class="mb-1 block text-sm font-medium text-gray-700">
-                Room Name
-              </label>
-              <input
-                type="text"
-                value={newRoomName()}
-                onInput={e => setNewRoomName(e.currentTarget.value)}
-                onKeyDown={e => {
-                  if (e.key === "Enter" && newRoomName().trim() && connected()) {
-                    handleCreateRoom();
-                  }
-                }}
-                placeholder="My Game Room"
-                disabled={!connected()}
-                class="w-full rounded border p-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              />
+      {/* Create Room Panel */}
+      <Show when={showCreateRoom()}>
+        <div class="border-b bg-white p-4 shadow-sm">
+          <div class="mx-auto max-w-3xl space-y-3">
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label class="mb-1 block text-xs font-medium text-slate-600">Room Name</label>
+                <input
+                  type="text"
+                  value={newRoomName()}
+                  onInput={e => setNewRoomName(e.currentTarget.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && newRoomName().trim() && connected()) handleCreateRoom(); }}
+                  placeholder="My Game Room"
+                  disabled={!connected()}
+                  class="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-slate-600">Buy-in ($)</label>
+                <input
+                  type="number" min="0.01" step="1"
+                  value={buyinAmount()}
+                  onInput={e => setBuyinAmount(parseFloat(e.currentTarget.value) || 10)}
+                  disabled={!connected()}
+                  class="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium text-slate-600">Votes / Player</label>
+                <input
+                  type="number" min="1" max="20" step="1"
+                  value={votesPerPlayer()}
+                  onInput={e => setVotesPerPlayer(parseInt(e.currentTarget.value) || 5)}
+                  disabled={!connected()}
+                  class="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+                />
+              </div>
             </div>
-            <div>
-              <label class="mb-1 block text-sm font-medium text-gray-700">
-                Buy-in ($)
-              </label>
-              <input
-                type="number"
-                min="0.01"
-                step="1"
-                value={buyinAmount()}
-                onInput={e => setBuyinAmount(parseFloat(e.currentTarget.value) || 10)}
-                placeholder="10"
-                disabled={!connected()}
-                class="w-full rounded border p-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              />
+            <div class="flex items-center justify-between">
+              <div class="flex gap-4">
+                <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                  <input type="checkbox" checked={allowRebuy()} onChange={e => setAllowRebuy(e.currentTarget.checked)} class="rounded" />
+                  Allow Re-buy
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                  <input type="checkbox" checked={allowMidgameJoin()} onChange={e => setAllowMidgameJoin(e.currentTarget.checked)} class="rounded" />
+                  Mid-game Join
+                </label>
+              </div>
+              <div class="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setShowCreateRoom(false)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  onClick={handleCreateRoom}
+                  disabled={!connected() || !newRoomName().trim() || buyinAmount() <= 0}
+                >
+                  Create (${buyinAmount().toFixed(0)} | {votesPerPlayer()}v)
+                </Button>
+              </div>
             </div>
-            <div>
-              <label class="mb-1 block text-sm font-medium text-gray-700">
-                Votes per Player
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                step="1"
-                value={votesPerPlayer()}
-                onInput={e => setVotesPerPlayer(parseInt(e.currentTarget.value) || 5)}
-                disabled={!connected()}
-                class="w-full rounded border p-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-            </div>
-          </div>
-          <div class="flex gap-6 px-1">
-            <label class="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={allowRebuy()}
-                onChange={e => setAllowRebuy(e.currentTarget.checked)}
-                class="rounded"
-              />
-              Allow Re-buy
-            </label>
-            <label class="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={allowMidgameJoin()}
-                onChange={e => setAllowMidgameJoin(e.currentTarget.checked)}
-                class="rounded"
-              />
-              Allow Mid-game Join
-            </label>
-          </div>
-          <div class="flex gap-2">
-            <button
-              onClick={handleCreateRoom}
-              disabled={!connected() || !newRoomName().trim() || buyinAmount() <= 0}
-              class="flex-1 rounded bg-green-500 px-4 py-2 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Create Room (${buyinAmount().toFixed(2)} | {votesPerPlayer()} votes)
-            </button>
-            <button
-              onClick={() => setShowCreateRoom(false)}
-              class="rounded bg-gray-500 px-4 py-2 text-white hover:bg-gray-600"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      <Show when={!connected()}>
-        <div class="mx-4 rounded-lg border border-destructive bg-destructive/10 p-4">
-          <h2 class="mb-2 text-lg font-semibold text-destructive">
-            Not Connected to SpacetimeDB
-          </h2>
-          <p class="mb-3 text-sm">
-            The application cannot connect to SpacetimeDB. Please ensure:
-          </p>
-          <ul class="ml-6 list-disc space-y-1 text-sm text-muted-foreground">
-            <li>SpacetimeDB is running (check terminal for errors)</li>
-            <li>The correct host is configured in your .env file</li>
-            <li>No firewall is blocking the connection</li>
-          </ul>
-          <div class="mt-3 rounded bg-muted p-2 font-mono text-xs">
-            Expected: {import.meta.env.VITE_SPACETIME_HOST || "ws://localhost:3000"}
           </div>
         </div>
       </Show>
 
-      <Tabs value={currentRoom()} onChange={handleJoinRoom}>
-        <TabsList>
+      <Show when={!connected()}>
+        <div class="m-4 rounded-lg border border-red-200 bg-red-50 p-4">
+          <h2 class="mb-1 text-sm font-semibold text-red-800">Not Connected</h2>
+          <p class="text-xs text-red-600">
+            Ensure SpacetimeDB is running at {import.meta.env.VITE_SPACETIME_HOST || "ws://localhost:3000"}
+          </p>
+        </div>
+      </Show>
+
+      {/* Room Tabs + Content */}
+      <div class="flex flex-1 flex-col overflow-hidden">
+        <Show when={Object.keys(rooms()).length > 0}>
+          <div class="border-b bg-white px-4">
+            <Tabs value={currentRoom()} onChange={handleJoinRoom}>
+              <TabsList class="h-9">
+                <For each={Object.entries(rooms())}>
+                  {([roomId, room]) => (
+                    <TabsTrigger value={roomId} class="text-xs px-3">
+                      {room.name}
+                      <Badge variant="secondary" class="ml-1.5 px-1 py-0 text-[10px]">
+                        {room.memberIds.length}
+                      </Badge>
+                    </TabsTrigger>
+                  )}
+                </For>
+              </TabsList>
+            </Tabs>
+          </div>
+        </Show>
+
+        <div class="flex-1 overflow-auto">
           <For each={Object.entries(rooms())}>
             {([roomId, room]) => (
-              <TabsTrigger value={roomId}>{room.name}</TabsTrigger>
+              <Show when={currentRoom() === roomId}>
+                <Show when={!room.startTime}>
+                  <GamePreStartInteractions
+                    roomId={roomId}
+                    rooms={rooms()}
+                    user={user}
+                    identity={identity}
+                    roomsPreStart={roomsReadyState}
+                    setRoomsPreStart={setRoomsReadyState}
+                    conn={conn}
+                    connected={connected}
+                  />
+                </Show>
+                <Show when={room.startTime && currentUser()}>
+                  <VotingInterface
+                    room={room}
+                    currentUser={currentUser()!}
+                  />
+                </Show>
+                <Show when={room.startTime && !currentUser()}>
+                  <div class="flex h-full items-center justify-center">
+                    <p class="text-sm text-slate-400">Loading user data...</p>
+                  </div>
+                </Show>
+              </Show>
             )}
           </For>
-        </TabsList>
-
-        <For each={Object.entries(rooms())}>
-          {([roomId, room]) => (
-            <TabsContent value={roomId}>
-              <Resizable orientation="horizontal" class="max-w-full rounded-lg border">
-                <ResizablePanel initialSize={0.15} class="p-2">
-                  <For each={room.memberIds}>
-                    {memberId => (
-                      <UserAvatarCard user={{ id: memberId, username: memberId }} />
-                    )}
-                  </For>
-                </ResizablePanel>
-                <ResizableHandle withHandle />
-                <ResizablePanel initialSize={0.85} class="p-2">
-                  <div class="flex h-full flex-col gap-4">
-                    <div class="flex-1">
-                      <Show when={!room.startTime}>
-                        <GamePreStartInteractions
-                          roomId={roomId}
-                          rooms={rooms()}
-                          user={user}
-                          identity={identity}
-                          roomsPreStart={roomsReadyState}
-                          setRoomsPreStart={setRoomsReadyState}
-                          conn={conn}
-                          connected={connected}
-                        />
-                      </Show>
-                      <Show when={room.startTime && currentUser()}>
-                        <VotingInterface
-                          room={room}
-                          currentUser={currentUser()!}
-                        />
-                      </Show>
-                      <Show when={room.startTime && !currentUser()}>
-                        <div class="flex h-full items-center justify-center">
-                          <div class="text-center">
-                            <p class="text-lg text-gray-500">Loading user data...</p>
-                          </div>
-                        </div>
-                      </Show>
-                    </div>
-                  </div>
-                </ResizablePanel>
-              </Resizable>
-            </TabsContent>
-          )}
-        </For>
-      </Tabs>
+          <Show when={Object.keys(rooms()).length === 0 && connected()}>
+            <div class="flex h-64 items-center justify-center">
+              <div class="text-center">
+                <p class="text-lg font-medium text-slate-500">No rooms yet</p>
+                <p class="text-sm text-slate-400">Create a room to get started</p>
+              </div>
+            </div>
+          </Show>
+        </div>
+      </div>
     </div>
   );
 };

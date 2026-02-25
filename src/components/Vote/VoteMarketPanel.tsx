@@ -10,6 +10,7 @@ import GuaranteeMarket from "./GuaranteeMarket";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { ToastHelper } from "~/lib/toast-helpers";
 import { sounds } from "~/lib/sounds";
+import { resolvePlayerName } from "~/lib/game-utils";
 
 interface VoteMarketPanelProps {
   votes: Vote[];
@@ -207,8 +208,12 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                 <For
                   each={marketListings()}
                   fallback={
-                    <div class="rounded border border-dashed p-8 text-center text-sm text-gray-500">
-                      No votes for sale matching your filters
+                    <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
+                      <div class="text-3xl opacity-30">🏪</div>
+                      <p class="text-sm font-medium text-slate-400">No votes listed</p>
+                      <p class="text-xs text-slate-300">
+                        {filterColor() ? "Try clearing your color filter" : "Players can list votes for sale from the \"Mine\" tab"}
+                      </p>
                     </div>
                   }
                 >
@@ -219,15 +224,15 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                           <span class="text-2xl">{getColorIcon(vote.color)}</span>
                           <div>
                             <div class="font-medium">Vote #{vote.id}</div>
-                            <div class="text-xs text-gray-500">
-                              From: {vote.playerId.slice(0, 8)}...
+                            <div class="text-xs text-slate-400">
+                              {resolvePlayerName(vote.playerId, conn())}
                             </div>
                           </div>
                         </div>
                         <div class="flex items-center gap-2">
-                          <Badge variant="outline" class="text-base font-bold">
+                          <span class="text-sm font-bold text-slate-700">
                             ${vote.salePrice}
-                          </Badge>
+                          </span>
                           <Button
                             size="sm"
                             onClick={() => handleBuyVote(vote.id, vote.salePrice!)}
@@ -251,8 +256,10 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                 <For
                   each={myVotes()}
                   fallback={
-                    <div class="rounded border border-dashed p-8 text-center text-sm text-gray-500">
-                      You don't own any votes yet
+                    <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
+                      <div class="text-3xl opacity-30">🗳️</div>
+                      <p class="text-sm font-medium text-slate-400">No votes yet</p>
+                      <p class="text-xs text-slate-300">Your votes will appear here when the game starts</p>
                     </div>
                   }
                 >
@@ -334,8 +341,10 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                 <For
                   each={recentTrades()}
                   fallback={
-                    <div class="rounded border border-dashed p-8 text-center text-sm text-gray-500">
-                      No transactions yet
+                    <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
+                      <div class="text-3xl opacity-30">📜</div>
+                      <p class="text-sm font-medium text-slate-400">No transactions yet</p>
+                      <p class="text-xs text-slate-300">Buy or sell votes to see activity here</p>
                     </div>
                   }
                 >
