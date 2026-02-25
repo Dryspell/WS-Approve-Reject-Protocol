@@ -1,4 +1,4 @@
-import { Component, createSignal, For, Show, onMount, onCleanup, createEffect, untrack } from "solid-js";
+import { Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect, untrack } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -16,6 +16,7 @@ import { AdminPanel } from "~/components/dev/AdminPanel";
 import { ToastHelper } from "~/lib/toast-helpers";
 import { sounds } from "~/lib/sounds";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import ColonyViewport, { type ColonyUnit, type TeamColor } from "../game/ColonyViewport";
 
 interface VotingInterfaceProps {
   room: GameRoom;
@@ -217,6 +218,29 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   };
 
   const [chatOpen, setChatOpen] = createSignal(false);
+  const [viewportSelectedIds, setViewportSelectedIds] = createSignal<number[]>([]);
+
+  const colonyUnits = createMemo<ColonyUnit[]>(() => {
+    const GROUND = 80;
+    const half = GROUND / 2 - 4;
+    return myVotes().map((vote, i) => {
+      const angle = (i / Math.max(myVotes().length, 1)) * Math.PI * 2;
+      const radius = 8 + (i % 3) * 5;
+      return {
+        id: vote.id,
+        team: (vote.color || "unset") as TeamColor,
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius,
+      };
+    });
+  });
+
+  const handleViewportSetTeam = (ids: number[], team: TeamColor) => {
+    const color = team === "unset" ? "" : team;
+    for (const id of ids) {
+      handleSetVoteColor(id, color);
+    }
+  };
 
   return (
     <ErrorBoundary>
@@ -349,116 +373,130 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             </Show>
           </div>
 
-          {/* CENTER: Vote Assignment */}
-          <div class="flex flex-1 flex-col gap-3 overflow-auto">
-            <Card class="flex-1">
-              <CardHeader class="pb-2">
-                <CardTitle class="flex items-center justify-between text-base">
-                  <span>Your Votes ({myVotes().length})</span>
-                  <div class="flex gap-1.5 text-xs">
-                    <Badge variant="destructive" class="px-2">
-                      {redVotes().length} Red
-                    </Badge>
-                    <Badge class="bg-blue-600 px-2">
-                      {blueVotes().length} Blue
-                    </Badge>
-                    <Show when={unsetVotes().length > 0}>
-                      <Badge variant="secondary" class="px-2">
-                        {unsetVotes().length} Unset
-                      </Badge>
-                    </Show>
+          {/* CENTER: Colony Viewport + Vote Controls */}
+          <div class="flex flex-1 flex-col gap-2 overflow-hidden">
+            {/* Colony Viewport */}
+            <div class="relative flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+              <Show
+                when={myVotes().length > 0}
+                fallback={
+                  <div class="flex h-full items-center justify-center bg-slate-900 text-slate-500">
+                    <div class="text-center">
+                      <div class="text-4xl mb-2 opacity-30">🏰</div>
+                      <p class="text-sm">Waiting for votes to be assigned...</p>
+                    </div>
                   </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent class="space-y-3">
-                {/* Compact Vote Grid */}
-                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  <For each={myVotes()}>
-                    {(vote) => {
-                      const color = () => vote.color;
-                      const bgClass = () => {
-                        if (color() === "red") return "bg-red-100 border-red-400 text-red-800";
-                        if (color() === "blue") return "bg-blue-100 border-blue-400 text-blue-800";
-                        return "bg-slate-50 border-dashed border-slate-300 text-slate-500";
-                      };
-                      return (
+                }
+              >
+                <ColonyViewport
+                  units={colonyUnits()}
+                  selectedIds={viewportSelectedIds}
+                  onSelect={setViewportSelectedIds}
+                  onSetTeam={handleViewportSetTeam}
+                />
+              </Show>
+
+              {/* Viewport toolbar overlay */}
+              <div class="absolute bottom-2 left-2 flex gap-1.5">
+                <button
+                  class="rounded bg-red-600/90 px-2.5 py-1 text-[11px] font-medium text-white shadow backdrop-blur hover:bg-red-600 disabled:opacity-30"
+                  disabled={viewportSelectedIds().length === 0}
+                  onClick={() => handleViewportSetTeam(viewportSelectedIds(), "red")}
+                >
+                  Set Red
+                </button>
+                <button
+                  class="rounded bg-blue-600/90 px-2.5 py-1 text-[11px] font-medium text-white shadow backdrop-blur hover:bg-blue-600 disabled:opacity-30"
+                  disabled={viewportSelectedIds().length === 0}
+                  onClick={() => handleViewportSetTeam(viewportSelectedIds(), "blue")}
+                >
+                  Set Blue
+                </button>
+                <button
+                  class="rounded bg-slate-600/90 px-2.5 py-1 text-[11px] font-medium text-white shadow backdrop-blur hover:bg-slate-600 disabled:opacity-30"
+                  disabled={viewportSelectedIds().length === 0}
+                  onClick={() => handleViewportSetTeam(viewportSelectedIds(), "unset")}
+                >
+                  Unset
+                </button>
+              </div>
+
+              {/* Selection info overlay */}
+              <Show when={viewportSelectedIds().length > 0}>
+                <div class="absolute top-2 left-2 rounded bg-black/60 px-2 py-1 text-[11px] text-white backdrop-blur">
+                  {viewportSelectedIds().length} unit{viewportSelectedIds().length !== 1 ? "s" : ""} selected
+                </div>
+              </Show>
+            </div>
+
+            {/* Compact Vote Bar */}
+            <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+              <div class="flex items-center gap-2 mb-1.5">
+                <span class="text-xs font-semibold text-slate-600">Votes ({myVotes().length})</span>
+                <div class="flex gap-1 ml-auto">
+                  <Badge variant="destructive" class="px-1.5 py-0 text-[10px]">{redVotes().length}R</Badge>
+                  <Badge class="bg-blue-600 px-1.5 py-0 text-[10px]">{blueVotes().length}B</Badge>
+                  <Show when={unsetVotes().length > 0}>
+                    <Badge variant="secondary" class="px-1.5 py-0 text-[10px]">{unsetVotes().length}?</Badge>
+                  </Show>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <For each={myVotes()}>
+                  {(vote) => {
+                    const isSelected = () => viewportSelectedIds().includes(vote.id);
+                    return (
+                      <button
+                        class="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium transition-all"
+                        classList={{
+                          "border-red-400 bg-red-50 text-red-700": vote.color === "red",
+                          "border-blue-400 bg-blue-50 text-blue-700": vote.color === "blue",
+                          "border-dashed border-slate-300 bg-slate-50 text-slate-500": !vote.color,
+                          "ring-2 ring-green-400 ring-offset-1": isSelected(),
+                        }}
+                        onClick={() => {
+                          setViewportSelectedIds(prev =>
+                            prev.includes(vote.id) ? prev.filter(id => id !== vote.id) : [...prev, vote.id]
+                          );
+                        }}
+                        data-testid={`vote-chip-${vote.id}`}
+                      >
                         <div
-                          class={`relative flex flex-col items-center gap-1 rounded-lg border-2 p-2 transition-all hover:shadow-md ${bgClass()}`}
-                          draggable
-                          onDragStart={() => handleDragStart(vote)}
-                        >
-                          <div class="text-xs font-bold">#{vote.id}</div>
-                          <Show
-                            when={color()}
-                            fallback={
-                              <div class="flex gap-1">
-                                <button
-                                  class="rounded bg-red-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-red-600"
-                                  onClick={() => handleSetVoteColor(vote.id, "red")}
-                                  data-testid={`set-red-${vote.id}`}
-                                >
-                                  Red
-                                </button>
-                                <button
-                                  class="rounded bg-blue-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-blue-600"
-                                  onClick={() => handleSetVoteColor(vote.id, "blue")}
-                                  data-testid={`set-blue-${vote.id}`}
-                                >
-                                  Blue
-                                </button>
-                              </div>
-                            }
-                          >
-                            <button
-                              class="text-[10px] underline opacity-60 hover:opacity-100"
-                              onClick={() => handleSetVoteColor(vote.id, "")}
-                            >
-                              Unset
-                            </button>
-                          </Show>
-                        </div>
-                      );
-                    }}
-                  </For>
+                          class="h-2 w-2 rounded-full"
+                          classList={{
+                            "bg-red-500": vote.color === "red",
+                            "bg-blue-500": vote.color === "blue",
+                            "bg-slate-300": !vote.color,
+                          }}
+                        />
+                        #{vote.id}
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
+              {/* Drop zones */}
+              <div class="grid grid-cols-2 gap-1.5 mt-1.5">
+                <div
+                  data-testid="vote-red"
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDrop("red")}
+                  class="flex items-center justify-center gap-1 rounded border border-dashed border-red-300 bg-red-50/50 py-1 text-[10px] font-medium text-red-600"
+                  classList={{ "border-red-500 bg-red-100": draggedVote() !== null }}
+                >
+                  Drop Red
                 </div>
-
-                {/* Drop Zones (compact) */}
-                <div class="grid grid-cols-2 gap-2">
-                  <div
-                    data-testid="vote-red"
-                    data-color="red"
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop("red")}
-                    class="flex flex-col items-center gap-1 rounded-lg border-2 border-dashed border-red-300 bg-red-50/50 p-3 text-center transition-colors"
-                    classList={{ "border-red-500 bg-red-100": draggedVote() !== null }}
-                  >
-                    <span class="text-sm font-semibold text-red-700">
-                      Red ({redVotes().length})
-                    </span>
-                    <span class="text-xs text-red-400">Drop here</span>
-                  </div>
-                  <div
-                    data-testid="vote-blue"
-                    data-color="blue"
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop("blue")}
-                    class="flex flex-col items-center gap-1 rounded-lg border-2 border-dashed border-blue-300 bg-blue-50/50 p-3 text-center transition-colors"
-                    classList={{ "border-blue-500 bg-blue-100": draggedVote() !== null }}
-                  >
-                    <span class="text-sm font-semibold text-blue-700">
-                      Blue ({blueVotes().length})
-                    </span>
-                    <span class="text-xs text-blue-400">Drop here</span>
-                  </div>
+                <div
+                  data-testid="vote-blue"
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDrop("blue")}
+                  class="flex items-center justify-center gap-1 rounded border border-dashed border-blue-300 bg-blue-50/50 py-1 text-[10px] font-medium text-blue-600"
+                  classList={{ "border-blue-500 bg-blue-100": draggedVote() !== null }}
+                >
+                  Drop Blue
                 </div>
-
-                <Show when={myVotes().length >= 2}>
-                  <div class="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
-                    Split your {myVotes().length} votes across colors to guarantee minority survival.
-                  </div>
-                </Show>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
           {/* RIGHT SIDEBAR: Market */}

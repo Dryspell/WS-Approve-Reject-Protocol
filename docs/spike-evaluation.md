@@ -45,9 +45,19 @@ Navigate to `/canvas/spike/` to access all three spikes, or open each directly:
 - **Weaknesses**: Less visual depth than Three.js. Would need a viewport plugin for momentum pan/zoom.
 - **Upgrade path**: Natural path to tilemaps, sprite animations, particle effects. 2D sprite assets are cheaper to create. Aligns with "top-down 2D" design doc direction.
 
-## Decision
+## Decision -- RESOLVED
 
-After trying all three, choose based on your priorities:
-- **If visual depth matters most**: Three.js (B)
-- **If interaction quality + low deps matters most**: Canvas (A) 
-- **If fastest path to full features matters most**: Pixi.js (C)
+**Winner: Three.js (Spike B)**
+
+Chosen for its out-of-the-box visual appeal, low-poly 3D aesthetic, and natural depth perception. The MeshStandardMaterial lighting system provides automatic visual cohesion across all scene elements. AI-generated low-poly 3D assets (via tools like Sloyd.ai and LL3M) are more forgiving of imperfections than 2D sprites.
+
+The Three.js spike has been extracted into a reusable `ColonyViewport` component at `src/components/game/ColonyViewport.tsx` and integrated into the main game VotingInterface. Features added beyond the spike:
+- Humanoid unit meshes (cylinder body + sphere head)
+- Spring-eased drag-to-move via raycasting
+- Selection glow with pulse animation
+- Resource node bobbing animation
+- ResizeObserver-based responsive sizing
+- Signal bridge to SolidJS reactive state
+- ACES filmic tone mapping + fog
+
+The spike routes at `/canvas/spike/` remain available for reference.

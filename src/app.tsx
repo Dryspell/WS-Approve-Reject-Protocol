@@ -1,12 +1,30 @@
-import { Router } from "@solidjs/router";
+import { Router, useLocation } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
-import { Suspense } from "solid-js";
+import { Show, Suspense } from "solid-js";
 import Nav from "~/components/Nav";
 import "./app.css";
 import "@fontsource/inter";
 import { Toaster } from "./components/ui/toast";
 import { MetaProvider, Title, Meta, Link } from "@solidjs/meta";
 import { SpacetimeDBProvider } from "~/hooks/useSpacetimeDB";
+
+function AppShell(props: { children: any }) {
+	const location = useLocation();
+	const showNav = () => !location.pathname.startsWith("/vote");
+
+	return (
+		<SpacetimeDBProvider>
+			<div class="flex min-h-screen flex-col">
+				<Show when={showNav()}>
+					<Nav />
+				</Show>
+				<Suspense>
+					<main class={showNav() ? "flex-1" : "flex-1 h-screen"}>{props.children}</main>
+				</Suspense>
+			</div>
+		</SpacetimeDBProvider>
+	);
+}
 
 export default function App() {
 	return (
@@ -41,14 +59,7 @@ export default function App() {
 					<Meta name="robots" content="index, follow" />
 					<Link rel="canonical" href="https://socketsignals.com" />
 					
-					<SpacetimeDBProvider>
-						<div class="flex min-h-screen flex-col">
-							<Nav />
-							<Suspense>
-								<main class="flex-1">{props.children}</main>
-							</Suspense>
-						</div>
-					</SpacetimeDBProvider>
+					<AppShell>{props.children}</AppShell>
 				</MetaProvider>
 			)}
 		>
