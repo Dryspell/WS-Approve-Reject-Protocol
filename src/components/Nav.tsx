@@ -3,16 +3,8 @@ import { For } from "solid-js";
 
 const routes = [
   {
-    value: "counters",
-    label: "Counters",
-  },
-  {
-    value: "pokemon",
-    label: "Pokemon",
-  },
-  {
-    value: "serialization",
-    label: "Serialization",
+    value: "vote",
+    label: "Vote",
   },
   {
     value: "chat",
@@ -23,8 +15,8 @@ const routes = [
     label: "Social",
   },
   {
-    value: "vote",
-    label: "Vote",
+    value: "leaderboard",
+    label: "Leaderboard",
   },
   {
     value: "db-inspector",

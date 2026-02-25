@@ -5,7 +5,7 @@ import Nav from "~/components/Nav";
 import "./app.css";
 import "@fontsource/inter";
 import { Toaster } from "./components/ui/toast";
-import { MetaProvider, Title } from "@solidjs/meta";
+import { MetaProvider, Title, Meta, Link } from "@solidjs/meta";
 import { SpacetimeDBProvider } from "~/hooks/useSpacetimeDB";
 
 export default function App() {
@@ -13,7 +13,34 @@ export default function App() {
 		<Router
 			root={props => (
 				<MetaProvider>
-					<Title>Socket Signals</Title>
+					<Title>Socket Signals - Real-Time Multiplayer Voting Game</Title>
+					<Meta name="description" content="Join the ultimate real-time multiplayer voting game. Strategize, vote, and compete with players worldwide in Socket Signals." />
+					<Meta name="keywords" content="multiplayer game, voting game, real-time game, online game, strategy game, social game, SpacetimeDB" />
+					<Meta name="author" content="Socket Signals Team" />
+					
+					{/* OpenGraph */}
+					<Meta property="og:type" content="website" />
+					<Meta property="og:locale" content="en_US" />
+					<Meta property="og:url" content="https://socketsignals.com" />
+					<Meta property="og:site_name" content="Socket Signals" />
+					<Meta property="og:title" content="Socket Signals - Real-Time Multiplayer Voting Game" />
+					<Meta property="og:description" content="Join the ultimate real-time multiplayer voting game. Strategize, vote, and compete with players worldwide." />
+					<Meta property="og:image" content="/og-image.png" />
+					<Meta property="og:image:width" content="1200" />
+					<Meta property="og:image:height" content="630" />
+					<Meta property="og:image:alt" content="Socket Signals - Multiplayer Voting Game" />
+					
+					{/* Twitter Card */}
+					<Meta name="twitter:card" content="summary_large_image" />
+					<Meta name="twitter:title" content="Socket Signals - Real-Time Multiplayer Voting Game" />
+					<Meta name="twitter:description" content="Join the ultimate real-time multiplayer voting game. Strategize, vote, and compete with players worldwide." />
+					<Meta name="twitter:image" content="/og-image.png" />
+					<Meta name="twitter:creator" content="@socketsignals" />
+					
+					{/* Robots */}
+					<Meta name="robots" content="index, follow" />
+					<Link rel="canonical" href="https://socketsignals.com" />
+					
 					<SpacetimeDBProvider>
 						<div class="flex min-h-screen flex-col">
 							<Nav />
