@@ -2935,8 +2935,21 @@ pub fn reset_test_data(ctx: &ReducerContext, confirmation: String) -> Result<(),
         ctx.db.unit().id().delete(unit_id);
     }
     
-    log::info!("✅ Test data reset complete: {} rooms, {} ready states, {} chat rooms, {} votes deleted", 
-        room_count, ready_count, chat_count, vote_count);
+    // Delete all player positions
+    let pos_ids: Vec<i32> = ctx.db.player_position().iter().map(|p| p.id).collect();
+    let pos_count = pos_ids.len();
+    for pos_id in pos_ids {
+        ctx.db.player_position().id().delete(pos_id);
+    }
+
+    // Delete all end-round votes
+    let erv_ids: Vec<i32> = ctx.db.end_round_vote().iter().map(|e| e.id).collect();
+    for erv_id in erv_ids {
+        ctx.db.end_round_vote().id().delete(erv_id);
+    }
+    
+    log::info!("✅ Test data reset complete: {} rooms, {} ready states, {} chat rooms, {} votes, {} positions deleted", 
+        room_count, ready_count, chat_count, vote_count, pos_count);
     
     Ok(())
 }

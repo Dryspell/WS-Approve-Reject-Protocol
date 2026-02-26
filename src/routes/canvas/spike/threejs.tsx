@@ -249,7 +249,7 @@ export default function ThreeJsSpike() {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(containerRef.clientWidth, containerRef.clientHeight);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     containerRef.appendChild(renderer.domElement);
 
     // Lights

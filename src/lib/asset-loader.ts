@@ -212,6 +212,21 @@ export const ASSETS = {
     chair: "structures/chair.gltf",
     column: "structures/column.gltf",
   },
+
+  environment: {
+    bush_1a: "environment/nature/Bush_1_A_Color1.gltf",
+    bush_2a: "environment/nature/Bush_2_A_Color1.gltf",
+    rock_1a: "environment/nature/Rock_1_A_Color1.gltf",
+    rock_1b: "environment/nature/Rock_1_B_Color1.gltf",
+    grass_1a: "environment/nature/Grass_1_A_Color1.gltf",
+    grass_1b: "environment/nature/Grass_1_B_Color1.gltf",
+    hex_grass: "environment/hex/hex_grass.gltf",
+    floor_dirt: "environment/dungeon/floor_dirt_large.gltf",
+    floor_dirt_rocky: "environment/dungeon/floor_dirt_large_rocky.gltf",
+    block_grass: "environment/blocks/grass.gltf",
+    block_dirt_grass: "environment/blocks/dirt_with_grass.gltf",
+    block_stone: "environment/blocks/stone.gltf",
+  },
 } as const;
 
 export type CharacterClass = keyof typeof ASSETS.characters;

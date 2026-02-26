@@ -101,6 +101,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Always dark — game is never light-themed, prevents white flash before app mounts */
+    background-color: #1a1a2e;
+    color: #f9fafb;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;

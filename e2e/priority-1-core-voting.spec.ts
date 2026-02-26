@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { MultiPlayerHelper } from './helpers/multi-player';
 import { VoteGamePage, uniqueRoomName } from './helpers/page-objects';
 import { setupPlayers, createAndJoinRoom, allReadyUp } from './helpers/game-flows';
+import { TestBotHelper } from './helpers/test-bots';
+import { setupHybridGame, hybridCreateAndJoinRoom, hybridCleanup, type HybridGameSetup } from './helpers/hybrid-flows';
 
 /**
  * Priority 1: Core Voting Gameplay E2E Tests
@@ -56,37 +58,40 @@ test.describe('1.1 Game Room Creation & Joining', () => {
     await expect(gp2.roomTab('Join Test VG-003')).toBeVisible();
   });
 
-  test('VG-004: Multiple players join - pot calculation', async () => {
-    const players = await setupPlayers(multiPlayer, 5);
+  test('VG-004: Multiple players join - pot calculation', async ({ browser }) => {
+    // Hybrid: 1 browser + 4 bots (was 5 browsers)
+    const setup = await setupHybridGame(browser, {
+      botCount: 4,
+      roomPrefix: 'MultiJoin-VG-004',
+    });
 
-    await players.gamePages[0].createRoom('Multi Join VG-004', { buyinAmount: 10 });
-
-    for (let i = 1; i < 5; i++) {
-      await players.gamePages[i].waitForRoomTab('Multi Join VG-004');
-    }
-    await players.gamePages[0].joinRoom('Multi Join VG-004');
-
-    for (const gp of players.gamePages) {
-      await expect(gp.roomTab('Multi Join VG-004')).toBeVisible();
+    try {
+      await hybridCreateAndJoinRoom(setup, { buyinAmount: 10 });
+      await expect(setup.gamePage.roomTab(setup.roomName)).toBeVisible();
+    } finally {
+      await hybridCleanup(setup);
     }
   });
 
-  test('VG-005: Room auto-start when all ready (3+ players)', async () => {
-    const players = await setupPlayers(multiPlayer, 3);
-    const roomName = uniqueRoomName('Ready VG-005');
+  test('VG-005: Room auto-start when all ready (3+ players)', async ({ browser }) => {
+    // Hybrid: 1 browser + 2 bots (was 3 browsers)
+    const setup = await setupHybridGame(browser, {
+      botCount: 2,
+      roomPrefix: 'Ready-VG-005',
+    });
 
-    await createAndJoinRoom(players, roomName, { buyinAmount: 10 });
+    try {
+      await hybridCreateAndJoinRoom(setup, { buyinAmount: 10 });
+      await expect(setup.gamePage.readyButton).toBeVisible({ timeout: 10000 });
 
-    for (const gp of players.gamePages) {
-      await expect(gp.readyButton).toBeVisible({ timeout: 10000 });
-    }
+      // Real player readies
+      await setup.gamePage.clickReady();
+      // Bots ready
+      await setup.bots.readyAll(setup.roomName);
 
-    for (const gp of players.gamePages) {
-      await gp.clickReady();
-    }
-
-    for (const gp of players.gamePages) {
-      await expect(gp.readyButton).toBeVisible({ timeout: 5000 });
+      await expect(setup.gamePage.readyButton).toBeVisible({ timeout: 5000 });
+    } finally {
+      await hybridCleanup(setup);
     }
   });
 });
@@ -247,16 +252,18 @@ test.describe('1.7 Tie Handling', () => {
     await multiPlayer.cleanup();
   });
 
-  test('VG-060: 4 player room setup for tie scenario', async () => {
-    const players = await setupPlayers(multiPlayer, 4);
+  test('VG-060: 4 player room setup for tie scenario', async ({ browser }) => {
+    // Hybrid: 1 browser + 3 bots (was 4 browsers)
+    const setup = await setupHybridGame(browser, {
+      botCount: 3,
+      roomPrefix: 'TieTest-VG-060',
+    });
 
-    await players.gamePages[0].createRoom('Tie Test VG-060', { buyinAmount: 10 });
-
-    for (let i = 1; i < 4; i++) {
-      await players.gamePages[i].waitForRoomTab('Tie Test VG-060');
-    }
-    for (const gp of players.gamePages) {
-      await expect(gp.roomTab('Tie Test VG-060')).toBeVisible();
+    try {
+      await hybridCreateAndJoinRoom(setup, { buyinAmount: 10 });
+      await expect(setup.gamePage.roomTab(setup.roomName)).toBeVisible();
+    } finally {
+      await hybridCleanup(setup);
     }
   });
 });

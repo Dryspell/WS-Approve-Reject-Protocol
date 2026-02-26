@@ -1,4 +1,4 @@
-import { Component, createSignal, For, createEffect, Show, Accessor, Setter } from "solid-js";
+import { Component, createSignal, For, createEffect, Show, Accessor, Setter, batch } from "solid-js";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import { randAnimal } from "@ngneat/falso";
 import { createId } from "@paralleldrive/cuid2";
@@ -66,6 +66,7 @@ function createUserSignal(): [Accessor<{ name: string; id: string }>, Setter<{ n
 
 const VoteBox: Component = () => {
   const [rooms, setRooms] = createSignal<Record<string, GameRoom>>({});
+  const [roomIds, setRoomIds] = createSignal<string[]>([]);
   const [roomsReadyState, setRoomsReadyState] = createStore<Record<string, ReadyState>>({});
   const [currentRoom, setCurrentRoom] = createSignal<string | undefined>(undefined);
   const [newRoomName, setNewRoomName] = createSignal("");
@@ -80,6 +81,14 @@ const VoteBox: Component = () => {
 
   // Initialize SpacetimeDB connection
   const { conn, connected, identity, subscribed } = useSpacetimeDB();
+
+  // Auto-select the first room tab when rooms arrive and nothing is selected
+  createEffect(() => {
+    const ids = roomIds();
+    if (ids.length > 0 && !currentRoom()) {
+      handleJoinRoom(ids[0]);
+    }
+  });
 
   // Subscribe to current user data
   createEffect(() => {
@@ -121,53 +130,57 @@ const VoteBox: Component = () => {
     console.log("Connected:", connected());
     console.log("Identity:", identity()?.toHexString());
 
-    // Initial load of game rooms from cache
+    // Batch the initial data load so all signals update atomically,
+    // preventing intermediate renders that could remount child components.
     const initialRooms = Array.from(connection.db.game_room.iter());
     console.log("🎮 Initial game rooms loaded:", initialRooms.length, initialRooms);
-    const roomsObj: Record<string, GameRoom> = {};
-    initialRooms.forEach(room => {
-      roomsObj[room.id] = room;
-    });
-    setRooms(roomsObj);
-
-    // Initial load of ready states
     const initialReadyStates = Array.from(connection.db.ready_state.iter());
     console.log("✅ Initial ready states loaded:", initialReadyStates.length);
-    const readyStatesObj: Record<string, ReadyState> = {};
-    initialReadyStates.forEach(state => {
-      readyStatesObj[state.roomId] = state;
-    });
-    setRoomsReadyState(readyStatesObj);
 
-    // Listen for new game rooms being inserted
+    batch(() => {
+      const roomsObj: Record<string, GameRoom> = {};
+      initialRooms.forEach(room => {
+        roomsObj[room.id] = room;
+      });
+      setRooms(roomsObj);
+      setRoomIds(Object.keys(roomsObj));
+
+      const readyStatesObj: Record<string, ReadyState> = {};
+      initialReadyStates.forEach(state => {
+        readyStatesObj[state.roomId] = state;
+      });
+      setRoomsReadyState(readyStatesObj);
+    });
+
     connection.db.game_room.onInsert((ctx, room) => {
       console.log("🎉 New game room inserted:", room);
-      setRooms(prev => ({
-        ...prev,
-        [room.id]: room
-      }));
+      batch(() => {
+        setRooms(prev => ({ ...prev, [room.id]: room }));
+        setRoomIds(prev => prev.includes(String(room.id)) ? prev : [...prev, String(room.id)]);
+      });
     });
 
-    // Listen for game room updates
+    // Listen for game room updates (only update room data, not IDs)
     connection.db.game_room.onUpdate((ctx, oldRoom, newRoom) => {
-      console.log("🔄 Game room updated:", newRoom);
       setRooms(prev => ({
         ...prev,
         [newRoom.id]: newRoom
       }));
     });
 
-    // Listen for game room deletions
     connection.db.game_room.onDelete((ctx, room) => {
       console.log("🗑️ Game room deleted:", room.id);
-      setRooms(prev => {
-        const next = { ...prev };
-        delete next[room.id];
-        return next;
+      batch(() => {
+        setRooms(prev => {
+          const next = { ...prev };
+          delete next[room.id];
+          return next;
+        });
+        setRoomIds(prev => prev.filter(id => id !== String(room.id)));
+        if (currentRoom() === String(room.id)) {
+          setCurrentRoom("");
+        }
       });
-      if (currentRoom() === String(room.id)) {
-        setCurrentRoom("");
-      }
     });
 
     // Listen for ready state insertions
@@ -305,7 +318,7 @@ const VoteBox: Component = () => {
   };
 
   return (
-    <div class="flex h-full flex-col bg-[#1a1a2e]">
+    <div class="flex h-screen flex-col bg-[#1a1a2e]">
         {/* Top Bar */}
         <div class="flex items-center justify-between border-b border-white/10 bg-black/40 backdrop-blur-md px-4 py-2">
           <div class="flex items-center gap-3">
@@ -331,7 +344,7 @@ const VoteBox: Component = () => {
                 Connected
               </Badge>
               <span class="text-xs text-white/40" data-testid={TID.identityDisplay}>
-                {resolvePlayerName(identity()?.toHexString() || "", conn())}
+                {currentUser()?.name || resolvePlayerName(identity()?.toHexString() || "", conn())}
               </span>
             </Show>
           </div>
@@ -424,63 +437,81 @@ const VoteBox: Component = () => {
 
         {/* Room Tabs + Content */}
         <div class="flex flex-1 flex-col overflow-hidden">
-          <Show when={Object.keys(rooms()).length > 0}>
+          <Show when={roomIds().length > 0}>
             <div class="border-b border-white/10 bg-black/20 px-4">
               <Tabs value={currentRoom()} onChange={handleJoinRoom}>
                 <TabsList class="h-9">
-                  <For each={Object.entries(rooms())}>
-                    {([roomId, room]) => (
-                      <TabsTrigger value={roomId} class="text-xs px-3">
-                        {room.name}
-                        <Badge variant="secondary" class="ml-1.5 px-1 py-0 text-[10px]">
-                          {room.memberIds.length}
-                        </Badge>
-                      </TabsTrigger>
-                    )}
+                  <For each={roomIds()}>
+                    {(roomId) => {
+                      const room = () => rooms()[roomId];
+                      return (
+                        <TabsTrigger value={roomId} class="text-xs px-3">
+                          {room()?.name}
+                          <Badge variant="secondary" class="ml-1.5 px-1 py-0 text-[10px]">
+                            {room()?.memberIds?.length ?? 0}
+                          </Badge>
+                        </TabsTrigger>
+                      );
+                    }}
                   </For>
                 </TabsList>
               </Tabs>
             </div>
           </Show>
 
-          <div class="flex-1 overflow-auto relative">
-            <For each={Object.entries(rooms())}>
-              {([roomId, room]) => (
-                <Show when={currentRoom() === roomId}>
-                  <Show when={!room.startTime}>
-                    <GamePreStartInteractions
-                      roomId={roomId}
-                      rooms={rooms()}
-                      user={user}
-                      identity={identity}
-                      roomsPreStart={roomsReadyState}
-                      setRoomsPreStart={setRoomsReadyState}
-                      conn={conn}
-                      connected={connected}
-                    />
-                  </Show>
-                  <Show when={room.startTime && currentUser()}>
-                    <VotingInterface
-                      room={room}
-                      currentUser={currentUser()!}
-                    />
-                  </Show>
-                  <Show when={room.startTime && !currentUser()}>
-                    <div class="flex h-full items-center justify-center">
-                      <p class="text-sm text-white/40">Loading user data...</p>
-                    </div>
-                  </Show>
-                </Show>
-              )}
-            </For>
-            <Show when={Object.keys(rooms()).length === 0 && connected()}>
+          <div class="flex-1 min-h-0 overflow-hidden relative" data-testid={TID.contentArea}>
+            {/*
+              Iterate over stable room IDs only. Accessing rooms()[roomId] inside
+              the callback keeps the room data reactive without remounting when
+              unrelated fields change (which would destroy the Three.js context).
+            */}
+            <Show when={!currentRoom() || !rooms()[currentRoom()!]}>
               <div class="flex h-64 items-center justify-center">
                 <div class="text-center">
-                  <p class="text-lg font-medium text-white/40">No rooms yet</p>
-                  <p class="text-sm text-white/30">Create a room to get started</p>
+                  <Show when={roomIds().length > 0} fallback={
+                    <>
+                      <p class="text-lg font-medium text-white/40">No rooms yet</p>
+                      <p class="text-sm text-white/30">Create a room to get started</p>
+                    </>
+                  }>
+                    <p class="text-lg font-medium text-white/40">Select a room to join</p>
+                    <p class="text-sm text-white/30">Click a room tab above, or create a new one</p>
+                  </Show>
                 </div>
               </div>
             </Show>
+            <For each={roomIds()}>
+              {(roomId) => {
+                const room = () => rooms()[roomId];
+                return (
+                  <Show when={currentRoom() === roomId}>
+                    <Show when={!room()?.startTime}>
+                      <GamePreStartInteractions
+                        roomId={roomId}
+                        rooms={rooms()}
+                        user={user}
+                        identity={identity}
+                        roomsPreStart={roomsReadyState}
+                        setRoomsPreStart={setRoomsReadyState}
+                        conn={conn}
+                        connected={connected}
+                      />
+                    </Show>
+                    <Show when={room()?.startTime && currentUser()}>
+                      <VotingInterface
+                        room={room()!}
+                        currentUser={currentUser()!}
+                      />
+                    </Show>
+                    <Show when={room()?.startTime && !currentUser()}>
+                      <div class="flex h-full items-center justify-center">
+                        <p class="text-sm text-white/40">Loading user data...</p>
+                      </div>
+                    </Show>
+                  </Show>
+                );
+              }}
+            </For>
           </div>
         </div>
       </div>

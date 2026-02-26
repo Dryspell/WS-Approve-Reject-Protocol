@@ -35,23 +35,13 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
     const moduleName = import.meta.env.VITE_SPACETIME_MODULE_NAME || import.meta.env.VITE_SPACETIME_DATABASE || "game";
     const isLocalHost = host.includes('localhost') || host.includes('127.0.0.1');
     
-    // For local development: clear any stored tokens to ensure fresh identity per window
-    // For production: persist tokens for session continuity
-    if (isLocalHost) {
-      localStorage.removeItem('auth_token');
-      console.log('Local development: Cleared stored auth token for fresh identity');
-    }
-    
     const onConnect = (connection: DbConnection, clientIdentity: Identity, token: string) => {
       setConn(connection);
       setIdentity(clientIdentity);
       setConnected(true);
       
-      // Only persist auth tokens for remote/production instances
-      if (!isLocalHost) {
-        localStorage.setItem('auth_token', token);
-        console.log('Saved auth token for production environment');
-      }
+      // Persist token for all environments so identity survives page refresh
+      localStorage.setItem('stdb_auth_token', token);
       
       console.log('Connected to SpacetimeDB with identity:', clientIdentity.toHexString());
 
@@ -108,13 +98,13 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
     
     console.log(`Connecting to SpacetimeDB at ${host} with module ${moduleName}`);
 
-    // Load auth token only for remote connections
-    const authToken = isLocalHost ? undefined : (localStorage.getItem('auth_token') || undefined);
+    // Restore auth token from previous session (all environments)
+    const authToken = localStorage.getItem('stdb_auth_token') || undefined;
     
-    if (isLocalHost) {
-      console.log('🔓 Local development mode: Each window gets a unique identity');
+    if (authToken) {
+      console.log('Restoring previous SpacetimeDB identity');
     } else {
-      console.log('🔒 Production mode: Using persisted auth token');
+      console.log('No stored token — new identity will be created');
     }
 
     // Create the connection

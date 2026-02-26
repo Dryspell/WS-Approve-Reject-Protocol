@@ -2,7 +2,7 @@
   "name": "Socket Signals",
   "type": "module",
   "scripts": {
-    "dev": "vinxi dev --port 3001",
+    "dev": "concurrently -n db,web -c blue,green --kill-others-on-fail false \"spacetime start || echo [db] SpacetimeDB already running\" \"vinxi dev --port 3001\"",
     "dev:client": "vinxi dev --port 3001",
     "dev:db:local": "spacetime start",
     "publish:local": "cd server && spacetime publish --server local -p . --yes game",
@@ -14,6 +14,7 @@
     "test": "vitest --config vitest.config.ts",
     "test:coverage": "vitest run --coverage",
     "test:reset-db": "npx tsx scripts/reset-test-db.ts",
+    "test:smoke": "playwright test e2e/0-smoke.spec.ts",
     "test:e2e": "pnpm typecheck:warn && pnpm test:reset-db && playwright test",
     "test:e2e:fast": "playwright test",
     "test:e2e:p1": "pnpm typecheck:warn && pnpm test:reset-db && playwright test e2e/priority-1-core-voting.spec.ts",
@@ -28,7 +29,9 @@
     "logs:local": "spacetime logs --server local game",
     "logs:cloud": "spacetime logs socket-signals",
     "sql:local": "spacetime sql --server local game",
-    "sql:cloud": "spacetime sql socket-signals"
+    "sql:cloud": "spacetime sql socket-signals",
+    "kill-ports": "npx --yes kill-port 3001",
+    "bots": "npx tsx scripts/bot-runner.ts"
   },
   "dependencies": {
     "@corvu/resizable": "^0.2.5",

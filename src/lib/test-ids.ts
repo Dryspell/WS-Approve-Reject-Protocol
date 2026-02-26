@@ -27,6 +27,10 @@ export const TID = {
   readyButton: 'ready-button',
   lobbyHeader: 'lobby-header',
   playerCard: 'player-card',
+  lobbyViewport: 'lobby-viewport',
+  gameViewport: 'game-viewport',
+  viewportCanvas: 'viewport-canvas',
+  contentArea: 'content-area',
 
   // ── Game header ──────────────────────────────────────────
   gameHeader: 'game-header',

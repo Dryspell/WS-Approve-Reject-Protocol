@@ -1,10 +1,13 @@
 import { defineConfig } from "@solidjs/start/config";
 
 export default defineConfig({
+  server: {
+    preset: "static",
+  },
+  ssr: false,
   vite: {
     ssr: {
-      // Externalize SpacetimeDB SDK to prevent SSR issues with WebSocket/browser APIs
-      external: ["@clockworklabs/spacetimedb-sdk"],
+      external: ["spacetimedb"],
       noExternal: [],
     },
   },

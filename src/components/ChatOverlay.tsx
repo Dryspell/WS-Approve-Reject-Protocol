@@ -353,10 +353,10 @@ const ChatOverlayInner: Component = () => {
   );
 
   return (
-    <div class="fixed bottom-0 right-4 z-[60] flex flex-col items-end">
+    <div class="fixed bottom-0 right-4 z-[60] flex flex-col items-end pointer-events-none">
       {/* Panel */}
       <Show when={isOpen()}>
-        <div class="mb-0 flex h-[480px] w-[340px] flex-col overflow-hidden rounded-t-xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
+        <div class="pointer-events-auto mb-0 flex h-[480px] w-[340px] flex-col overflow-hidden rounded-t-xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
           {/* Header */}
           <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <div class="flex items-center gap-2">
@@ -670,7 +670,7 @@ const ChatOverlayInner: Component = () => {
 
       {/* Floating toggle button */}
       <button
-        class="group relative flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-all hover:bg-blue-500 hover:shadow-blue-500/30 hover:scale-105 active:scale-95"
+        class="pointer-events-auto group relative flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/25 transition-all hover:bg-blue-500 hover:shadow-blue-500/30 hover:scale-105 active:scale-95"
         classList={{ "rounded-t-none rounded-b-full": isOpen() }}
         onClick={togglePanel}
       >

@@ -1,4 +1,4 @@
-import { Component, createSignal, Show, For } from "solid-js";
+import { Component, createSignal, Show, For, onMount, onCleanup } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
@@ -20,39 +20,29 @@ export const DebugPanel: Component<DebugPanelProps> = (props) => {
   const [activeTab, setActiveTab] = createSignal<'state' | 'network' | 'logs'>('state');
   const [logs, setLogs] = createSignal<Array<{ time: string; level: string; message: string }>>([]);
 
-  // Intercept console logs
-  if (typeof window !== 'undefined') {
+  onMount(() => {
     const originalLog = console.log;
     const originalError = console.error;
     const originalWarn = console.warn;
 
-    console.log = (...args) => {
-      originalLog(...args);
-      setLogs(prev => [...prev, { 
-        time: new Date().toLocaleTimeString(), 
-        level: 'log', 
-        message: args.join(' ') 
-      }].slice(-100)); // Keep last 100 logs
-    };
-
-    console.error = (...args) => {
-      originalError(...args);
-      setLogs(prev => [...prev, { 
-        time: new Date().toLocaleTimeString(), 
-        level: 'error', 
-        message: args.join(' ') 
+    const addLog = (level: string, args: unknown[]) => {
+      setLogs(prev => [...prev, {
+        time: new Date().toLocaleTimeString(),
+        level,
+        message: args.map(a => typeof a === 'string' ? a : String(a)).join(' ')
       }].slice(-100));
     };
 
-    console.warn = (...args) => {
-      originalWarn(...args);
-      setLogs(prev => [...prev, { 
-        time: new Date().toLocaleTimeString(), 
-        level: 'warn', 
-        message: args.join(' ') 
-      }].slice(-100));
-    };
-  }
+    console.log = (...args) => { originalLog(...args); addLog('log', args); };
+    console.error = (...args) => { originalError(...args); addLog('error', args); };
+    console.warn = (...args) => { originalWarn(...args); addLog('warn', args); };
+
+    onCleanup(() => {
+      console.log = originalLog;
+      console.error = originalError;
+      console.warn = originalWarn;
+    });
+  });
 
   return (
     <>
