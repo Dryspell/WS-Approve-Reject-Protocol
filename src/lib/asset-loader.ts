@@ -155,6 +155,10 @@ export const ASSETS = {
     rogue: "characters/Rogue.glb",
     rogue_hooded: "characters/Rogue_Hooded.glb",
     ranger: "characters/Ranger.glb",
+    skeleton_minion: "characters/Skeleton_Minion.glb",
+    skeleton_warrior: "characters/Skeleton_Warrior.glb",
+    skeleton_mage: "characters/Skeleton_Mage.glb",
+    skeleton_rogue: "characters/Skeleton_Rogue.glb",
   },
 
   animations: {
@@ -265,4 +269,18 @@ const CHARACTER_CLASSES: CharacterClass[] = [
 
 export function characterForIndex(index: number): CharacterClass {
   return CHARACTER_CLASSES[index % CHARACTER_CLASSES.length];
+}
+
+// Skeleton variants for minion/laborer units
+export type SkeletonClass = "skeleton_minion" | "skeleton_warrior" | "skeleton_mage" | "skeleton_rogue";
+
+const SKELETON_CLASSES: SkeletonClass[] = [
+  "skeleton_minion",
+  "skeleton_warrior",
+  "skeleton_mage",
+  "skeleton_rogue",
+];
+
+export function skeletonForIndex(index: number): SkeletonClass {
+  return SKELETON_CLASSES[index % SKELETON_CLASSES.length];
 }

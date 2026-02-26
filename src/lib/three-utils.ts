@@ -106,6 +106,84 @@ export function disposeNameSprite(sprite: THREE.Sprite) {
   (sprite.material as THREE.SpriteMaterial).dispose();
 }
 
+// ── Trade billboard sprite ──────────────────────────────────────────────
+
+export interface TradeBillboardData {
+  offerId: number;
+  type: "sell" | "buy" | "guarantee";
+  price: number;
+  color?: "red" | "blue" | null;
+}
+
+export function createTradeBillboard(data: TradeBillboardData): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 96;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, 256, 96);
+
+  const bgColor =
+    data.type === "sell"
+      ? "rgba(234, 179, 8, 0.85)"
+      : data.type === "buy"
+        ? "rgba(59, 130, 246, 0.85)"
+        : "rgba(168, 85, 247, 0.85)";
+
+  ctx.fillStyle = bgColor;
+  ctx.beginPath();
+  ctx.roundRect(16, 8, 224, 72, 12);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(255,255,255,0.3)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(16, 8, 224, 72, 12);
+  ctx.stroke();
+
+  const icon = data.type === "sell" ? "↗" : data.type === "buy" ? "↙" : "🛡";
+  ctx.font = "bold 22px sans-serif";
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(icon, 28, 32);
+
+  ctx.font = "bold 18px sans-serif";
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.fillText(`$${data.price.toFixed(2)}`, 128, 32);
+
+  const label = data.type === "sell" ? "SELL" : data.type === "buy" ? "BUY" : "GUARANTEE";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.fillText(label, 128, 56);
+
+  if (data.color) {
+    ctx.fillStyle = data.color === "red" ? "#ef4444" : "#3b82f6";
+    ctx.beginPath();
+    ctx.arc(218, 32, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  const mat = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthTest: false,
+  });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(4, 1.5, 1);
+  sprite.position.set(0, 4.2, 0);
+  sprite.userData.offerId = data.offerId;
+  sprite.userData.billboardAge = 0;
+  return sprite;
+}
+
+export function disposeTradeBillboard(sprite: THREE.Sprite) {
+  (sprite.material as THREE.SpriteMaterial).map?.dispose();
+  (sprite.material as THREE.SpriteMaterial).dispose();
+}
+
 // ── Label sprite (for buildings) ───────────────────────────────────────
 
 export function createLabelSprite(text: string): THREE.Sprite {

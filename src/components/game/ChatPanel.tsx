@@ -1,11 +1,5 @@
 import { Component, createSignal, For, Show, onMount, createEffect } from "solid-js";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
-import { ScrollArea } from "~/components/ui/scroll-area";
-import { TextField, TextFieldInput } from "~/components/ui/text-field";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
-import type { Identity } from "~/module_bindings";
 import type { ChatMessage as DBChatMessage } from "~/module_bindings/types";
 import { showToast } from "~/components/ui/toast";
 import { TID } from "~/lib/test-ids";
@@ -246,27 +240,29 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
   };
 
   return (
-    <Card class="flex h-full flex-col" classList={{
+    <div class="flex h-full flex-col bg-transparent" classList={{
       'h-12': props.minimized,
     }}>
-      <CardHeader class="cursor-pointer" onClick={props.onToggleMinimize}>
-        <div class="flex items-center justify-between">
-          <CardTitle class="flex items-center gap-2 text-base">
-            💬 Chat {props.minimized && <Badge variant="outline" class="text-xs">Minimized</Badge>}
-          </CardTitle>
-          <Button size="sm" variant="ghost" class="h-6 w-6 p-0">
-            {props.minimized ? '▲' : '▼'}
-          </Button>
+      <Show when={props.onToggleMinimize}>
+        <div class="cursor-pointer px-3 py-2 border-b border-white/10" onClick={props.onToggleMinimize}>
+          <div class="flex items-center justify-between">
+            <span class="flex items-center gap-2 text-sm font-semibold text-white/80">
+              Chat {props.minimized && <span class="rounded border border-white/20 px-1.5 py-0.5 text-[10px] text-white/50">Minimized</span>}
+            </span>
+            <span class="text-[10px] text-white/40">
+              {props.minimized ? '▲' : '▼'}
+            </span>
+          </div>
         </div>
-      </CardHeader>
+      </Show>
 
       <Show when={!props.minimized}>
-        <CardContent class="flex flex-1 flex-col p-0">
+        <div class="flex flex-1 flex-col overflow-hidden">
           {/* Messages */}
-          <ScrollArea class="flex-1 p-4" ref={setScrollAreaRef} data-testid="chat-messages">
-            <div class="space-y-3">
+          <div class="flex-1 overflow-auto p-3" ref={setScrollAreaRef} data-testid="chat-messages">
+            <div class="space-y-2.5">
               <For each={messages()} fallback={
-                <div class="py-8 text-center text-xs text-gray-500">
+                <div class="py-6 text-center text-xs text-white/30">
                   No messages yet. Be the first to chat!
                 </div>
               }>
@@ -275,8 +271,8 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
                     'text-center': msg.type === 'system',
                   }}>
                     <Show when={msg.type === 'system'}>
-                      <div class="inline-block rounded bg-gray-100 px-3 py-1 text-xs text-gray-600">
-                        ℹ️ {msg.message}
+                      <div class="inline-block rounded bg-white/5 px-3 py-1 text-xs text-white/40">
+                        {msg.message}
                       </div>
                     </Show>
 
@@ -284,19 +280,19 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
                       <div classList={{
                         'text-right': msg.senderId === identity()?.toHexString(),
                       }}>
-                        <div class="mb-1 flex items-center gap-2" classList={{
+                        <div class="mb-0.5 flex items-center gap-2" classList={{
                           'justify-end': msg.senderId === identity()?.toHexString(),
                         }}>
-                          <span class="text-xs font-semibold text-gray-700">
+                          <span class="text-[10px] font-semibold text-white/60">
                             {msg.senderName}
                           </span>
-                          <span class="text-xs text-gray-400">
+                          <span class="text-[10px] text-white/25">
                             {getMessageTime(msg.timestamp)}
                           </span>
                         </div>
-                        <div class="inline-block max-w-[80%] rounded-lg px-3 py-2 text-sm" classList={{
-                          'bg-blue-500 text-white': msg.senderId === identity()?.toHexString(),
-                          'bg-gray-200 text-gray-800': msg.senderId !== identity()?.toHexString(),
+                        <div class="inline-block max-w-[80%] rounded-lg px-2.5 py-1.5 text-xs" classList={{
+                          'bg-blue-500/80 text-white': msg.senderId === identity()?.toHexString(),
+                          'bg-white/10 text-white/80': msg.senderId !== identity()?.toHexString(),
                         }}>
                           {msg.message}
                         </div>
@@ -304,117 +300,119 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
                     </Show>
 
                     <Show when={msg.type === 'trade-offer'}>
-                      <Card class="border-yellow-200" classList={{
-                        "bg-yellow-50": msg.tradeOfferStatus === 'open',
-                        "bg-gray-50 opacity-60": msg.tradeOfferStatus !== 'open',
+                      <div class="rounded-lg border" classList={{
+                        "border-amber-500/30 bg-amber-500/10": msg.tradeOfferStatus === 'open',
+                        "border-white/5 bg-white/5 opacity-50": msg.tradeOfferStatus !== 'open',
                       }}>
-                        <CardContent class="p-3 text-sm">
+                        <div class="p-2.5 text-xs">
                           <div class="flex items-center justify-between">
-                            <div class="font-semibold">
-                              {msg.tradeOfferType === 'sell_vote' ? '📤 Selling Vote' : '📥 Buying Vote'}
+                            <div class="font-semibold text-white/80">
+                              {msg.tradeOfferType === 'sell_vote' ? 'Selling Vote' : 'Buying Vote'}
                             </div>
-                            <Badge variant="outline" class="text-xs font-bold">
+                            <span class="rounded border border-amber-400/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
                               ${msg.tradeOfferPrice?.toFixed(2)}
-                            </Badge>
+                            </span>
                           </div>
-                          <div class="mt-1 text-xs text-gray-600">
+                          <div class="mt-1 text-[10px] text-white/40">
                             {msg.senderName} is {msg.message}
                           </div>
                           <Show when={msg.tradeOfferStatus === 'open' && msg.senderId !== identity()?.toHexString()}>
-                            <div class="mt-2 flex gap-2">
-                              <Button size="sm" onClick={() => handleAcceptOffer(msg.tradeOfferId!)}>
+                            <div class="mt-2 flex gap-1.5">
+                              <button class="rounded bg-emerald-600/80 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-emerald-500" onClick={() => handleAcceptOffer(msg.tradeOfferId!)}>
                                 Accept
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => handleDeclineOffer(msg.tradeOfferId!)}>
+                              </button>
+                              <button class="rounded bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/50 hover:bg-white/20" onClick={() => handleDeclineOffer(msg.tradeOfferId!)}>
                                 Ignore
-                              </Button>
+                              </button>
                             </div>
                           </Show>
                           <Show when={msg.tradeOfferStatus === 'open' && msg.senderId === identity()?.toHexString()}>
                             <div class="mt-2">
-                              <Button size="sm" variant="outline" onClick={() => handleDeclineOffer(msg.tradeOfferId!)}>
+                              <button class="rounded bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/50 hover:bg-white/20" onClick={() => handleDeclineOffer(msg.tradeOfferId!)}>
                                 Cancel Offer
-                              </Button>
+                              </button>
                             </div>
                           </Show>
                           <Show when={msg.tradeOfferStatus === 'accepted'}>
-                            <div class="mt-2 text-xs font-semibold text-green-600">Trade completed</div>
+                            <div class="mt-1.5 text-[10px] font-semibold text-emerald-400">Trade completed</div>
                           </Show>
                           <Show when={msg.tradeOfferStatus === 'cancelled'}>
-                            <div class="mt-2 text-xs text-gray-500">Cancelled</div>
+                            <div class="mt-1.5 text-[10px] text-white/30">Cancelled</div>
                           </Show>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     </Show>
                   </div>
                 )}
               </For>
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Trade Offer Form */}
           <Show when={showTradeForm()}>
-            <div class="border-t border-yellow-300 bg-yellow-50 p-3 space-y-2">
+            <div class="border-t border-amber-500/20 bg-amber-500/5 p-2.5 space-y-2">
               <div class="flex items-center justify-between">
-                <span class="text-sm font-semibold">Create Trade Offer</span>
-                <Button size="sm" variant="ghost" onClick={() => setShowTradeForm(false)}>✕</Button>
+                <span class="text-xs font-semibold text-white/70">Create Trade Offer</span>
+                <button class="text-white/40 hover:text-white/70 text-xs" onClick={() => setShowTradeForm(false)}>✕</button>
               </div>
               <div class="flex gap-2">
                 <select
-                  class="flex-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+                  class="flex-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/80"
                   value={tradeType()}
                   onChange={(e) => setTradeType(e.currentTarget.value as 'sell_vote' | 'buy_vote')}
                 >
                   <option value="sell_vote">Sell my vote</option>
                   <option value="buy_vote">Buy a vote</option>
                 </select>
-                <TextField class="w-24">
-                  <TextFieldInput
-                    type="number"
-                    min="0.01"
-                    step="0.5"
-                    value={tradePrice()}
-                    onInput={(e) => setTradePrice(parseFloat(e.currentTarget.value) || 0)}
-                  />
-                </TextField>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.5"
+                  value={tradePrice()}
+                  onInput={(e) => setTradePrice(parseFloat(e.currentTarget.value) || 0)}
+                  class="w-20 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/80"
+                />
               </div>
-              <Button size="sm" class="w-full" onClick={handleCreateTradeOffer}>
+              <button class="w-full rounded bg-amber-600/80 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500" onClick={handleCreateTradeOffer}>
                 Post Offer (${tradePrice().toFixed(2)})
-              </Button>
+              </button>
             </div>
           </Show>
 
           {/* Input */}
-          <div class="border-t p-3">
-            <div class="flex gap-2">
-              <TextField class="flex-1">
-                <TextFieldInput
-                  data-testid="chat-input"
-                  placeholder="Type a message..."
-                  value={inputValue()}
-                  onInput={(e) => setInputValue(e.currentTarget.value)}
-                  onKeyPress={handleKeyPress}
-                />
-              </TextField>
-              <Button
-                size="sm"
-                variant="outline"
+          <div class="border-t border-white/10 p-2.5">
+            <div class="flex gap-1.5">
+              <input
+                data-testid="chat-input"
+                placeholder="Type a message..."
+                value={inputValue()}
+                onInput={(e) => setInputValue(e.currentTarget.value)}
+                onKeyPress={handleKeyPress}
+                class="flex-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white placeholder-white/25 outline-none focus:border-white/20"
+              />
+              <button
+                class="rounded bg-white/10 px-2 py-1 text-sm hover:bg-white/20"
                 onClick={() => setShowTradeForm(!showTradeForm())}
                 title="Trade Offer"
               >
                 🤝
-              </Button>
-              <Button data-testid={TID.sendButton} onClick={sendMessage} disabled={!inputValue().trim()}>
+              </button>
+              <button
+                data-testid={TID.sendButton}
+                onClick={sendMessage}
+                disabled={!inputValue().trim()}
+                class="rounded bg-blue-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 Send
-              </Button>
+              </button>
             </div>
-            <div class="mt-2 text-xs text-gray-500">
-              Press Enter to send • 🤝 to post a trade offer
+            <div class="mt-1.5 text-[10px] text-white/20">
+              Enter to send
             </div>
           </div>
-        </CardContent>
+        </div>
       </Show>
-    </Card>
+    </div>
   );
 };
 

@@ -25,12 +25,27 @@ export const DebugPanel: Component<DebugPanelProps> = (props) => {
     const originalError = console.error;
     const originalWarn = console.warn;
 
+    let pending = false;
+    let buffer: Array<{ time: string; level: string; message: string }> = [];
+
+    const flushBuffer = () => {
+      pending = false;
+      if (buffer.length === 0) return;
+      const batch = buffer;
+      buffer = [];
+      setLogs(prev => [...prev, ...batch].slice(-100));
+    };
+
     const addLog = (level: string, args: unknown[]) => {
-      setLogs(prev => [...prev, {
+      buffer.push({
         time: new Date().toLocaleTimeString(),
         level,
-        message: args.map(a => typeof a === 'string' ? a : String(a)).join(' ')
-      }].slice(-100));
+        message: args.map(a => typeof a === 'string' ? a : String(a)).join(' '),
+      });
+      if (!pending) {
+        pending = true;
+        queueMicrotask(flushBuffer);
+      }
     };
 
     console.log = (...args) => { originalLog(...args); addLog('log', args); };

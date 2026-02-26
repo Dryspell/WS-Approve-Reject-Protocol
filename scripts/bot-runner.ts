@@ -12,6 +12,7 @@
  *   --delay N          Milliseconds between actions (default: 3000)
  *   --chat             Enable occasional chat messages
  *   --verbose          Log every decision
+ *   --ready-delay N    Milliseconds before bots ready up (default: 15000)
  *   --host URL         SpacetimeDB host (default: http://127.0.0.1:3000)
  *   --db NAME          Database name (default: game)
  */
@@ -28,6 +29,7 @@ export type Strategy = 'contrarian' | 'follower' | 'random' | 'splitter' | 'mixe
 export interface BotConfig {
   room: string;
   delay: number;
+  readyDelay: number;
   chat: boolean;
   verbose: boolean;
   host: string;
@@ -37,6 +39,7 @@ export interface BotConfig {
 const DEFAULT_CONFIG: BotConfig = {
   room: 'bot-arena',
   delay: 3000,
+  readyDelay: 15000,
   chat: false,
   verbose: false,
   host: 'http://127.0.0.1:3000',
@@ -118,6 +121,7 @@ export class Bot {
   private interval: ReturnType<typeof setInterval> | null = null;
   private readyToggled = false;
   private hasVotedEndRound = false;
+  private votedEndRoundForRound = -1;
   private lastChatTick = 0;
 
   constructor(index: number, strategy: Strategy, config?: Partial<BotConfig>) {
@@ -319,12 +323,15 @@ export class Bot {
     }
 
     if (!this.readyToggled) {
-      const delay = 500 + Math.random() * 2000;
+      const delay = this.cfg.readyDelay + Math.random() * this.cfg.readyDelay * 0.5;
+      this.readyToggled = true; // set immediately to prevent multiple setTimeout calls
       setTimeout(() => {
-        if (this.state !== 'LOBBY' || !this.conn || !this.identity) return;
+        if (this.state !== 'LOBBY' || !this.conn || !this.identity) {
+          this.readyToggled = false;
+          return;
+        }
         this.log('Toggling ready');
         this.conn.reducers.toggleReady({ roomId: room.id, userId: this.identity.toHexString() });
-        this.readyToggled = true;
       }, delay);
     }
   }
@@ -372,19 +379,18 @@ export class Bot {
       }
     }
 
+    // Reset vote flag when the round advances
+    if (this.votedEndRoundForRound !== room.currentRound) {
+      this.hasVotedEndRound = false;
+    }
+
     if (!this.hasVotedEndRound && myVotes.length > 0 && uncoloredVotes.length === 0) {
       if (Math.random() < 0.4) {
         this.debug('Voting to end round');
         this.conn.reducers.voteEndRound({ roomId: room.id });
         this.hasVotedEndRound = true;
+        this.votedEndRoundForRound = room.currentRound;
       }
-    }
-
-    const currentEndVotes = [...this.conn.db.end_round_vote.iter()].filter(
-      (v) => v.roomId === room.id && v.round === room.currentRound && v.userId === identityHex
-    );
-    if (currentEndVotes.length === 0) {
-      this.hasVotedEndRound = false;
     }
   }
 
@@ -438,7 +444,7 @@ export class Bot {
     this.debug(`Chat: "${text}"`);
     try {
       this.conn.reducers.sendChatMessage({
-        roomId: String(room.id),
+        roomId: `game_${room.id}`,
         text,
         roundNumber: room.gameStatus === 'lobby' ? undefined : room.currentRound,
       });
@@ -475,6 +481,7 @@ function parseArgs(argv: string[]) {
     room: 'bot-arena',
     strategy: 'mixed' as Strategy,
     delay: 3000,
+    readyDelay: 15000,
     chat: false,
     verbose: false,
     host: 'http://127.0.0.1:3000',
@@ -483,14 +490,15 @@ function parseArgs(argv: string[]) {
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case '--count':   opts.count = parseInt(args[++i], 10); break;
-      case '--room':    opts.room = args[++i]; break;
-      case '--strategy': opts.strategy = args[++i] as Strategy; break;
-      case '--delay':   opts.delay = parseInt(args[++i], 10); break;
-      case '--chat':    opts.chat = true; break;
-      case '--verbose': opts.verbose = true; break;
-      case '--host':    opts.host = args[++i]; break;
-      case '--db':      opts.db = args[++i]; break;
+      case '--count':       opts.count = parseInt(args[++i], 10); break;
+      case '--room':        opts.room = args[++i]; break;
+      case '--strategy':    opts.strategy = args[++i] as Strategy; break;
+      case '--delay':       opts.delay = parseInt(args[++i], 10); break;
+      case '--ready-delay': opts.readyDelay = parseInt(args[++i], 10); break;
+      case '--chat':        opts.chat = true; break;
+      case '--verbose':     opts.verbose = true; break;
+      case '--host':        opts.host = args[++i]; break;
+      case '--db':          opts.db = args[++i]; break;
     }
   }
   return opts;
@@ -534,6 +542,7 @@ if (isDirectRun) {
     const botCfg: BotConfig = {
       room: cliConfig.room,
       delay: cliConfig.delay,
+      readyDelay: cliConfig.readyDelay,
       chat: cliConfig.chat,
       verbose: cliConfig.verbose,
       host: cliConfig.host,

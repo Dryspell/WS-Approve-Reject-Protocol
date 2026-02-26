@@ -1,6 +1,6 @@
 # Project TODOs
 
-> **Current Focus**: Documentation accuracy, then game-breaking bug fixes
+> **Current Focus**: All 11 phases of the Complete Feature Roadmap + Phase L Integration Gap Fixes are complete.
 >
 > See [docs/development-history.md](./docs/development-history.md) for completed sprint summaries.
 > See [docs/STATUS.md](./docs/STATUS.md) for vision-vs-implementation mapping.
@@ -61,27 +61,68 @@
 
 ---
 
-## Phase 5: Game Design Alignment (Partially Complete)
+## Phase 5: Game Design Alignment (Complete)
 
 - [x] **Transaction fees** -- 1% fee on vote sales, guarantee purchases, and trade offers (added to pot via `TRANSACTION_FEE_RATE`)
 - [x] **Extract hardcoded game constants** -- all key values now named constants (`STARTING_WALLET`, `DEFAULT_ROUND_DURATION`, `REBUY_MULTIPLIER`, `REBUY_POT_PERCENTAGE`, `TRANSACTION_FEE_RATE`, `WIN_CONDITION_REMAINING`)
 - [x] **Per-room game configuration** -- `votes_per_player`, `min_players`, `max_players`, `allow_rebuy`, `allow_midgame_join` fields on `GameRoom`, exposed in room creation UI and presets
+- [x] **Side-betting for eliminated/spectating players** -- SideBet table, SideBetPanel
 - [ ] **Configurable starting wallet limit** -- add wallet cap per room or globally
-- [ ] **Side-betting for eliminated/spectating players** -- bets on round outcomes
 
 ---
 
-## Phase 6: Stretch Goals
+## Phase 6: Stretch Goals (Mostly Complete)
 
+- [x] **Colony Builder integration with Vote Exchange** -- laborers as voters (vote_id on Unit)
+- [x] **Tournament mode** -- Tournament table, TournamentPanel
+- [x] **Spectator mode** -- Spectator table
+- [x] **Dual currency (MT + MBLS)** -- PlayerCurrency table
+- [x] **Multi-timeframe server hierarchy** -- ServerNode table, transfer reducers
 - [ ] Mobile responsive layout (keep in mind during all work but don't block)
 - [ ] Counter-offer / negotiation system (VG-025 in QA outline)
 - [ ] Per-round partial pot distribution option
 - [ ] Vote-on-voting trigger (alternative to timer-based rounds)
-- [ ] Colony Builder integration with Vote Exchange (laborers as voters)
-- [ ] Tournament mode with brackets
 - [ ] Bot players for solo practice
-- [ ] Spectator mode
 - [ ] Clan/guild system
+
+---
+
+## Complete Feature Roadmap (Phases A–K)
+
+- [x] **Phase A**: Laborer-Vote Unification (vote_id on Unit, units linked to votes)
+- [x] **Phase B**: Functional Buildings (16 building types, construction, assignment, taxation)
+- [x] **Phase C**: Resource Refinement Pipeline (game_tick processes building production)
+- [x] **Phase D**: Equipment System -- equip/unequip apply stat bonuses via `recalculate_unit_stats`; crafting consumes tiered materials
+- [x] **Phase E**: Battle Arena -- `create_battle_arena` reducer with stat snapshots; UI wired
+- [x] **Phase F**: Laborer Genetics -- initial units get LaborerGenetics records; breeding works
+- [x] **Phase G**: Vote Mechanics Polish -- side bet economics backed by pot; payouts from pot_size
+- [x] **Phase H**: Multi-Timeframe Server Hierarchy (ServerNode table, transfer reducers)
+- [x] **Phase I**: Dual Currency (PlayerCurrency table with MT + MBLS)
+- [x] **Phase J**: Platform Features (Tournament, Spectator tables)
+- [x] **Phase K**: Technical Debt (dead code removal, docs update, cleanup)
+
+---
+
+## Phase L: Integration Gap Fixes (Complete)
+
+- [x] **Equipment stat application** -- `equip_item`/`unequip_item` recalculate UnitStats via `recalculate_unit_stats` helper
+- [x] **Craft resource consumption** -- `craft_equipment` consumes materials from building inventory (5 tiers)
+- [x] **Battle arena creation** -- `create_battle_arena` reducer snapshots unit stats; BattleArenaViewport wired
+- [x] **Side bet economics** -- bet amounts added to pot, payouts come from pot (zero-sum)
+- [x] **Equipment cleanup on unit death** -- unequip items before deletion at all 3 sites
+- [x] **Tax rate double-division bug** -- removed extra /100 in `handleSetBuildingTax`
+- [x] **Wire missing UI** -- `onMoveUnit`, `onQueueTask`, spawn_laborer button wired in VotingInterface
+- [x] **Initial unit genetics** -- `create_initial_units` creates LaborerGenetics records with balanced IVs
+- [x] **Unify vote sale systems** -- `set_vote_for_sale` creates TradeOffer; `remove_vote_from_sale` cancels it; `transfer_vote_ownership` marks it accepted
+
+---
+
+## Future Work
+
+- [ ] **Visual polish on 3D models for buildings** -- richer assets, improved building representations
+- [ ] **Full multi-server SpacetimeDB architecture** -- ServerNode/transfers exist; production hierarchy deployment
+- [ ] **Payment processor integration for real currency** -- cash-out, real-money transactions
+- [ ] **Mobile responsive layout** -- responsive design across breakpoints
 
 ---
 

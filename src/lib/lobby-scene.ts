@@ -6,15 +6,16 @@ import {
   onLoadProgress,
   ASSETS,
   type CharacterClass,
+  skeletonForIndex,
 } from "./asset-loader";
 import {
   type ManagedCharacter,
   type SharedAnimations,
-  waitForDimensions,
   createNameSprite,
   disposeNameSprite,
   createLabelSprite,
   loadSharedAnimations,
+  setupAnimationActions,
   spawnCharacter,
   transitionMovement,
   createRenderer,
@@ -48,6 +49,18 @@ const MOVE_SPEED = 10;
 const CAMERA_OFFSET = new THREE.Vector3(0, 30, 24);
 const CAMERA_LERP = 0.06;
 const POSITION_BROADCAST_INTERVAL = 0.1;
+const MINION_SCALE = 1.1;
+const MINION_FOLLOW_SPEED = 6;
+const MINION_COUNT = 3;
+
+interface MinionFollower {
+  mesh: THREE.Group;
+  mixer: THREE.AnimationMixer;
+  idleAction?: THREE.AnimationAction;
+  walkAction?: THREE.AnimationAction;
+  offset: THREE.Vector3;
+  isMoving: boolean;
+}
 
 interface BuildingDef {
   id: string;
@@ -101,6 +114,12 @@ const BUILDING_DEFS: Omit<BuildingDef, "isNear">[] = [
   },
 ];
 
+function hashCode(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
 // ── Nature prop scattering ─────────────────────────────────────────────
 
 async function scatterNatureProps(scene: THREE.Scene, lobbySize: number) {
@@ -151,7 +170,9 @@ export class LobbySceneManager {
   private keyupHandler?: (e: KeyboardEvent) => void;
 
   private playerChar: ManagedCharacter | null = null;
+  private playerMinions: MinionFollower[] = [];
   private otherChars = new Map<string, ManagedCharacter>();
+  private otherMinions = new Map<string, MinionFollower[]>();
   private otherPlayerTargets = new Map<string, { x: number; z: number; rotY: number; isMoving: boolean }>();
   private buildings: BuildingDef[];
   private buildingMeshes: THREE.Group[] = [];
@@ -173,10 +194,14 @@ export class LobbySceneManager {
 
   // ── Lifecycle ────────────────────────────────────────────────────────
 
-  async init(playerName: string, playerCharacter: CharacterClass = "knight") {
-    const dims = await waitForDimensions(this.container);
-    if (!dims || this.disposed) return;
-    const { w, h } = dims;
+  /**
+   * Synchronous init: creates renderer, builds scene, starts loop IMMEDIATELY.
+   * No async gap — mirrors the reference Gathering/main.ts pattern where
+   * init() is fully synchronous inside onMount, then assets load in background.
+   */
+  init(playerName: string, playerCharacter: CharacterClass = "knight") {
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
 
     this.buildScene(w, h);
     this.buildStaticGeometry();
@@ -184,9 +209,7 @@ export class LobbySceneManager {
     this.setupResizeObserver();
     this.startLoop();
 
-    // Async asset loading runs in background; the scene is already visible
-    // with ground, fences, and lights while models stream in.
-    await this.loadAssets(playerName, playerCharacter);
+    this.loadAssets(playerName, playerCharacter);
   }
 
   dispose() {
@@ -202,9 +225,19 @@ export class LobbySceneManager {
       this.playerChar.mixer.stopAllAction();
       disposeModel(this.playerChar.mesh);
     }
+    for (const m of this.playerMinions) {
+      m.mixer.stopAllAction();
+      disposeModel(m.mesh);
+    }
     for (const [, c] of this.otherChars) {
       c.mixer.stopAllAction();
       disposeModel(c.mesh);
+    }
+    for (const [, minions] of this.otherMinions) {
+      for (const m of minions) {
+        m.mixer.stopAllAction();
+        disposeModel(m.mesh);
+      }
     }
     for (const m of this.buildingMeshes) {
       disposeModel(m);
@@ -229,8 +262,8 @@ export class LobbySceneManager {
   private buildScene(w: number, h: number) {
     this.timer = new THREE.Timer();
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a2a15);
-    this.scene.fog = new THREE.FogExp2(0x1a2a15, 0.018);
+    this.scene.background = new THREE.Color(0x87ceeb);
+    this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.012);
 
     this.camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 200);
     this.camera.position.copy(CAMERA_OFFSET);
@@ -327,10 +360,10 @@ export class LobbySceneManager {
 
   private setupResizeObserver() {
     this.ro = new ResizeObserver(() => {
-      if (this.disposed) return;
-      const rw = this.container.clientWidth;
-      const rh = this.container.clientHeight;
-      if (rw === 0 || rh === 0) return;
+      if (this.disposed || !this.renderer) return;
+      const rw = this.container.clientWidth || window.innerWidth;
+      const rh = this.container.clientHeight || window.innerHeight;
+      if (rw < 2 || rh < 2) return;
       this.camera.aspect = rw / rh;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(rw, rh);
@@ -349,6 +382,7 @@ export class LobbySceneManager {
       this.elapsed += dt;
 
       this.updatePlayerMovement(dt);
+      this.updateMinions(dt);
       this.updateOtherCharacters(dt);
       this.updateBuildingBob();
 
@@ -436,6 +470,86 @@ export class LobbySceneManager {
     }
   }
 
+  private updateMinions(dt: number) {
+    if (!this.playerChar) return;
+    const pp = this.playerChar.mesh.position;
+    const playerMoving = this.playerChar.isMoving;
+    this.updateMinionGroup(this.playerMinions, pp, playerMoving, dt);
+
+    for (const [id, minions] of this.otherMinions) {
+      const char = this.otherChars.get(id);
+      if (!char) continue;
+      const target = this.otherPlayerTargets.get(id);
+      this.updateMinionGroup(minions, char.mesh.position, target?.isMoving ?? false, dt);
+    }
+  }
+
+  private updateMinionGroup(minions: MinionFollower[], leaderPos: THREE.Vector3, leaderMoving: boolean, dt: number) {
+    for (const m of minions) {
+      const tx = leaderPos.x + m.offset.x;
+      const tz = leaderPos.z + m.offset.z;
+      const dx = tx - m.mesh.position.x;
+      const dz = tz - m.mesh.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      const moving = dist > 0.3 || leaderMoving;
+
+      if (dist > 0.1) {
+        const speed = MINION_FOLLOW_SPEED * dt;
+        m.mesh.position.x += dx * Math.min(speed / dist, 1);
+        m.mesh.position.z += dz * Math.min(speed / dist, 1);
+        m.mesh.rotation.y = Math.atan2(dx, dz);
+      }
+
+      if (moving !== m.isMoving) {
+        m.isMoving = moving;
+        if (moving && m.walkAction) {
+          m.walkAction.reset().fadeIn(0.2).play();
+          m.idleAction?.fadeOut(0.2);
+        } else if (!moving && m.idleAction) {
+          m.idleAction.reset().fadeIn(0.2).play();
+          m.walkAction?.fadeOut(0.2);
+        }
+      }
+
+      m.mixer.update(dt);
+    }
+  }
+
+  private async spawnMinions(ownerPos: THREE.Vector3, count: number, startIndex = 0): Promise<MinionFollower[]> {
+    const minions: MinionFollower[] = [];
+    for (let i = 0; i < count; i++) {
+      try {
+        const skelClass = skeletonForIndex(startIndex + i);
+        const assetPath = ASSETS.characters[skelClass];
+        const { scene: model, animations } = await loadModel(assetPath);
+        model.scale.setScalar(MINION_SCALE);
+
+        const group = new THREE.Group();
+        group.add(model);
+
+        const angle = ((i / count) * Math.PI * 2) + Math.PI * 0.25;
+        const radius = 2.0 + Math.random() * 0.5;
+        const offset = new THREE.Vector3(
+          Math.cos(angle) * radius,
+          0,
+          Math.sin(angle) * radius,
+        );
+
+        group.position.set(ownerPos.x + offset.x, 0, ownerPos.z + offset.z);
+
+        const mixer = new THREE.AnimationMixer(model);
+        const { idle, walk } = setupAnimationActions(mixer, animations, this.sharedAnimations);
+        idle?.play();
+
+        this.scene.add(group);
+        minions.push({ mesh: group, mixer, idleAction: idle, walkAction: walk, offset, isMoving: false });
+      } catch {
+        /* skeleton model not available */
+      }
+    }
+    return minions;
+  }
+
   // ── Asset loading (async, runs in background) ───────────────────────
 
   private async loadAssets(playerName: string, playerCharacter: CharacterClass) {
@@ -443,11 +557,19 @@ export class LobbySceneManager {
       this.callbacks.onLoadProgress?.(Math.round((loaded / Math.max(total, 1)) * 100)),
     );
 
+    const skeletonAssets = [
+      ASSETS.characters.skeleton_minion,
+      ASSETS.characters.skeleton_warrior,
+      ASSETS.characters.skeleton_mage,
+      ASSETS.characters.skeleton_rogue,
+    ];
+
     const assetsToPreload = [
       ASSETS.characters[playerCharacter],
       ASSETS.animations.general,
       ASSETS.animations.movement,
       ...BUILDING_DEFS.flatMap((b) => b.assets),
+      ...skeletonAssets,
     ];
     await preloadModels(assetsToPreload);
     if (this.disposed) return;
@@ -463,6 +585,13 @@ export class LobbySceneManager {
       { scale: CHARACTER_SCALE },
     );
     this.scene.add(this.playerChar.mesh);
+    if (this.disposed) return;
+
+    this.playerMinions = await this.spawnMinions(
+      this.playerChar.mesh.position,
+      MINION_COUNT,
+      0,
+    );
     if (this.disposed) return;
 
     await this.buildBuildings();
@@ -521,6 +650,15 @@ export class LobbySceneManager {
         this.scene.remove(c.mesh);
         this.otherChars.delete(id);
         this.otherPlayerTargets.delete(id);
+        const minions = this.otherMinions.get(id);
+        if (minions) {
+          for (const m of minions) {
+            m.mixer.stopAllAction();
+            this.scene.remove(m.mesh);
+            disposeModel(m.mesh);
+          }
+          this.otherMinions.delete(id);
+        }
       }
     }
 
@@ -550,10 +688,12 @@ export class LobbySceneManager {
           this.sharedAnimations,
           { ready: p.isReady, scale: CHARACTER_SCALE },
         )
-          .then((char) => {
+          .then(async (char) => {
             char.id = p.id;
             this.scene.add(char.mesh);
             this.otherChars.set(p.id, char);
+            const minions = await this.spawnMinions(char.mesh.position, 2, hashCode(p.id));
+            if (!this.disposed) this.otherMinions.set(p.id, minions);
           })
           .catch(() => {});
       }

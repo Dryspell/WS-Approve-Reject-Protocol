@@ -1,9 +1,4 @@
 import { Component, createSignal, For, Show } from "solid-js";
-import { Card, CardContent } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Badge } from "~/components/ui/badge";
-import { TextField, TextFieldLabel, TextFieldInput } from "~/components/ui/text-field";
-import { ScrollArea } from "~/components/ui/scroll-area";
 import type { Guarantee, GuaranteePurchase, Vote } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { ToastHelper } from "~/lib/toast-helpers";
@@ -21,48 +16,42 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
   const { conn } = useSpacetimeDB();
   const [guarantees, setGuarantees] = createSignal<Guarantee[]>([]);
   const [purchases, setPurchases] = createSignal<GuaranteePurchase[]>([]);
-  
+
   const [createColor, setCreateColor] = createSignal<"red" | "blue">("red");
   const [createPrice, setCreatePrice] = createSignal<number>(5);
   const [createType, setCreateType] = createSignal<"public" | "private">("public");
   const [selectedVoteId, setSelectedVoteId] = createSignal<number | null>(null);
 
-  const activeGuarantees = () => {
-    return guarantees().filter(
+  const activeGuarantees = () =>
+    guarantees().filter(
       (g) => g.isActive && g.roomId === props.roomId && g.roundNumber === props.roundNumber
     );
-  };
 
-  const myGuarantees = () => {
-    return guarantees().filter(
+  const myGuarantees = () =>
+    guarantees().filter(
       (g) => g.sellerId === props.currentUserId && g.roomId === props.roomId
     );
-  };
 
-  const myPurchases = () => {
-    return purchases().filter((p) => p.buyerId === props.currentUserId);
-  };
+  const myPurchases = () =>
+    purchases().filter((p) => p.buyerId === props.currentUserId);
 
-  // Votes that don't already have an active guarantee
   const availableVotesForGuarantee = () => {
     const guaranteedVoteIds = new Set(
       guarantees()
-        .filter(g => g.sellerId === props.currentUserId && g.isActive)
-        .map(g => g.voteId)
+        .filter((g) => g.sellerId === props.currentUserId && g.isActive)
+        .map((g) => g.voteId)
     );
-    return props.myVotes.filter(v => !guaranteedVoteIds.has(v.id));
+    return props.myVotes.filter((v) => !guaranteedVoteIds.has(v.id));
   };
 
   const handleCreateGuarantee = async () => {
     const connection = conn();
     if (!connection) return;
-
     const voteId = selectedVoteId();
     if (voteId === null) {
       ToastHelper.warning("Select a Vote", "Pick which vote to guarantee");
       return;
     }
-
     try {
       await connection.reducers.createGuarantee({
         roomId: props.roomId,
@@ -72,11 +61,7 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
         price: createPrice(),
         guaranteeType: createType(),
       });
-      
-      ToastHelper.success(
-        "Guarantee Created",
-        `Vote #${voteId} locked to ${createColor()} at $${createPrice()}`
-      );
+      ToastHelper.success("Guarantee Created", `Vote #${voteId} locked to ${createColor()} at $${createPrice()}`);
       sounds.guaranteePurchased();
       setCreatePrice(5);
       setSelectedVoteId(null);
@@ -89,12 +74,10 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
   const handlePurchaseGuarantee = async (guaranteeId: number, price: number) => {
     const connection = conn();
     if (!connection) return;
-
     if (props.userWalletBalance < price) {
       ToastHelper.warning("Insufficient Funds", `You need $${price} but have $${props.userWalletBalance.toFixed(2)}`);
       return;
     }
-
     try {
       await connection.reducers.purchaseGuarantee({ guaranteeId });
       ToastHelper.success("Guarantee Purchased", `You paid $${price} -- this vote is now locked`);
@@ -105,232 +88,243 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
     }
   };
 
-  return (
-    <div class="space-y-4">
-      {/* Create Guarantee Form */}
-      <Card>
-        <CardContent class="space-y-3 p-4">
-          <p class="text-sm font-semibold">Sell a Guarantee</p>
+  const colorDot = (color: string) => (
+    <div class="h-3 w-3 rounded-full" classList={{ "bg-red-500": color === "red", "bg-blue-500": color === "blue" }} />
+  );
 
-          {/* Vote Selector */}
-          <div class="space-y-1">
-            <p class="text-xs text-gray-600">Select which vote to guarantee:</p>
-            <Show when={availableVotesForGuarantee().length > 0} fallback={
-              <div class="rounded border border-dashed p-2 text-center text-xs text-gray-500">
+  return (
+    <div class="space-y-3 text-white/90">
+      {/* Create Guarantee Form */}
+      <div class="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2.5">
+        <p class="text-xs font-semibold text-white/80">Sell a Guarantee</p>
+
+        {/* Vote Selector */}
+        <div class="space-y-1">
+          <p class="text-[10px] text-white/40">Select which vote to guarantee:</p>
+          <Show
+            when={availableVotesForGuarantee().length > 0}
+            fallback={
+              <div class="rounded border border-dashed border-white/10 p-2 text-center text-[10px] text-white/30">
                 All your votes already have guarantees
               </div>
-            }>
-              <div class="flex flex-wrap gap-1">
-                <For each={availableVotesForGuarantee()}>
-                  {(vote) => (
-                    <Button
-                      size="sm"
-                      variant={selectedVoteId() === vote.id ? "default" : "outline"}
-                      onClick={() => setSelectedVoteId(vote.id)}
-                      class="text-xs"
-                    >
-                      Vote #{vote.id}
-                      {vote.color ? (vote.color === "red" ? " 🔴" : " 🔵") : " ⚪"}
-                    </Button>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </div>
-          
-          <div class="grid grid-cols-2 gap-2">
-            <Button
-              variant={createColor() === "red" ? "default" : "outline"}
-              onClick={() => setCreateColor("red")}
-              class={createColor() === "red" ? "bg-red-500 hover:bg-red-600" : ""}
-            >
-              🔴 Red
-            </Button>
-            <Button
-              variant={createColor() === "blue" ? "default" : "outline"}
-              onClick={() => setCreateColor("blue")}
-              class={createColor() === "blue" ? "bg-blue-500 hover:bg-blue-600" : ""}
-            >
-              🔵 Blue
-            </Button>
-          </div>
-
-          <TextField>
-            <TextFieldLabel class="text-xs">Price ($)</TextFieldLabel>
-            <TextFieldInput
-              type="number"
-              min="0.01"
-              step="0.5"
-              value={createPrice()}
-              onInput={(e) => setCreatePrice(parseFloat(e.currentTarget.value))}
-            />
-          </TextField>
-
-          <div class="space-y-2">
-            <p class="text-xs text-gray-600">Type:</p>
-            <div class="grid grid-cols-2 gap-2">
-              <Button
-                size="sm"
-                variant={createType() === "public" ? "default" : "outline"}
-                onClick={() => setCreateType("public")}
-              >
-                Public
-              </Button>
-              <Button
-                size="sm"
-                variant={createType() === "private" ? "default" : "outline"}
-                onClick={() => setCreateType("private")}
-              >
-                Private
-              </Button>
-            </div>
-            <p class="text-xs text-gray-500">
-              {createType() === "public" 
-                ? "One buyer only (removed after purchase)"
-                : "Multiple different buyers can each purchase"}
-            </p>
-          </div>
-
-          <Button
-            onClick={handleCreateGuarantee}
-            class="w-full"
-            disabled={selectedVoteId() === null || availableVotesForGuarantee().length === 0}
+            }
           >
-            Lock Vote #{selectedVoteId() ?? '?'} to {createColor()} ($${createPrice().toFixed(2)})
-          </Button>
+            <div class="flex flex-wrap gap-1">
+              <For each={availableVotesForGuarantee()}>
+                {(vote) => (
+                  <button
+                    class="rounded border px-1.5 py-0.5 text-[10px] font-medium transition-all"
+                    classList={{
+                      "border-amber-400/60 bg-amber-500/20 text-amber-300": selectedVoteId() === vote.id,
+                      "border-white/10 bg-white/5 text-white/50 hover:bg-white/10": selectedVoteId() !== vote.id,
+                    }}
+                    onClick={() => setSelectedVoteId(vote.id)}
+                  >
+                    #{vote.id}
+                    <span class="ml-0.5">
+                      {vote.color === "red" ? "🔴" : vote.color === "blue" ? "🔵" : "⚪"}
+                    </span>
+                  </button>
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
 
-          <div class="rounded border border-blue-200 bg-blue-50 p-2 text-xs text-blue-700">
-            🔒 <strong>Enforced:</strong> Your vote will be locked to this color once a buyer purchases this guarantee.
+        {/* Color selector */}
+        <div class="grid grid-cols-2 gap-1.5">
+          <button
+            class="flex items-center justify-center gap-1 rounded border py-1 text-[10px] font-semibold transition-all"
+            classList={{
+              "border-red-400/60 bg-red-500/20 text-red-300": createColor() === "red",
+              "border-white/10 bg-white/5 text-white/40 hover:bg-white/10": createColor() !== "red",
+            }}
+            onClick={() => setCreateColor("red")}
+          >
+            {colorDot("red")} Red
+          </button>
+          <button
+            class="flex items-center justify-center gap-1 rounded border py-1 text-[10px] font-semibold transition-all"
+            classList={{
+              "border-blue-400/60 bg-blue-500/20 text-blue-300": createColor() === "blue",
+              "border-white/10 bg-white/5 text-white/40 hover:bg-white/10": createColor() !== "blue",
+            }}
+            onClick={() => setCreateColor("blue")}
+          >
+            {colorDot("blue")} Blue
+          </button>
+        </div>
+
+        {/* Price */}
+        <div class="space-y-0.5">
+          <label class="text-[10px] text-white/40">Price ($)</label>
+          <input
+            type="number"
+            min="0.01"
+            step="0.5"
+            value={createPrice()}
+            onInput={(e) => setCreatePrice(parseFloat(e.currentTarget.value))}
+            class="w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/80 outline-none placeholder:text-white/20 focus:border-white/20"
+          />
+        </div>
+
+        {/* Type */}
+        <div class="space-y-1">
+          <p class="text-[10px] text-white/40">Type:</p>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              class="rounded border py-1 text-[10px] font-medium transition-all"
+              classList={{
+                "border-amber-400/40 bg-amber-500/15 text-amber-300": createType() === "public",
+                "border-white/10 bg-white/5 text-white/40 hover:bg-white/10": createType() !== "public",
+              }}
+              onClick={() => setCreateType("public")}
+            >
+              Public
+            </button>
+            <button
+              class="rounded border py-1 text-[10px] font-medium transition-all"
+              classList={{
+                "border-amber-400/40 bg-amber-500/15 text-amber-300": createType() === "private",
+                "border-white/10 bg-white/5 text-white/40 hover:bg-white/10": createType() !== "private",
+              }}
+              onClick={() => setCreateType("private")}
+            >
+              Private
+            </button>
           </div>
-        </CardContent>
-      </Card>
+          <p class="text-[9px] text-white/25">
+            {createType() === "public"
+              ? "One buyer only (removed after purchase)"
+              : "Multiple buyers can each purchase"}
+          </p>
+        </div>
+
+        <button
+          onClick={handleCreateGuarantee}
+          class="w-full rounded bg-green-600/70 py-1.5 text-[10px] font-semibold text-white transition-colors hover:bg-green-500/80 disabled:opacity-30"
+          disabled={selectedVoteId() === null || availableVotesForGuarantee().length === 0}
+        >
+          Lock Vote #{selectedVoteId() ?? "?"} to {createColor()} (${createPrice().toFixed(2)})
+        </button>
+
+        <div class="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5 text-[9px] text-amber-300/70">
+          🔒 <strong>Enforced:</strong> Your vote will be locked once a buyer purchases.
+        </div>
+      </div>
 
       {/* Available Guarantees */}
       <div>
-        <p class="mb-2 text-sm font-semibold">
-          Available Guarantees ({activeGuarantees().length})
+        <p class="mb-1.5 text-xs font-semibold text-white/70">
+          Available ({activeGuarantees().length})
         </p>
-        <ScrollArea class="h-64">
-          <div class="space-y-2 pr-2">
-            <For
-              each={activeGuarantees()}
-              fallback={
-                <div class="rounded border border-dashed p-4 text-center text-sm text-gray-500">
-                  No guarantees available. Be the first to create one!
-                </div>
-              }
-            >
-              {(guarantee) => {
-                const isMine = () => guarantee.sellerId === props.currentUserId;
-                const hasPurchased = () => myPurchases().some(p => p.guaranteeId === guarantee.id);
+        <div class="max-h-52 space-y-1.5 overflow-auto pr-1">
+          <For
+            each={activeGuarantees()}
+            fallback={
+              <div class="rounded-lg border border-dashed border-white/10 bg-white/5 p-4 text-center text-[10px] text-white/30">
+                No guarantees available yet
+              </div>
+            }
+          >
+            {(guarantee) => {
+              const isMine = () => guarantee.sellerId === props.currentUserId;
+              const hasPurchased = () => myPurchases().some((p) => p.guaranteeId === guarantee.id);
 
-                return (
-                  <Card classList={{ "border-green-300": hasPurchased() }}>
-                    <CardContent class="p-3">
-                      <div class="flex items-start justify-between">
-                        <div class="flex-1">
-                          <div class="flex items-center gap-2">
-                            <span class="text-2xl">
-                              {guarantee.color === "red" ? "🔴" : "🔵"}
-                            </span>
-                            <div>
-                              <div class="font-semibold capitalize">
-                                {guarantee.color} Guarantee
-                              </div>
-                              <div class="text-xs text-gray-500">
-                                {guarantee.guaranteeType === "public" ? "Public" : "Private"} •
-                                Vote #{guarantee.voteId} •
-                                By {isMine() ? "You" : guarantee.sellerId.slice(0, 8) + "..."}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <Show when={hasPurchased()}>
-                            <Badge variant="default" class="mt-2 text-xs bg-green-600">
-                              ✓ Purchased
-                            </Badge>
-                          </Show>
-                        </div>
-
-                        <div class="flex flex-col items-end gap-2">
-                          <Badge variant="outline" class="text-sm font-bold">
-                            ${guarantee.price.toFixed(2)}
-                          </Badge>
-                          
-                          <Show when={!isMine() && !hasPurchased()}>
-                            <Button
-                              size="sm"
-                              onClick={() => handlePurchaseGuarantee(guarantee.id, guarantee.price)}
-                              disabled={props.userWalletBalance < guarantee.price}
-                            >
-                              Buy
-                            </Button>
-                          </Show>
+              return (
+                <div
+                  class="rounded-lg border bg-white/5 px-3 py-2 transition-all"
+                  classList={{
+                    "border-green-500/30": hasPurchased(),
+                    "border-white/10 hover:border-white/20": !hasPurchased(),
+                  }}
+                >
+                  <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-2">
+                      {colorDot(guarantee.color)}
+                      <div>
+                        <div class="text-[11px] font-semibold capitalize">{guarantee.color} Guarantee</div>
+                        <div class="text-[9px] text-white/30">
+                          {guarantee.guaranteeType === "public" ? "Public" : "Private"} · Vote #{guarantee.voteId} ·{" "}
+                          {isMine() ? "You" : guarantee.sellerId.slice(0, 8) + "..."}
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                );
-              }}
-            </For>
-          </div>
-        </ScrollArea>
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                      <span class="text-xs font-bold text-amber-300">${guarantee.price.toFixed(2)}</span>
+                      <Show when={hasPurchased()}>
+                        <span class="rounded bg-green-600/30 px-1 py-0.5 text-[9px] font-semibold text-green-400">
+                          ✓ Purchased
+                        </span>
+                      </Show>
+                      <Show when={!isMine() && !hasPurchased()}>
+                        <button
+                          class="rounded bg-amber-500/80 px-2 py-0.5 text-[10px] font-semibold text-white transition-colors hover:bg-amber-400 disabled:opacity-30"
+                          onClick={() => handlePurchaseGuarantee(guarantee.id, guarantee.price)}
+                          disabled={props.userWalletBalance < guarantee.price}
+                        >
+                          Buy
+                        </button>
+                      </Show>
+                    </div>
+                  </div>
+                </div>
+              );
+            }}
+          </For>
+        </div>
       </div>
 
       {/* Your Guarantees */}
       <Show when={myGuarantees().length > 0}>
         <div>
-          <p class="mb-2 text-sm font-semibold">
+          <p class="mb-1.5 text-xs font-semibold text-white/70">
             Your Guarantees ({myGuarantees().length})
           </p>
-          <ScrollArea class="h-48">
-            <div class="space-y-2 pr-2">
-              <For each={myGuarantees()}>
-                {(guarantee) => {
-                  const purchaseCount = () => purchases().filter(
-                    p => p.guaranteeId === guarantee.id
-                  ).length;
-
-                  return (
-                    <Card>
-                      <CardContent class="p-3">
-                        <div class="flex items-center justify-between">
-                          <div class="flex items-center gap-2">
-                            <span class="text-xl">
-                              {guarantee.color === "red" ? "🔴" : "🔵"}
-                            </span>
-                            <div>
-                              <div class="font-medium capitalize text-sm">
-                                Vote #{guarantee.voteId} → {guarantee.color} • ${guarantee.price}
-                              </div>
-                              <div class="text-xs text-gray-500">
-                                {guarantee.guaranteeType} • {purchaseCount()} purchase{purchaseCount() !== 1 ? "s" : ""}
-                              </div>
-                            </div>
-                          </div>
-                          <Badge variant={guarantee.isActive ? "default" : "secondary"}>
-                            {guarantee.isActive ? (purchaseCount() > 0 ? "🔒 Locked" : "Active") : "Sold"}
-                          </Badge>
+          <div class="max-h-40 space-y-1.5 overflow-auto pr-1">
+            <For each={myGuarantees()}>
+              {(guarantee) => {
+                const purchaseCount = () => purchases().filter((p) => p.guaranteeId === guarantee.id).length;
+                return (
+                  <div class="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                    <div class="flex items-center gap-2">
+                      {colorDot(guarantee.color)}
+                      <div>
+                        <div class="text-[11px] font-medium capitalize">
+                          Vote #{guarantee.voteId} → {guarantee.color} · ${guarantee.price}
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                }}
-              </For>
-            </div>
-          </ScrollArea>
+                        <div class="text-[9px] text-white/30">
+                          {guarantee.guaranteeType} · {purchaseCount()} purchase{purchaseCount() !== 1 ? "s" : ""}
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      class="rounded px-1.5 py-0.5 text-[9px] font-semibold"
+                      classList={{
+                        "bg-green-600/30 text-green-400": guarantee.isActive && purchaseCount() > 0,
+                        "bg-amber-500/20 text-amber-300": guarantee.isActive && purchaseCount() === 0,
+                        "bg-white/10 text-white/40": !guarantee.isActive,
+                      }}
+                    >
+                      {guarantee.isActive ? (purchaseCount() > 0 ? "🔒 Locked" : "Active") : "Sold"}
+                    </span>
+                  </div>
+                );
+              }}
+            </For>
+          </div>
         </div>
       </Show>
 
       {/* Info */}
-      <div class="rounded border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
-        <p class="font-semibold">💡 How Guarantees Work</p>
-        <ul class="ml-4 mt-1 list-disc space-y-1">
-          <li><strong>Per-vote:</strong> Each guarantee locks one specific vote to a color</li>
-          <li><strong>Enforced:</strong> Once purchased, the server locks the vote -- the seller cannot change it</li>
-          <li><strong>Public:</strong> One buyer only, then the guarantee is removed</li>
-          <li><strong>Private:</strong> Multiple different buyers can each purchase (but not the same buyer twice)</li>
-          <li><strong>Strategy:</strong> Buyers can bluff others about what guarantees they hold</li>
+      <div class="rounded-lg border border-blue-400/15 bg-blue-500/5 p-2.5 text-[9px] text-blue-300/60">
+        <p class="font-semibold text-blue-300/80">How Guarantees Work</p>
+        <ul class="ml-3 mt-1 list-disc space-y-0.5">
+          <li>Each guarantee locks one specific vote to a color</li>
+          <li>Once purchased, the server locks the vote -- seller cannot change it</li>
+          <li><strong>Public:</strong> One buyer only, then removed</li>
+          <li><strong>Private:</strong> Multiple different buyers can each purchase</li>
+          <li>Buyers can bluff others about what guarantees they hold</li>
         </ul>
       </div>
     </div>

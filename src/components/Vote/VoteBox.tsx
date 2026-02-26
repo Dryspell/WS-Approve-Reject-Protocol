@@ -460,11 +460,7 @@ const VoteBox: Component = () => {
           </Show>
 
           <div class="flex-1 min-h-0 overflow-hidden relative" data-testid={TID.contentArea}>
-            {/*
-              Iterate over stable room IDs only. Accessing rooms()[roomId] inside
-              the callback keeps the room data reactive without remounting when
-              unrelated fields change (which would destroy the Three.js context).
-            */}
+            {/* Empty state: no room selected or room doesn't exist */}
             <Show when={!currentRoom() || !rooms()[currentRoom()!]}>
               <div class="flex h-64 items-center justify-center">
                 <div class="text-center">
@@ -480,38 +476,46 @@ const VoteBox: Component = () => {
                 </div>
               </div>
             </Show>
-            <For each={roomIds()}>
-              {(roomId) => {
-                const room = () => rooms()[roomId];
-                return (
-                  <Show when={currentRoom() === roomId}>
-                    <Show when={!room()?.startTime}>
-                      <GamePreStartInteractions
-                        roomId={roomId}
-                        rooms={rooms()}
-                        user={user}
-                        identity={identity}
-                        roomsPreStart={roomsReadyState}
-                        setRoomsPreStart={setRoomsReadyState}
-                        conn={conn}
-                        connected={connected}
-                      />
-                    </Show>
-                    <Show when={room()?.startTime && currentUser()}>
-                      <VotingInterface
-                        room={room()!}
-                        currentUser={currentUser()!}
-                      />
-                    </Show>
-                    <Show when={room()?.startTime && !currentUser()}>
-                      <div class="flex h-full items-center justify-center">
-                        <p class="text-sm text-white/40">Loading user data...</p>
-                      </div>
-                    </Show>
-                  </Show>
-                );
+
+            {/*
+              Pre-game lobby: rendered OUTSIDE <For> to prevent the <For>+<Show>
+              reactive chain from destroying the Three.js WebGL context.
+              Uses CSS display to hide instead of unmounting when not applicable.
+            */}
+            <div
+              style={{
+                display: currentRoom() && rooms()[currentRoom()!] && !rooms()[currentRoom()!]?.startTime ? "" : "none",
+                position: "absolute",
+                inset: "0",
               }}
-            </For>
+            >
+              <Show when={currentRoom()}>
+                <GamePreStartInteractions
+                  roomId={currentRoom()!}
+                  rooms={rooms()}
+                  user={user}
+                  identity={identity}
+                  roomsPreStart={roomsReadyState}
+                  setRoomsPreStart={setRoomsReadyState}
+                  conn={conn}
+                  connected={connected}
+                />
+              </Show>
+            </div>
+
+            {/* In-game: only rendered when game has started */}
+            <Show when={currentRoom() && rooms()[currentRoom()!]?.startTime && currentUser()}>
+              <VotingInterface
+                room={rooms()[currentRoom()!]!}
+                currentUser={currentUser()!}
+              />
+            </Show>
+
+            <Show when={currentRoom() && rooms()[currentRoom()!]?.startTime && !currentUser()}>
+              <div class="flex h-full items-center justify-center">
+                <p class="text-sm text-white/40">Loading user data...</p>
+              </div>
+            </Show>
           </div>
         </div>
       </div>

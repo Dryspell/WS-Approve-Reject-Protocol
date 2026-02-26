@@ -7,14 +7,17 @@ import {
   onLoadProgress,
   ASSETS,
   characterForIndex,
+  skeletonForIndex,
   resourceTypeToAsset,
   type CharacterClass,
 } from "./asset-loader";
 import {
   type ManagedCharacter,
   type SharedAnimations,
-  waitForDimensions,
+  type TradeBillboardData,
   createNameSprite,
+  createTradeBillboard,
+  disposeTradeBillboard,
   setupAnimationActions,
   loadSharedAnimations,
   transitionMovement,
@@ -59,12 +62,21 @@ export interface OtherPlayerAvatar {
   isMoving: boolean;
 }
 
+export interface ActiveTradeOffer {
+  unitId: number;
+  offerId: number;
+  type: "sell" | "buy" | "guarantee";
+  price: number;
+  color?: "red" | "blue" | null;
+}
+
 export interface ColonySceneCallbacks {
   onSelect: (ids: number[]) => void;
   onMoveUnit?: (id: number, x: number, z: number) => void;
   onPositionUpdate?: (x: number, z: number, rotY: number, moving: boolean) => void;
   onLoadProgress?: (progress: number) => void;
   onAssetsReady?: () => void;
+  onTradeOfferClick?: (offerId: number, screenX: number, screenY: number) => void;
   getSelectedIds: () => number[];
 }
 
@@ -119,6 +131,9 @@ interface InternalUnit {
   mesh: THREE.Group;
   hitTarget: THREE.Mesh;
   ring?: THREE.Mesh;
+  hoverRing?: THREE.Mesh;
+  tradeBillboard?: THREE.Sprite;
+  billboardAge: number;
   spring: Spring3;
   mixer?: THREE.AnimationMixer;
   idleAction?: THREE.AnimationAction;
@@ -152,6 +167,15 @@ function createSelectionRing(): THREE.Mesh {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = 0.03;
+  return mesh;
+}
+
+function createHoverRing(): THREE.Mesh {
+  const geo = new THREE.RingGeometry(0.95, 1.15, 32);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.45, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.04;
   return mesh;
 }
 
@@ -226,15 +250,14 @@ export class ColonySceneManager {
 
   // ── Lifecycle ────────────────────────────────────────────────────────
 
-  async init(
+  init(
     units: ColonyUnit[],
     resources: ColonyResource[] | undefined,
     playerName?: string,
     playerCharacter?: CharacterClass,
   ) {
-    const dims = await waitForDimensions(this.container);
-    if (!dims || this.disposed) return;
-    const { w, h } = dims;
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
 
     this.buildScene(w, h);
     this.buildStaticGeometry();
@@ -244,7 +267,7 @@ export class ColonySceneManager {
     this.setupResizeObserver();
     this.startLoop();
 
-    await this.loadAssets(units, resources, playerName, playerCharacter);
+    this.loadAssets(units, resources, playerName, playerCharacter);
   }
 
   dispose() {
@@ -479,8 +502,28 @@ export class ColonySceneManager {
 
   private handleClick = (e: MouseEvent) => {
     if (this.isDragging) return;
+
+    // Check for billboard clicks first
+    this.getMouseNDC(e);
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const billboards = this.internalUnits
+      .filter((u) => u.tradeBillboard)
+      .map((u) => u.tradeBillboard!);
+    if (billboards.length > 0) {
+      const bbHits = this.raycaster.intersectObjects(billboards, false);
+      if (bbHits.length > 0) {
+        const offerId = bbHits[0].object.userData.offerId;
+        if (offerId != null) {
+          this.callbacks.onTradeOfferClick?.(offerId, e.clientX, e.clientY);
+          return;
+        }
+      }
+    }
+
     const hitUnit = this.raycastUnits(e);
-    if (!hitUnit && !e.shiftKey) {
+    if (hitUnit) {
+      this.resetBillboardAge(hitUnit.id);
+    } else if (!e.shiftKey) {
       this.callbacks.onSelect([]);
     }
   };
@@ -489,10 +532,10 @@ export class ColonySceneManager {
 
   private setupResizeObserver() {
     this.ro = new ResizeObserver(() => {
-      if (this.disposed) return;
-      const w = this.container.clientWidth;
-      const h = this.container.clientHeight;
-      if (w === 0 || h === 0) return;
+      if (this.disposed || !this.renderer) return;
+      const w = this.container.clientWidth || window.innerWidth;
+      const h = this.container.clientHeight || window.innerHeight;
+      if (w < 2 || h < 2) return;
       const a = w / h;
       this.camera.left = (-this.frustum * a) / 2;
       this.camera.right = (this.frustum * a) / 2;
@@ -520,6 +563,7 @@ export class ColonySceneManager {
       this.updateUnits(dt);
       this.updateResources();
       this.updateSelectionPulse();
+      this.updateBillboardFade(dt);
 
       this.renderer.render(this.scene, this.camera);
     };
@@ -655,10 +699,13 @@ export class ColonySceneManager {
 
       // Preload character models for units
       const neededChars = new Set<string>();
-      units.forEach((pu, i) => {
-        const cls = pu.characterClass || characterForIndex(i);
-        neededChars.add(ASSETS.characters[cls]);
+      units.forEach((_pu, i) => {
+        neededChars.add(ASSETS.characters[skeletonForIndex(i)]);
       });
+      neededChars.add(ASSETS.characters.skeleton_minion);
+      neededChars.add(ASSETS.characters.skeleton_warrior);
+      neededChars.add(ASSETS.characters.skeleton_mage);
+      neededChars.add(ASSETS.characters.skeleton_rogue);
       await preloadModels([...neededChars]);
       if (this.disposed) return;
 
@@ -692,8 +739,9 @@ export class ColonySceneManager {
   }
 
   private async createUnit(pu: ColonyUnit, index: number): Promise<InternalUnit> {
-    const charClass = pu.characterClass || characterForIndex(index);
-    const assetPath = ASSETS.characters[charClass];
+    const skelClass = skeletonForIndex(index);
+    const charClass = pu.characterClass || skelClass;
+    const assetPath = ASSETS.characters[charClass] || ASSETS.characters[skelClass];
     const { scene: model, animations } = await loadModel(assetPath);
     model.scale.setScalar(CHARACTER_SCALE);
 
@@ -727,6 +775,7 @@ export class ColonySceneManager {
       characterClass: charClass,
       mesh: group,
       hitTarget,
+      billboardAge: 0,
       spring: { cx: pu.x, cy: 0, cz: pu.z, tx: pu.x, ty: 0, tz: pu.z, vx: 0, vy: 0, vz: 0 },
       mixer,
       idleAction: idle,
@@ -860,6 +909,21 @@ export class ColonySceneManager {
     }
   }
 
+  highlightUnit(id: number | null) {
+    for (const u of this.internalUnits) {
+      if (u.id === id && !u.hoverRing) {
+        const ring = createHoverRing();
+        u.mesh.add(ring);
+        u.hoverRing = ring;
+      } else if (u.id !== id && u.hoverRing) {
+        u.mesh.remove(u.hoverRing);
+        u.hoverRing.geometry.dispose();
+        (u.hoverRing.material as THREE.Material).dispose();
+        u.hoverRing = undefined;
+      }
+    }
+  }
+
   // ── Public API for reactive updates ──────────────────────────────────
 
   updateTeamColors(propUnits: ColonyUnit[]) {
@@ -910,6 +974,59 @@ export class ColonySceneManager {
         })
         .catch((err) => console.warn("[ColonyScene] Failed to create dynamic unit:", err));
     }
+  }
+
+  updateTradeOffers(offers: ActiveTradeOffer[]) {
+    const offersByUnit = new Map<number, ActiveTradeOffer>();
+    for (const o of offers) offersByUnit.set(o.unitId, o);
+
+    for (const iu of this.internalUnits) {
+      const offer = offersByUnit.get(iu.id);
+      if (offer) {
+        if (!iu.tradeBillboard || iu.tradeBillboard.userData.offerId !== offer.offerId) {
+          if (iu.tradeBillboard) {
+            iu.mesh.remove(iu.tradeBillboard);
+            disposeTradeBillboard(iu.tradeBillboard);
+          }
+          const bb = createTradeBillboard({
+            offerId: offer.offerId,
+            type: offer.type,
+            price: offer.price,
+            color: offer.color,
+          });
+          iu.mesh.add(bb);
+          iu.tradeBillboard = bb;
+          iu.billboardAge = 0;
+        }
+      } else if (iu.tradeBillboard) {
+        iu.mesh.remove(iu.tradeBillboard);
+        disposeTradeBillboard(iu.tradeBillboard);
+        iu.tradeBillboard = undefined;
+      }
+    }
+  }
+
+  private updateBillboardFade(dt: number) {
+    const SHOW_DURATION = 30;
+    const FADE_DURATION = 2;
+
+    for (const iu of this.internalUnits) {
+      if (!iu.tradeBillboard) continue;
+      iu.billboardAge += dt;
+      const mat = iu.tradeBillboard.material as THREE.SpriteMaterial;
+      if (iu.billboardAge > SHOW_DURATION) {
+        const fadeProgress = Math.min((iu.billboardAge - SHOW_DURATION) / FADE_DURATION, 1);
+        mat.opacity = 1 - fadeProgress;
+      } else {
+        mat.opacity = 1;
+      }
+      iu.tradeBillboard.lookAt(this.camera.position);
+    }
+  }
+
+  resetBillboardAge(unitId: number) {
+    const iu = this.internalUnits.find((u) => u.id === unitId);
+    if (iu) iu.billboardAge = 0;
   }
 
   updateOtherPlayers(players: OtherPlayerAvatar[]) {

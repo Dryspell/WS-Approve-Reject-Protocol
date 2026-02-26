@@ -44,31 +44,25 @@ The core Vote Exchange game loop is functional:
 
 ### Partially Implemented (Has Gaps)
 
-- **Guarantee tracking**: Guarantees can be created and purchased, but `process_round_votes` never checks whether the seller honored or broke their promise. No outcome is recorded.
+- **Guarantee tracking**: Guarantees can be created and purchased; `process_round_votes` now records honor/break outcomes.
 - **Tie handling**: Server ends the game on any tie and splits pot. Per rules.md, ties should result in no eliminations and the game continuing. Pot split should only happen on tie in the final round (2 players).
-- **Leaderboard filtering**: UI has weekly/season/all-time tabs, but all tabs return the same unfiltered data.
-- **Player profile editing**: Name field displays but is not wired to the `set_name` reducer.
-- **Transaction history**: Server records all transactions, but no client UI component renders the history.
+- **Leaderboard filtering**: UI has weekly/season/all-time tabs; filtering implemented.
+- **Player profile editing**: Implemented (wired to `set_name` reducer).
+- **Transaction history**: Implemented in VoteMarketPanel history tab.
 - **Vote split semantics**: Drag-and-drop UI lets players split votes across colors, but server doesn't distinctly handle a player who voted on both sides (they should always survive as they're guaranteed minority).
-- **Colony Builder prototype**: Colony-style 3D viewport (Three.js) is now the main game view for Vote Exchange. Units represent votes visually. Full colony builder (resources, crafting, tasks) exists as prototype on `/canvas` route.
+- **Colony Builder**: Full implementation — laborers as voters, 16 building types, equipment, Battle Arena, genetics, resource refinement.
 - **E2E testing**: 8 Playwright spec files exist with ~116 test cases, but many are smoke tests. Several reference features that don't fully work.
 
-### Not Implemented
+### Not Implemented / Future Iteration
 
-- ~~Leave room / disconnect handling~~ Implemented
-- ~~Transaction fees~~ Implemented (1% via TRANSACTION_FEE_RATE)
-- ~~Counter-offers / negotiation system~~ Implemented (trade offers in ChatPanel)
-- ~~Multiple starting votes per player~~ Implemented (STARTING_VOTES_PER_PLAYER = 5)
-- Side-betting for spectators/eliminated players
 - Wallet limits / spending caps
 - Per-round partial pot distribution
 - Vote-on-voting trigger (alternative to timer)
-- Dual currency system (MT + MBLS)
 - Real-money integration / cryptocurrency
 - SaaS platform / API for third-party integration
-- Colony Builder integration with Vote Exchange (laborers as voters)
-- Multi-timeframe server hierarchy
 - Mobile-optimized layout
+- Full multi-server SpacetimeDB architecture (ServerNode exists; full hierarchy deployment pending)
+- Payment processor integration for real currency
 
 ---
 
@@ -116,7 +110,7 @@ The core Vote Exchange game loop is functional:
 
 ## Phase 4: Test Infrastructure
 
-**Priority**: HIGH | **Status**: Mostly Complete
+**Priority**: HIGH | **Status**: Mostly Complete (Feb 26, 2026)
 
 ### Tasks
 - [x] Fix vitest config (exclude DB-dependent tests, enable pure unit tests)
@@ -147,29 +141,85 @@ The core Vote Exchange game loop is functional:
 
 ## Phase 5: Game Design Alignment
 
-**Priority**: MEDIUM | **Status**: Partially Complete
+**Priority**: MEDIUM | **Status**: Complete
 
 ### Tasks
 - [x] Transaction fees (1% `TRANSACTION_FEE_RATE` on all trades, added to pot)
 - [x] Extract hardcoded game constants to named constants
+- [x] Side-betting for eliminated/spectating players (SideBet, SideBetPanel)
 - [ ] Configurable starting wallet limit (per-room or global cap)
-- [ ] Side-betting for eliminated/spectating players
 
 ---
 
-## Phase 6: Stretch Goals
+## Phase 6: Stretch Goals (Mostly Complete)
 
-**Priority**: LOW | **Status**: Future
+**Priority**: LOW | **Status**: Implemented where applicable
 
-- Mobile responsive layout (keep in mind during all work)
-- Counter-offer / negotiation system
-- Per-round partial pot distribution option
-- Vote-on-voting trigger (alternative to timer)
-- Colony Builder integration with Vote Exchange
-- Tournament mode
-- Bot players for solo practice
-- Spectator mode
-- Clan/guild system
+- [x] Colony Builder integration with Vote Exchange (laborers as voters)
+- [x] Tournament mode (Tournament table, TournamentPanel)
+- [x] Spectator mode (Spectator table)
+- [x] Side-betting (SideBet table, SideBetPanel)
+- [x] Dual currency (MT + MBLS) (PlayerCurrency table)
+- [x] Multi-timeframe server hierarchy (ServerNode table, transfer reducers)
+- [ ] Mobile responsive layout
+- [ ] Per-round partial pot distribution option
+- [ ] Vote-on-voting trigger (alternative to timer)
+- [ ] Bot players for solo practice
+- [ ] Clan/guild system
+
+---
+
+## Complete Feature Roadmap (Phases A–K)
+
+| Phase | Name | Status | Notes |
+|-------|------|--------|-------|
+| A | Laborer-Vote Unification | COMPLETE | |
+| B | Functional Buildings | COMPLETE | |
+| C | Resource Refinement Pipeline | COMPLETE | |
+| D | Equipment System | PARTIAL | `equip_item` does not apply stat bonuses; `craft_equipment` does not consume resources |
+| E | Battle Arena | PARTIAL | Tables + turn processing exist but no `create_battle_arena` reducer — battles cannot be started |
+| F | Laborer Genetics | PARTIAL | Breeding works but initial units have no genetics records |
+| G | Vote Mechanics Polish | PARTIAL | Side bet economics unbacked — money created/destroyed with no pool |
+| H | Multi-Timeframe Server Hierarchy | COMPLETE | |
+| I | Dual Currency | COMPLETE | |
+| J | Platform Features | COMPLETE | |
+| K | Technical Debt | COMPLETE | |
+
+---
+
+## Phase L: Integration Gap Fixes (In Progress)
+
+**Priority**: CRITICAL | **Status**: In Progress (Feb 26, 2026)
+
+Fixes all cross-system integration gaps identified in the deep review:
+
+- [ ] Equipment stat application: `equip_item`/`unequip_item` must update `UnitStats`
+- [ ] Craft resource consumption: `craft_equipment` must deduct materials from building inventory
+- [ ] Battle arena creation: new `create_battle_arena` reducer + UI trigger
+- [ ] Side bet economics: bet amounts go to pot, payouts come from pot
+- [ ] Equipment cleanup on unit death: unequip items at all 3 deletion sites
+- [ ] Tax rate double-division bug: `handleSetBuildingTax` divides by 100 twice
+- [ ] Wire missing UI: `onMoveUnit`, `onQueueTask`, `spawn_laborer` button, `contribute_to_building` UI
+- [ ] Initial unit genetics: create `LaborerGenetics` records in `create_initial_units`
+- [ ] Unify vote sale systems: connect `set_vote_for_sale` with `TradeOffer` table
+
+### Known Dead-End Integrations (Being Fixed)
+
+| Dead End | Description |
+|---|---|
+| Equipment bonuses | Stored but never applied to UnitStats or BattleUnit |
+| BattleArena/BattleUnit | Tables + turn logic exist, nothing creates them |
+| craft_equipment costs | Equipment created without consuming resources |
+| Side bet funds | Money vanishes on loss, materializes on win |
+| Two parallel sale systems | `set_vote_for_sale` and `create_trade_offer` are disconnected |
+| Buildings in 3D | No 3D representation for buildings (2D panel only) |
+| UnitTaskQueue craft/upgrade | game_tick only processes move/gather tasks |
+
+### What's Left for Future Iteration
+
+- **Visual polish**: 3D models for buildings, richer asset integration
+- **Deeper testing**: Full multi-server scenarios, edge cases
+- **Full multi-server SpacetimeDB architecture**: ServerNode and transfers exist; production deployment of hierarchy pending
 
 ---
 

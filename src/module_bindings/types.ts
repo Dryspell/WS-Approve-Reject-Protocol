@@ -10,6 +10,34 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const BattleArena = __t.object("BattleArena", {
+  id: __t.i32(),
+  roomId: __t.i32(),
+  roundNumber: __t.i32(),
+  status: __t.string(),
+  turnNumber: __t.i32(),
+  winnerTeam: __t.option(__t.string()),
+  createdAt: __t.timestamp(),
+});
+export type BattleArena = __Infer<typeof BattleArena>;
+
+export const BattleUnit = __t.object("BattleUnit", {
+  id: __t.i32(),
+  arenaId: __t.i32(),
+  sourceUnitId: __t.i32(),
+  ownerId: __t.string(),
+  team: __t.string(),
+  currentHealth: __t.i32(),
+  maxHealth: __t.i32(),
+  attack: __t.i32(),
+  defense: __t.i32(),
+  speed: __t.i32(),
+  isAlive: __t.bool(),
+  positionX: __t.f32(),
+  positionY: __t.f32(),
+});
+export type BattleUnit = __Infer<typeof BattleUnit>;
+
 export const BlockedUser = __t.object("BlockedUser", {
   id: __t.i32(),
   blocker: __t.identity(),
@@ -69,6 +97,28 @@ export const EndRoundVote = __t.object("EndRoundVote", {
   round: __t.i32(),
 });
 export type EndRoundVote = __Infer<typeof EndRoundVote>;
+
+export const Equipment = __t.object("Equipment", {
+  id: __t.i32(),
+  roomId: __t.i32(),
+  ownerId: __t.string(),
+  equippedToUnitId: __t.option(__t.i32()),
+  equipmentType: __t.string(),
+  slot: __t.string(),
+  itemName: __t.string(),
+  tier: __t.i32(),
+  material: __t.string(),
+  enchantment: __t.option(__t.string()),
+  quality: __t.string(),
+  surface: __t.string(),
+  attackBonus: __t.i32(),
+  defenseBonus: __t.i32(),
+  speedBonus: __t.i32(),
+  healthBonus: __t.i32(),
+  durability: __t.i32(),
+  maxDurability: __t.i32(),
+});
+export type Equipment = __Infer<typeof Equipment>;
 
 export const FriendRequest = __t.object("FriendRequest", {
   id: __t.i32(),
@@ -148,12 +198,33 @@ export const GuaranteePurchase = __t.object("GuaranteePurchase", {
 });
 export type GuaranteePurchase = __Infer<typeof GuaranteePurchase>;
 
+export const LaborerGenetics = __t.object("LaborerGenetics", {
+  unitId: __t.i32(),
+  generation: __t.i32(),
+  parentAId: __t.option(__t.i32()),
+  parentBId: __t.option(__t.i32()),
+  combatIv: __t.i32(),
+  gatheringIv: __t.i32(),
+  craftingIv: __t.i32(),
+  speedIv: __t.i32(),
+  healthIv: __t.i32(),
+  staminaIv: __t.i32(),
+});
+export type LaborerGenetics = __Infer<typeof LaborerGenetics>;
+
 export const Message = __t.object("Message", {
   sender: __t.identity(),
   sent: __t.timestamp(),
   text: __t.string(),
 });
 export type Message = __Infer<typeof Message>;
+
+export const PlayerCurrency = __t.object("PlayerCurrency", {
+  playerId: __t.string(),
+  mtBalance: __t.f64(),
+  mblsBalance: __t.f64(),
+});
+export type PlayerCurrency = __Infer<typeof PlayerCurrency>;
 
 export const PlayerPosition = __t.object("PlayerPosition", {
   id: __t.i32(),
@@ -187,6 +258,55 @@ export const Resource = __t.object("Resource", {
   depletionThreshold: __t.i32(),
 });
 export type Resource = __Infer<typeof Resource>;
+
+export const ServerNode = __t.object("ServerNode", {
+  id: __t.i32(),
+  name: __t.string(),
+  serverType: __t.string(),
+  parentId: __t.option(__t.i32()),
+  tradingPeriodSeconds: __t.i64(),
+  status: __t.string(),
+  linkedRoomId: __t.option(__t.i32()),
+  createdAt: __t.timestamp(),
+});
+export type ServerNode = __Infer<typeof ServerNode>;
+
+export const SideBet = __t.object("SideBet", {
+  id: __t.i32(),
+  roomId: __t.i32(),
+  roundNumber: __t.i32(),
+  bettorId: __t.string(),
+  betType: __t.string(),
+  betTarget: __t.string(),
+  amount: __t.f64(),
+  payoutMultiplier: __t.f64(),
+  status: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type SideBet = __Infer<typeof SideBet>;
+
+export const Spectator = __t.object("Spectator", {
+  id: __t.i32(),
+  roomId: __t.i32(),
+  userId: __t.string(),
+  joinedAt: __t.timestamp(),
+});
+export type Spectator = __Infer<typeof Spectator>;
+
+export const Tournament = __t.object("Tournament", {
+  id: __t.i32(),
+  name: __t.string(),
+  entryFee: __t.f64(),
+  prizePool: __t.f64(),
+  maxParticipants: __t.i32(),
+  currentRound: __t.i32(),
+  status: __t.string(),
+  bracketType: __t.string(),
+  roomIds: __t.array(__t.i32()),
+  participantIds: __t.array(__t.string()),
+  createdAt: __t.timestamp(),
+});
+export type Tournament = __Infer<typeof Tournament>;
 
 export const TradeOffer = __t.object("TradeOffer", {
   id: __t.i32(),
@@ -233,8 +353,16 @@ export const Unit = __t.object("Unit", {
   voteGuarantee: __t.option(__t.string()),
   votePrice: __t.option(__t.i32()),
   voteOwner: __t.option(__t.string()),
+  voteId: __t.option(__t.i32()),
   storageCapacity: __t.option(__t.i32()),
   isStorage: __t.bool(),
+  buildingType: __t.option(__t.string()),
+  constructionProgress: __t.option(__t.i32()),
+  constructionMax: __t.option(__t.i32()),
+  assignedUnitId: __t.option(__t.i32()),
+  buildingRecipe: __t.option(__t.string()),
+  taxRate: __t.option(__t.f32()),
+  contributors: __t.array(__t.string()),
 });
 export type Unit = __Infer<typeof Unit>;
 

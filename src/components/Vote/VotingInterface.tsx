@@ -1,7 +1,8 @@
 import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect, untrack } from "solid-js";
+import { useNavigate } from "@solidjs/router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue, EndRoundVote } from "~/module_bindings/types";
+import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue, EndRoundVote, Equipment, BattleArena, BattleUnit, SideBet, LaborerGenetics, Tournament } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import RoundTimer from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
@@ -17,8 +18,17 @@ import { sounds } from "~/lib/sounds";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import ColonyViewport, { type ColonyUnit, type ColonyResource, type TeamColor, type OtherPlayerAvatar } from "../game/ColonyViewport";
 import UnitContextPanel from "../game/UnitContextPanel";
+import BuildingPanel from "../game/BuildingPanel";
+import EquipmentPanel from "../game/EquipmentPanel";
+import BattleArenaViewport from "../game/BattleArenaViewport";
+import GeneticsPanel from "../game/GeneticsPanel";
+import SideBetPanel from "../game/SideBetPanel";
+import EVCalculator from "../game/EVCalculator";
+import TournamentPanel from "../game/TournamentPanel";
 import { characterForIndex, type CharacterClass } from "~/lib/asset-loader";
+import { resolvePlayerName } from "~/lib/game-utils";
 import { TID } from "~/lib/test-ids";
+
 
 interface VotingInterfaceProps {
   room: GameRoom;
@@ -26,6 +36,7 @@ interface VotingInterfaceProps {
 }
 
 const VotingInterface: Component<VotingInterfaceProps> = (props) => {
+  const navigate = useNavigate();
   const { conn, connected } = useSpacetimeDB();
   const [votes, setVotes] = createSignal<Vote[]>([]);
   const [allPlayers, setAllPlayers] = createSignal<User[]>([]);
@@ -41,6 +52,15 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [lastProcessedRound, setLastProcessedRound] = createSignal(0);
   const [endRoundVotes, setEndRoundVotes] = createSignal<EndRoundVote[]>([]);
   const [otherPlayerAvatars, setOtherPlayerAvatars] = createSignal<OtherPlayerAvatar[]>([]);
+  const [tradePopup, setTradePopup] = createSignal<{ offerId: number; x: number; y: number } | null>(null);
+  const [equipment, setEquipment] = createSignal<Equipment[]>([]);
+  const [battleArenas, setBattleArenas] = createSignal<BattleArena[]>([]);
+  const [battleUnits, setBattleUnits] = createSignal<BattleUnit[]>([]);
+  const [sideBets, setSideBets] = createSignal<SideBet[]>([]);
+  const [genetics, setGenetics] = createSignal<LaborerGenetics[]>([]);
+  const [tournaments, setTournaments] = createSignal<Tournament[]>([]);
+  const [activePanel, setActivePanel] = createSignal<string | null>(null);
+  const [battleDismissed, setBattleDismissed] = createSignal(false);
 
   let roundCheckInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -170,6 +190,9 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     connection.db.unit_stats.onUpdate((ctx, oldStats, newStats) => {
       setUnitStats((prev) => prev.map((s) => (s.unitId === newStats.unitId ? newStats : s)));
     });
+    connection.db.unit_stats.onDelete((ctx, stats) => {
+      setUnitStats((prev) => prev.filter((s) => s.unitId !== stats.unitId));
+    });
 
     // Initial load of all data
     const initialVotes = Array.from(connection.db.vote.iter());
@@ -187,6 +210,9 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     });
     connection.db.unit_inventory.onUpdate((ctx, oldInv, newInv) => {
       setUnitInventories((prev) => prev.map((i) => (i.unitId === newInv.unitId ? newInv : i)));
+    });
+    connection.db.unit_inventory.onDelete((ctx, inv) => {
+      setUnitInventories((prev) => prev.filter((i) => i.unitId !== inv.unitId));
     });
 
     // Subscribe to task queues
@@ -235,6 +261,37 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     setUnitTaskQueues(Array.from(connection.db.unit_task_queue.iter()));
     setEndRoundVotes(Array.from(connection.db.end_round_vote.iter()));
     refreshPlayerPositions();
+
+    // Subscribe to new Phase tables
+    connection.db.equipment.onInsert((ctx, eq) => setEquipment(prev => [...prev, eq]));
+    connection.db.equipment.onUpdate((ctx, old, eq) => setEquipment(prev => prev.map(e => e.id === eq.id ? eq : e)));
+    connection.db.equipment.onDelete((ctx, eq) => setEquipment(prev => prev.filter(e => e.id !== eq.id)));
+    setEquipment(Array.from(connection.db.equipment.iter()));
+
+    connection.db.battle_arena.onInsert((ctx, a) => { setBattleDismissed(false); setBattleArenas(prev => [...prev, a]); });
+    connection.db.battle_arena.onUpdate((ctx, old, a) => setBattleArenas(prev => prev.map(x => x.id === a.id ? a : x)));
+    connection.db.battle_arena.onDelete((ctx, a) => setBattleArenas(prev => prev.filter(x => x.id !== a.id)));
+    setBattleArenas(Array.from(connection.db.battle_arena.iter()));
+
+    connection.db.battle_unit.onInsert((ctx, bu) => setBattleUnits(prev => [...prev, bu]));
+    connection.db.battle_unit.onUpdate((ctx, old, bu) => setBattleUnits(prev => prev.map(x => x.id === bu.id ? bu : x)));
+    connection.db.battle_unit.onDelete((ctx, bu) => setBattleUnits(prev => prev.filter(x => x.id !== bu.id)));
+    setBattleUnits(Array.from(connection.db.battle_unit.iter()));
+
+    connection.db.side_bet.onInsert((ctx, sb) => setSideBets(prev => [...prev, sb]));
+    connection.db.side_bet.onUpdate((ctx, old, sb) => setSideBets(prev => prev.map(x => x.id === sb.id ? sb : x)));
+    connection.db.side_bet.onDelete((ctx, sb) => setSideBets(prev => prev.filter(x => x.id !== sb.id)));
+    setSideBets(Array.from(connection.db.side_bet.iter()));
+
+    connection.db.laborer_genetics.onInsert((ctx, g) => setGenetics(prev => [...prev, g]));
+    connection.db.laborer_genetics.onUpdate((ctx, old, g) => setGenetics(prev => prev.map(x => x.unitId === g.unitId ? g : x)));
+    connection.db.laborer_genetics.onDelete((ctx, g) => setGenetics(prev => prev.filter(x => x.unitId !== g.unitId)));
+    setGenetics(Array.from(connection.db.laborer_genetics.iter()));
+
+    connection.db.tournament.onInsert((ctx, t) => setTournaments(prev => [...prev, t]));
+    connection.db.tournament.onUpdate((ctx, old, t) => setTournaments(prev => prev.map(x => x.id === t.id ? t : x)));
+    connection.db.tournament.onDelete((ctx, t) => setTournaments(prev => prev.filter(x => x.id !== t.id)));
+    setTournaments(Array.from(connection.db.tournament.iter()));
 
     // Set initial round tracking
     setLastProcessedRound(props.room.currentRound);
@@ -331,6 +388,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
 
   const [chatOpen, setChatOpen] = createSignal(false);
   const [viewportSelectedIds, setViewportSelectedIds] = createSignal<number[]>([]);
+  const [hoveredVoteId, setHoveredVoteId] = createSignal<number | null>(null);
+  const [voteFlashColor, setVoteFlashColor] = createSignal<string | null>(null);
 
   const handleDropZoneClick = (color: string) => {
     const selected = viewportSelectedIds();
@@ -469,6 +528,26 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     ),
   );
 
+  const handleBuyVote = async (voteId: number, price: number) => {
+    const connection = conn();
+    if (!connection) return;
+    if (props.currentUser.walletBalance < price) {
+      ToastHelper.warning("Insufficient Funds", `You need $${price}`);
+      return;
+    }
+    try {
+      connection.reducers.transferVoteOwnership({
+        voteId,
+        buyerId: props.currentUser.identity.toHexString(),
+        price,
+      });
+      ToastHelper.success("Vote Purchased", `Bought vote #${voteId} for $${price}`);
+      sounds.tradeComplete();
+    } catch {
+      ToastHelper.error("Failed to purchase vote");
+    }
+  };
+
   const handleVoteEndRound = async () => {
     const connection = conn();
     if (!connection) return;
@@ -481,6 +560,167 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
 
   const [playersOpen, setPlayersOpen] = createSignal(true);
   const [marketOpen, setMarketOpen] = createSignal(false);
+
+  const activeOffers = createMemo(() => {
+    const offers: { unitId: number; offerId: number; type: "sell" | "buy" | "guarantee"; price: number; color?: "red" | "blue" | null }[] = [];
+    const myUnits = serverUnits().filter((u) => u.roomId === props.room.id);
+    for (const v of votes()) {
+      if (v.roomId !== props.room.id || !v.isForSale) continue;
+      const unit = myUnits.find((u) => u.ownerId === v.playerId);
+      if (unit) {
+        offers.push({ unitId: unit.id, offerId: v.id, type: "sell", price: v.salePrice || 0, color: (v.color as "red" | "blue") || null });
+      }
+    }
+    return offers;
+  });
+
+  const handleTradeOfferClick = (offerId: number, screenX: number, screenY: number) => {
+    setTradePopup({ offerId, x: screenX, y: screenY });
+  };
+
+  // Phase B-J handlers
+  const roomBuildings = createMemo(() =>
+    serverUnits().filter(u => u.roomId === props.room.id && u.buildingType)
+  );
+
+  const handleConstructBuilding = (buildingType: string, x: number, z: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.constructBuilding({ roomId: props.room.id, position: { x, y: z }, buildingType });
+      ToastHelper.success("Building", `Started constructing ${buildingType}`);
+    } catch { ToastHelper.error("Failed to construct building"); }
+  };
+
+  const handleAssignUnit = (unitId: number, buildingId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.assignUnitToBuilding({ unitId, buildingId });
+    } catch { ToastHelper.error("Failed to assign unit"); }
+  };
+
+  const handleContribute = (buildingId: number, resourceType: string, amount: number, sourceUnitId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.contributeToBuilding({ buildingId, resourceType, amount, sourceUnitId });
+    } catch { ToastHelper.error("Failed to contribute"); }
+  };
+
+  const handleSetBuildingTax = (buildingId: number, taxRate: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.setBuildingTax({ buildingId, taxRate });
+    } catch { ToastHelper.error("Failed to set tax"); }
+  };
+
+  const handleMoveUnit = (unitId: number, x: number, z: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.moveUnit({ unitId, targetPosition: { x, y: z } });
+    } catch { ToastHelper.error("Failed to move unit"); }
+  };
+
+  const handleQueueTask = (taskType: string, targetId: string) => {
+    const connection = conn();
+    if (!connection) return;
+    const ids = viewportSelectedIds();
+    if (ids.length === 0) return;
+    try {
+      for (const unitId of ids) {
+        connection.reducers.queueUnitTask({ unitId, taskType, targetId });
+      }
+    } catch { ToastHelper.error("Failed to queue task"); }
+  };
+
+  const handleSpawnLaborer = () => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.spawnLaborer({ roomId: props.room.id });
+      ToastHelper.success("Laborer", "New laborer spawned!");
+    } catch { ToastHelper.error("Failed to spawn laborer"); }
+  };
+
+  const handleEquipItem = (equipmentId: number, unitId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.equipItem({ equipmentId, unitId });
+    } catch { ToastHelper.error("Failed to equip item"); }
+  };
+
+  const handleUnequipItem = (equipmentId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.unequipItem({ equipmentId });
+    } catch { ToastHelper.error("Failed to unequip item"); }
+  };
+
+  const handleCraftEquipment = (buildingId: number, equipmentType: string, material: string) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.craftEquipment({ roomId: props.room.id, buildingId, equipmentType, material });
+      ToastHelper.success("Crafted!", `${material} ${equipmentType} crafted`);
+    } catch { ToastHelper.error("Failed to craft equipment"); }
+  };
+
+  const handleProcessBattleTurn = (arenaId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.processBattleTurn({ arenaId });
+    } catch { ToastHelper.error("Failed to process battle turn"); }
+  };
+
+  const handlePlaceSideBet = (betType: string, betTarget: string, amount: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.placeSideBet({ roomId: props.room.id, betType, betTarget, amount });
+      ToastHelper.success("Bet Placed", `$${amount} on ${betTarget}`);
+    } catch { ToastHelper.error("Failed to place bet"); }
+  };
+
+  const handleBreed = (parentAId: number, parentBId: number, buildingId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.breedLaborers({ roomId: props.room.id, parentAId, parentBId, breedingBuildingId: buildingId });
+      ToastHelper.success("Breeding", "Offspring created!");
+    } catch { ToastHelper.error("Failed to breed"); }
+  };
+
+  const handleJoinTournament = (tournamentId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.joinTournament({ tournamentId });
+    } catch { ToastHelper.error("Failed to join tournament"); }
+  };
+
+  const handleCreateTournament = (name: string, entryFee: number, maxParticipants: number, bracketType: string) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.createTournament({ name, entryFee, maxParticipants, bracketType });
+      ToastHelper.success("Tournament Created", name);
+    } catch { ToastHelper.error("Failed to create tournament"); }
+  };
+
+  const activeBattle = createMemo(() => {
+    if (battleDismissed()) return undefined;
+    return battleArenas().find(a => a.roomId === props.room.id && a.status !== "completed");
+  });
+
+  const isEliminated = createMemo(() =>
+    props.room.eliminatedPlayers.includes(props.currentUser.identity.toHexString())
+  );
 
   const handleAvatarPositionUpdate = (x: number, z: number, rotY: number, moving: boolean) => {
     const connection = conn();
@@ -508,6 +748,10 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             otherPlayers={otherPlayerAvatars()}
             onPositionUpdate={handleAvatarPositionUpdate}
             onSetTeam={handleViewportSetTeam}
+            hoveredUnitId={hoveredVoteId()}
+            activeOffers={activeOffers()}
+            onMoveUnit={handleMoveUnit}
+            onTradeOfferClick={handleTradeOfferClick}
           />
         </div>
 
@@ -523,6 +767,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               tasks={selectedUnitTasks()}
               onClose={() => setViewportSelectedIds([])}
               onSetVoteColor={handleSetUnitVoteColor}
+              onQueueTask={handleQueueTask}
               onCancelTask={handleCancelTask}
             />
           </div>
@@ -562,21 +807,36 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </div>
 
           <Show when={props.room.gameStatus === "active" && !props.room.eliminatedPlayers.includes(props.currentUser.identity.toHexString())}>
-            <Button
-              size="sm"
-              variant={hasVotedEndRound() ? "default" : "outline"}
-              class={hasVotedEndRound()
-                ? "bg-green-600/80 text-white text-xs px-2 py-1 hover:bg-green-500 border-green-500/50"
-                : "text-white/70 border-white/20 text-xs px-2 py-1 hover:bg-white/10 hover:text-white"}
-              onClick={handleVoteEndRound}
-              disabled={hasVotedEndRound()}
-              data-testid={TID.endRoundBtn}
-            >
-              {hasVotedEndRound() ? "Ready" : "End Round"}
-              <span class="ml-1 text-[10px] opacity-70" data-testid={TID.endRoundCount}>
-                {endRoundVotesForCurrentRound().length}/{remainingPlayers().length}
-              </span>
-            </Button>
+            {(() => {
+              const count = () => endRoundVotesForCurrentRound().length;
+              const total = () => remainingPlayers().length;
+              const pct = () => total() > 0 ? (count() / total()) * 100 : 0;
+              const nearThreshold = () => pct() >= 60;
+              return (
+                <button
+                  onClick={handleVoteEndRound}
+                  disabled={hasVotedEndRound()}
+                  data-testid={TID.endRoundBtn}
+                  class="relative overflow-hidden rounded-md text-xs px-3 py-1.5 font-medium transition-all border"
+                  classList={{
+                    "bg-green-600/80 text-white border-green-500/50 cursor-default": hasVotedEndRound(),
+                    "border-white/20 text-white/70 hover:bg-white/10 hover:text-white cursor-pointer": !hasVotedEndRound(),
+                    "animate-pulse": nearThreshold() && !hasVotedEndRound(),
+                  }}
+                >
+                  <div
+                    class="absolute inset-0 bg-green-500/20 transition-all duration-500"
+                    style={{ width: `${pct()}%` }}
+                  />
+                  <span class="relative z-10 flex items-center gap-1.5">
+                    {hasVotedEndRound() ? "Ready" : "End Round"}
+                    <span class="opacity-70" data-testid={TID.endRoundCount}>
+                      {count()}/{total()}
+                    </span>
+                  </span>
+                </button>
+              );
+            })()}
           </Show>
 
           <div class="flex-1" />
@@ -653,8 +913,23 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                           {player.name || "Anonymous"}
                           {isCurrentUser && <span class="text-[10px] text-blue-400 ml-1">(you)</span>}
                         </div>
-                        <div class="flex gap-1.5 text-[10px] text-white/40">
-                          <span>{playerVotes().length}v</span>
+                        <div class="flex items-center gap-1.5 text-[10px] text-white/40">
+                          <div class="flex items-center gap-0.5">
+                            <For each={playerVotes()}>
+                              {(v) => (
+                                <div
+                                  class="h-1.5 w-1.5 rounded-full"
+                                  classList={{
+                                    "bg-red-400": v.color === "red",
+                                    "bg-blue-400": v.color === "blue",
+                                    "bg-white/30": !v.color,
+                                  }}
+                                  title={`Vote #${v.id}: ${v.color || "unset"}`}
+                                />
+                              )}
+                            </For>
+                            <span class="ml-0.5">{playerVotes().length}v</span>
+                          </div>
                           <span>${player.walletBalance.toFixed(0)}</span>
                         </div>
                       </div>
@@ -702,10 +977,142 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 roundNumber={props.room.currentRound}
                 currentUserId={props.currentUser.identity.toHexString()}
                 userWalletBalance={props.currentUser.walletBalance}
+                players={allPlayers()}
               />
             </div>
           </Show>
         </div>
+
+        {/* ── Panel Toolbar (bottom-left quick access) ── */}
+        <div class="absolute left-3 bottom-[calc(100%-100vh+4rem)] z-20 flex flex-col gap-1" style="bottom: auto; top: auto;">
+        </div>
+
+        {/* Floating panel buttons along top-right of viewport */}
+        <div class="absolute right-[calc(theme(spacing.3)+theme(spacing.8)+0.25rem)] top-14 z-20 flex flex-col gap-1">
+          {[
+            { key: "buildings", label: "B", title: "Buildings" },
+            { key: "equipment", label: "E", title: "Equipment" },
+            { key: "genetics", label: "G", title: "Genetics" },
+            { key: "ev", label: "EV", title: "Strategy Helper" },
+            { key: "tournament", label: "T", title: "Tournaments" },
+          ].map(btn => (
+            <button
+              class="w-8 h-8 rounded-lg text-[10px] font-bold transition-all border"
+              classList={{
+                "bg-amber-500/30 border-amber-400/50 text-amber-200": activePanel() === btn.key,
+                "bg-black/40 backdrop-blur border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70": activePanel() !== btn.key,
+              }}
+              onClick={() => setActivePanel(activePanel() === btn.key ? null : btn.key)}
+              title={btn.title}
+            >
+              {btn.label}
+            </button>
+          ))}
+          <Show when={isEliminated()}>
+            <button
+              class="w-8 h-8 rounded-lg text-[10px] font-bold transition-all border"
+              classList={{
+                "bg-amber-500/30 border-amber-400/50 text-amber-200": activePanel() === "sidebets",
+                "bg-black/40 backdrop-blur border-white/10 text-white/50 hover:bg-white/10": activePanel() !== "sidebets",
+              }}
+              onClick={() => setActivePanel(activePanel() === "sidebets" ? null : "sidebets")}
+              title="Side Bets"
+            >
+              $
+            </button>
+          </Show>
+        </div>
+
+        {/* Slide-out feature panels */}
+        <Show when={activePanel() === "buildings"}>
+          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
+            <BuildingPanel
+              buildings={roomBuildings()}
+              units={roomUnits()}
+              onConstruct={handleConstructBuilding}
+              onAssignUnit={handleAssignUnit}
+              onContribute={handleContribute}
+              onSetTax={handleSetBuildingTax}
+            />
+          </div>
+        </Show>
+
+        <Show when={activePanel() === "equipment"}>
+          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
+            <EquipmentPanel
+              selectedUnitId={viewportSelectedIds().length === 1 ? viewportSelectedIds()[0] : null}
+              equipment={equipment().filter(e => e.roomId === props.room.id)}
+              onEquip={handleEquipItem}
+              onUnequip={handleUnequipItem}
+              onCraft={handleCraftEquipment}
+              buildings={roomBuildings().filter(b => 
+                b.buildingType?.startsWith("manufacturing_")
+              )}
+            />
+          </div>
+        </Show>
+
+        <Show when={activePanel() === "genetics"}>
+          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
+            <GeneticsPanel
+              selectedUnitId={viewportSelectedIds().length >= 1 ? viewportSelectedIds()[0] : null}
+              selectedUnitIdB={viewportSelectedIds().length >= 2 ? viewportSelectedIds()[1] : null}
+              genetics={genetics()}
+              units={roomUnits()}
+              onBreed={handleBreed}
+              breedingBuildings={roomBuildings().filter(b => b.buildingType === "breeding")}
+            />
+          </div>
+        </Show>
+
+        <Show when={activePanel() === "ev"}>
+          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
+            <EVCalculator
+              playerCount={remainingPlayers().length}
+              potSize={props.room.potSize}
+              buyinAmount={props.room.buyinAmount}
+              myVoteCount={myVotes().length}
+              totalVotes={votes().filter(v => v.roomId === props.room.id).length}
+              guaranteesPurchased={0}
+            />
+          </div>
+        </Show>
+
+        <Show when={activePanel() === "sidebets"}>
+          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
+            <SideBetPanel
+              roomId={props.room.id}
+              roundNumber={props.room.currentRound}
+              sideBets={sideBets().filter(sb => sb.roomId === props.room.id)}
+              players={remainingPlayers()}
+              currentUserId={props.currentUser.identity.toHexString()}
+              onPlaceBet={handlePlaceSideBet}
+            />
+          </div>
+        </Show>
+
+        <Show when={activePanel() === "tournament"}>
+          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
+            <TournamentPanel
+              tournaments={tournaments()}
+              currentUserId={props.currentUser.identity.toHexString()}
+              onJoin={handleJoinTournament}
+              onCreate={handleCreateTournament}
+            />
+          </div>
+        </Show>
+
+        {/* Battle Arena Overlay */}
+        <Show when={activeBattle()}>
+          {(arena) => (
+            <BattleArenaViewport
+              arena={arena()}
+              battleUnits={battleUnits().filter(bu => bu.arenaId === arena().id)}
+              onProcessTurn={handleProcessBattleTurn}
+              onClose={() => setBattleDismissed(true)}
+            />
+          )}
+        </Show>
 
         {/* ── BOTTOM CENTER: Vote Controls + Chat ── */}
         <div class="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 w-full max-w-2xl px-3">
@@ -736,12 +1143,15 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                         "border-blue-400/60 bg-blue-500/20 text-blue-300": vote.color === "blue",
                         "border-dashed border-white/20 bg-white/5 text-white/40": !vote.color,
                         "ring-2 ring-green-400/70 ring-offset-1 ring-offset-transparent": isSelected(),
+                        "scale-110 shadow-lg shadow-amber-400/20": hoveredVoteId() === vote.id,
                       }}
                       onClick={() => {
                         setViewportSelectedIds(prev =>
                           prev.includes(vote.id) ? prev.filter(id => id !== vote.id) : [...prev, vote.id]
                         );
                       }}
+                      onMouseEnter={() => setHoveredVoteId(vote.id)}
+                      onMouseLeave={() => setHoveredVoteId(null)}
                       data-testid={TID.voteChip(vote.id)}
                     >
                       <div
@@ -767,9 +1177,16 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 tabindex="0"
                 onDragOver={handleDragOver}
                 onDrop={() => handleDrop("red")}
-                onClick={() => handleDropZoneClick("red")}
-                class="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-red-500/40 bg-red-500/10 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/25 hover:border-red-400/60 transition-all"
-                classList={{ "border-red-400 bg-red-500/30": draggedVote() !== null }}
+                onClick={() => {
+                  handleDropZoneClick("red");
+                  setVoteFlashColor("red");
+                  setTimeout(() => setVoteFlashColor(null), 400);
+                }}
+                class="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-red-500/40 bg-red-500/10 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/25 hover:border-red-400/60 transition-all active:scale-95"
+                classList={{
+                  "border-red-400 bg-red-500/30": draggedVote() !== null,
+                  "animate-vote-flash-red": voteFlashColor() === "red",
+                }}
               >
                 <div class="h-3 w-3 rounded-full bg-red-500" />
                 Red
@@ -780,9 +1197,16 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 tabindex="0"
                 onDragOver={handleDragOver}
                 onDrop={() => handleDrop("blue")}
-                onClick={() => handleDropZoneClick("blue")}
-                class="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-blue-500/40 bg-blue-500/10 py-2 text-sm font-semibold text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 transition-all"
-                classList={{ "border-blue-400 bg-blue-500/30": draggedVote() !== null }}
+                onClick={() => {
+                  handleDropZoneClick("blue");
+                  setVoteFlashColor("blue");
+                  setTimeout(() => setVoteFlashColor(null), 400);
+                }}
+                class="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-blue-500/40 bg-blue-500/10 py-2 text-sm font-semibold text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 transition-all active:scale-95"
+                classList={{
+                  "border-blue-400 bg-blue-500/30": draggedVote() !== null,
+                  "animate-vote-flash-blue": voteFlashColor() === "blue",
+                }}
               >
                 <div class="h-3 w-3 rounded-full bg-blue-500" />
                 Blue
@@ -816,6 +1240,17 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 </button>
               </div>
             </Show>
+
+            {/* Spawn laborer */}
+            <button
+              class="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600/20 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-600/30 transition-colors border border-emerald-500/20"
+              onClick={handleSpawnLaborer}
+            >
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Spawn Laborer
+            </button>
 
             {/* Chat toggle row */}
             <button
@@ -855,31 +1290,157 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </Show>
         </div>
 
+        {/* ===== TRADE POPUP (layer 40) ===== */}
+        <Show when={tradePopup()}>
+          {(popup) => {
+            const offer = () => {
+              const v = votes().find((v) => v.id === popup().offerId);
+              if (v) return { type: "sell" as const, price: v.salePrice || 0, color: v.color, seller: v.playerId, voteId: v.id };
+              return null;
+            };
+
+            const [counterPrice, setCounterPrice] = createSignal(0);
+            const [showCounter, setShowCounter] = createSignal(false);
+
+            return (
+              <div
+                class="fixed z-40 animate-fade-in"
+                style={{
+                  left: `${Math.min(popup().x, window.innerWidth - 260)}px`,
+                  top: `${Math.min(popup().y, window.innerHeight - 200)}px`,
+                }}
+              >
+                <div class="w-56 rounded-xl border border-white/20 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-xl">
+                  <div class="mb-2 flex items-center justify-between">
+                    <span class="text-xs font-semibold text-white/80">Trade Offer</span>
+                    <button
+                      class="text-white/30 hover:text-white/60 text-xs"
+                      onClick={() => setTradePopup(null)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <Show when={offer()} fallback={<p class="text-[10px] text-white/30">Offer no longer available</p>}>
+                    {(o) => (
+                      <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                          <div
+                            class="h-3 w-3 rounded-full"
+                            classList={{
+                              "bg-red-500": o().color === "red",
+                              "bg-blue-500": o().color === "blue",
+                              "bg-white/30": !o().color,
+                            }}
+                          />
+                          <span class="text-xs text-white/60">Vote #{o().voteId}</span>
+                          <span class="ml-auto text-sm font-bold text-amber-300">${o().price.toFixed(2)}</span>
+                        </div>
+                        <div class="text-[10px] text-white/40">
+                          Seller: {resolvePlayerName(o().seller, conn())}
+                        </div>
+
+                        <Show when={!showCounter()}>
+                          <div class="flex gap-1.5">
+                            <button
+                              class="flex-1 rounded bg-green-600/80 py-1.5 text-[10px] font-semibold text-white transition-colors hover:bg-green-500"
+                              onClick={() => {
+                                handleBuyVote(o().voteId, o().price);
+                                setTradePopup(null);
+                              }}
+                              disabled={props.currentUser.walletBalance < o().price}
+                            >
+                              Accept (${o().price.toFixed(2)})
+                            </button>
+                            <button
+                              class="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] text-white/50 hover:bg-white/10"
+                              onClick={() => {
+                                setCounterPrice(Math.max(o().price * 0.8, 0.01));
+                                setShowCounter(true);
+                              }}
+                            >
+                              Counter
+                            </button>
+                          </div>
+                        </Show>
+
+                        <Show when={showCounter()}>
+                          <div class="space-y-1.5">
+                            <div class="flex gap-1">
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="0.5"
+                                value={counterPrice()}
+                                onInput={(e) => setCounterPrice(parseFloat(e.currentTarget.value))}
+                                class="flex-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/80 outline-none focus:border-white/20"
+                              />
+                              <button
+                                class="rounded bg-amber-500/80 px-2 py-1 text-[10px] font-semibold text-white hover:bg-amber-400"
+                                onClick={() => {
+                                  const connection = conn();
+                                  if (connection) {
+                                    try {
+                                      connection.reducers.createTradeOffer({
+                                        roomId: props.room.id,
+                                        roundNumber: props.room.currentRound,
+                                        offerType: "buy_vote",
+                                        voteId: undefined,
+                                        price: counterPrice(),
+                                      });
+                                      ToastHelper.success("Counter Offer", `Buy offer posted at $${counterPrice().toFixed(2)}`);
+                                    } catch {
+                                      ToastHelper.error("Failed to create counter offer");
+                                    }
+                                  }
+                                  setTradePopup(null);
+                                }}
+                              >
+                                Send
+                              </button>
+                            </div>
+                            <button
+                              class="w-full text-[9px] text-white/30 hover:text-white/50"
+                              onClick={() => setShowCounter(false)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </Show>
+                      </div>
+                    )}
+                  </Show>
+                </div>
+              </div>
+            );
+          }}
+        </Show>
+
         {/* ===== MODALS (layer 50) ===== */}
 
         {/* Elimination Modal */}
         <Show when={showEliminationModal()}>
+          <div class="animate-fade-in">
           <EliminationModal
             roundNumber={Math.max(props.room.currentRound - 1, 0)}
             eliminatedPlayers={eliminatedPlayers().map(p => p.identity.toHexString())}
             survivingPlayers={remainingPlayers().map(p => p.identity.toHexString())}
-            minorityColor={getVoteTotals().minority}
+            minorityColor={(getVoteTotals().minority === "tie" ? "red" : getVoteTotals().minority) as "red" | "blue"}
             redVotes={getVoteTotals().red}
             blueVotes={getVoteTotals().blue}
             room={props.room}
             currentUser={props.currentUser}
             onClose={() => setShowEliminationModal(false)}
           />
+          </div>
         </Show>
 
         {/* Game Over Modal */}
         <Show when={props.room.gameStatus === "completed"}>
-          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <Card class="w-96 shadow-2xl border-white/20 bg-slate-900/90 backdrop-blur-xl">
-              <CardHeader>
-                <CardTitle class="text-center text-2xl text-white">Game Over!</CardTitle>
-              </CardHeader>
-              <CardContent class="space-y-4">
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+            <div class="w-96 rounded-xl border border-white/20 bg-slate-900/90 p-6 shadow-2xl backdrop-blur-xl animate-scale-in">
+              <h2 class="mb-4 text-center text-2xl font-bold text-white">Game Over!</h2>
+              <div class="space-y-4">
                 <div class="text-center">
                   <p class="text-lg font-semibold text-white/80">Winners:</p>
                   <For each={remainingPlayers()}>
@@ -891,11 +1452,30 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                     )}
                   </For>
                 </div>
-                <Button class="w-full" onClick={() => window.location.reload()}>
-                  Return to Lobby
-                </Button>
-              </CardContent>
-            </Card>
+                <div class="flex gap-2">
+                  <button
+                    class="flex-1 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-all hover:from-purple-500 hover:to-blue-500"
+                    onClick={() => {
+                      try {
+                        const connection = conn();
+                        if (connection) {
+                          connection.reducers.leaveRoom({ roomId: props.room.id });
+                        }
+                      } catch {}
+                      navigate("/vote");
+                    }}
+                  >
+                    Return to Lobby
+                  </button>
+                  <button
+                    class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/70 transition-all hover:bg-white/10"
+                    onClick={() => navigate("/")}
+                  >
+                    Home
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </Show>
       </div>

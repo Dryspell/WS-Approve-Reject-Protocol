@@ -10,9 +10,14 @@ import { MetaProvider, Title, Meta, Link } from "@solidjs/meta";
 import { SpacetimeDBProvider } from "~/hooks/useSpacetimeDB";
 
 function AppShell(props: { children: any }) {
-	const location = useLocation();
-	const isHome = () => location.pathname === "/";
-	const isGame = () => location.pathname.startsWith("/vote");
+	let location: ReturnType<typeof useLocation> | undefined;
+	try {
+		location = useLocation();
+	} catch {
+		// Router context may not be ready during initial render or HMR
+	}
+	const isHome = () => location?.pathname === "/";
+	const isGame = () => location?.pathname?.startsWith("/vote") ?? false;
 	const showNav = () => !isHome() && !isGame();
 
 	return (

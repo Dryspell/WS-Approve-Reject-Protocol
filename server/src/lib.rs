@@ -22,6 +22,7 @@ pub struct ChatRoom {
     pub id: String,
     pub name: String,
     pub created_at: i64,
+    pub creator_id: String,
 }
 
 #[table(accessor = chat_message, public)]
@@ -172,9 +173,19 @@ pub struct Unit {
     vote_guarantee: Option<String>, // "red" | "blue" | null
     vote_price: Option<i32>, // Price in MT if unit is for sale
     vote_owner: Option<String>, // Owner of the vote if different from unit owner
+    // Link to the Vote table: each minion unit IS a vote
+    vote_id: Option<i32>,
     // New storage-related fields
-    storage_capacity: Option<i32>, // Storage capacity for storage buildings
-    is_storage: bool, // Whether this unit is a storage building
+    storage_capacity: Option<i32>,
+    is_storage: bool,
+    // Building-related fields (Phase B)
+    building_type: Option<String>,     // "extraction_wood" | "refinery_forge" | "manufacturing_armorer" | etc.
+    construction_progress: Option<i32>,
+    construction_max: Option<i32>,
+    assigned_unit_id: Option<i32>,     // unit currently working at this building
+    building_recipe: Option<String>,   // what this building produces
+    tax_rate: Option<f32>,
+    contributors: Vec<String>,
 }
 
 #[table(accessor = game_event, public)]
@@ -351,6 +362,7 @@ pub fn create_room(
         id: chat_room_id.clone(),
         name: format!("Game Chat: {}", inserted_room.name),
         created_at: ctx.timestamp.to_micros_since_unix_epoch(),
+        creator_id: ctx.sender().to_hex().to_string(),
     });
 
     // Give creator chat permissions
@@ -511,55 +523,84 @@ pub fn start_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
 }
 
 fn create_initial_units(ctx: &ReducerContext, room: &GameRoom) -> Result<(), String> {
-    // Create units
-    for member_id in &room.member_ids {
-        let unit = Unit {
-            id: 0, // Will be auto-incremented
-            room_id: room.id,
-            owner_id: member_id.clone(),
-            unit_type: "minion".to_string(),
-            position: Vector2 {
-                x: (ctx.rng().gen::<f32>() * 100.0) as f32,
-                y: (ctx.rng().gen::<f32>() * 100.0) as f32,
-            },
-            dimensions: Vector2 { x: 20.0, y: 20.0 },
-            fill_style: format!("#{:06x}", ctx.rng().gen::<u32>() % 16777215),
-            task_type: None,
-            target_id: None,
-            vote_color: None,
-            vote_guarantee: None,
-            vote_price: None,
-            vote_owner: None,
-            storage_capacity: None,
-            is_storage: false,
-        };
-        let inserted_unit = ctx.db.unit().insert(unit);
+    // Laborer-Vote Unification: each minion unit IS a vote.
+    // Gather all votes just created for this room so we can link them.
+    let all_votes: Vec<Vote> = ctx.db.vote().iter()
+        .filter(|v| v.room_id == room.id && v.round_number == 1)
+        .collect();
 
-        // Create inventory for unit
-        let inventory = UnitInventory {
-            unit_id: inserted_unit.id,
-            // Primary Resources
-            wood: 0,
-            stone: 0,
-            metal_ore: 0,
-            coal: 0,
-            gems: 0,
-            fiber: 0,
-            hide: 0,
-            sand: 0,
-            food: 0,
-            // Secondary Resources
-            wooden_pole: 0,
-            lumber: 0,
-            cut_stone: 0,
-            metal_ingot: 0,
-            cloth: 0,
-            rope: 0,
-            leather: 0,
-            glass: 0,
-            max_capacity: 100, // Default inventory capacity for units
-        };
-        ctx.db.unit_inventory().insert(inventory);
+    for member_id in &room.member_ids {
+        let member_votes: Vec<&Vote> = all_votes.iter()
+            .filter(|v| v.player_id == *member_id)
+            .collect();
+
+        for (i, vote) in member_votes.iter().enumerate() {
+            let spread = 8.0;
+            let base_x = ctx.rng().gen::<f32>() * 80.0 + 10.0;
+            let base_y = ctx.rng().gen::<f32>() * 80.0 + 10.0;
+            let unit = Unit {
+                id: 0,
+                room_id: room.id,
+                owner_id: member_id.clone(),
+                unit_type: "minion".to_string(),
+                position: Vector2 {
+                    x: base_x + (i as f32) * spread,
+                    y: base_y,
+                },
+                dimensions: Vector2 { x: 20.0, y: 20.0 },
+                fill_style: format!("#{:06x}", ctx.rng().gen::<u32>() % 16777215),
+                task_type: None,
+                target_id: None,
+                vote_color: None,
+                vote_guarantee: None,
+                vote_price: None,
+                vote_owner: None,
+                vote_id: Some(vote.id),
+                storage_capacity: None,
+                is_storage: false,
+                building_type: None,
+                construction_progress: None,
+                construction_max: None,
+                assigned_unit_id: None,
+                building_recipe: None,
+                tax_rate: None,
+                contributors: vec![],
+            };
+            let inserted_unit = ctx.db.unit().insert(unit);
+
+            ctx.db.unit_stats().insert(UnitStats {
+                unit_id: inserted_unit.id,
+                health: 100,
+                max_health: 100,
+                attack: 10,
+                defense: 5,
+                speed: 3,
+                gather_rate: 5,
+                craft_rate: 3,
+            });
+
+            ctx.db.unit_inventory().insert(UnitInventory {
+                unit_id: inserted_unit.id,
+                wood: 0, stone: 0, metal_ore: 0, coal: 0, gems: 0,
+                fiber: 0, hide: 0, sand: 0, food: 0,
+                wooden_pole: 0, lumber: 0, cut_stone: 0, metal_ingot: 0,
+                cloth: 0, rope: 0, leather: 0, glass: 0,
+                max_capacity: 100,
+            });
+
+            ctx.db.laborer_genetics().insert(LaborerGenetics {
+                unit_id: inserted_unit.id,
+                combat_iv: 15,
+                gathering_iv: 15,
+                crafting_iv: 15,
+                speed_iv: 15,
+                health_iv: 15,
+                stamina_iv: 15,
+                generation: 0,
+                parent_a_id: None,
+                parent_b_id: None,
+            });
+        }
     }
 
     // Create initial resources
@@ -923,6 +964,7 @@ pub fn create_chat_room(ctx: &ReducerContext, name: String) -> Result<(), String
         id: room_id.clone(),
         name: name.clone(),
         created_at: ctx.timestamp.to_micros_since_unix_epoch(),
+        creator_id: ctx.sender().to_hex().to_string(),
     });
     log::info!("✅ Inserted chat_room: {} ({})", name, room_id);
 
@@ -978,7 +1020,7 @@ pub fn set_chat_permission(
 ) -> Result<(), String> {
     // Only room creator can set permissions
     if let Some(room) = ctx.db.chat_room().id().find(&room_id) {
-        if room.created_at != ctx.timestamp.to_micros_since_unix_epoch() {
+        if room.creator_id != ctx.sender().to_hex().to_string() {
             return Err("Only room creator can set permissions".to_string());
         }
 
@@ -1103,22 +1145,48 @@ pub fn trade_unit_vote(
             return Err("Price mismatch".to_string());
         }
         
-        // Clone values before moving
-        let owner_id = unit.owner_id.clone();
+        let seller_id = unit.owner_id.clone();
         let room_id = unit.room_id;
         let buyer_id = buyer_id.clone();
+        let price_f64 = price as f64;
         
-        // Transfer vote ownership
+        // Financial transfer
+        let buyer = ctx.db.user().iter()
+            .find(|u| u.identity.to_hex().to_string() == buyer_id)
+            .ok_or("Buyer not found")?;
+        if buyer.wallet_balance < price_f64 {
+            return Err("Buyer has insufficient funds".to_string());
+        }
+        let fee = price_f64 * TRANSACTION_FEE_RATE;
+        let mut updated_buyer = buyer.clone();
+        updated_buyer.wallet_balance -= price_f64;
+        ctx.db.user().identity().update(updated_buyer);
+
+        let seller = ctx.db.user().iter()
+            .find(|u| u.identity.to_hex().to_string() == seller_id)
+            .ok_or("Seller not found")?;
+        let mut updated_seller = seller.clone();
+        updated_seller.wallet_balance += price_f64 - fee;
+        ctx.db.user().identity().update(updated_seller);
+
+        if fee > 0.0 {
+            if let Some(mut r) = ctx.db.game_room().id().find(room_id) {
+                r.pot_size += fee;
+                ctx.db.game_room().id().update(r);
+            }
+        }
+        
+        // Transfer vote ownership on unit
         unit.vote_owner = Some(buyer_id.clone());
+        unit.owner_id = buyer_id.clone();
         unit.vote_price = None;
         ctx.db.unit().id().update(unit);
         
-        // Create trade event
         create_game_event(
             ctx,
             room_id.to_string(),
             "vote_trade".to_string(),
-            owner_id,
+            seller_id,
             buyer_id,
             price,
         )?;
@@ -1134,12 +1202,17 @@ pub fn transfer_vote_ownership(
     buyer_id: String,
     price: f64,
 ) -> Result<(), String> {
-    // Get the vote
+    let caller_id = ctx.sender().to_hex().to_string();
+
     if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
         let seller_id = vote.player_id.clone();
         let room_id = vote.room_id;
+
+        // Authorization: caller must be the vote owner (seller)
+        if seller_id != caller_id {
+            return Err("Only the vote owner can transfer it".to_string());
+        }
         
-        // Get buyer and seller
         let buyer = ctx.db.user().iter()
             .find(|u| u.identity.to_hex().to_string() == buyer_id)
             .ok_or("Buyer not found")?;
@@ -1174,23 +1247,42 @@ pub fn transfer_vote_ownership(
         }
         
         // Transfer vote ownership and remove from sale
+        let transferring_vote_id = vote.id;
         vote.player_id = buyer_id.clone();
         vote.is_for_sale = false;
         vote.sale_price = None;
         ctx.db.vote().id().update(vote);
+        
+        // Laborer-Vote Unification: also transfer the linked unit
+        if let Some(mut linked_unit) = ctx.db.unit().iter()
+            .find(|u| u.vote_id == Some(transferring_vote_id)) {
+            linked_unit.owner_id = buyer_id.clone();
+            linked_unit.vote_owner = Some(buyer_id.clone());
+            ctx.db.unit().id().update(linked_unit);
+        }
         
         // Record transaction
         ctx.db.transaction().insert(Transaction {
             id: 0,
             room_id,
             from_player: seller_id,
-            to_player: buyer_id,
+            to_player: buyer_id.clone(),
             transaction_type: "vote_sale".to_string(),
             amount: price,
             vote_id: Some(vote_id),
             guarantee_id: None,
             timestamp: ctx.timestamp,
         });
+
+        // Mark matching TradeOffer as accepted so both UIs stay in sync
+        let matching: Vec<TradeOffer> = ctx.db.trade_offer().iter()
+            .filter(|o| o.vote_id == Some(vote_id) && o.status == "open")
+            .collect();
+        for mut offer in matching {
+            offer.status = "accepted".to_string();
+            offer.accepted_by = Some(buyer_id.clone());
+            ctx.db.trade_offer().id().update(offer);
+        }
         
         Ok(())
     } else {
@@ -1217,7 +1309,28 @@ pub fn set_vote_for_sale(
         
         vote.is_for_sale = true;
         vote.sale_price = Some(price);
+        let room_id = vote.room_id;
         ctx.db.vote().id().update(vote);
+
+        // Cancel any existing open TradeOffer for this vote, then create a fresh one
+        let existing: Vec<TradeOffer> = ctx.db.trade_offer().iter()
+            .filter(|o| o.vote_id == Some(vote_id) && o.from_player == caller_id && o.status == "open")
+            .collect();
+        for mut old in existing { old.status = "cancelled".to_string(); ctx.db.trade_offer().id().update(old); }
+
+        let round_number = ctx.db.game_room().id().find(room_id).map(|r| r.current_round).unwrap_or(0);
+        ctx.db.trade_offer().insert(TradeOffer {
+            id: 0,
+            room_id,
+            round_number,
+            from_player: caller_id,
+            offer_type: "sell_vote".to_string(),
+            vote_id: Some(vote_id),
+            price,
+            status: "open".to_string(),
+            accepted_by: None,
+            created_at: ctx.timestamp,
+        });
         
         Ok(())
     } else {
@@ -1240,6 +1353,12 @@ pub fn remove_vote_from_sale(
         vote.is_for_sale = false;
         vote.sale_price = None;
         ctx.db.vote().id().update(vote);
+
+        // Cancel any matching open TradeOffers
+        let matching: Vec<TradeOffer> = ctx.db.trade_offer().iter()
+            .filter(|o| o.vote_id == Some(vote_id) && o.from_player == caller_id && o.status == "open")
+            .collect();
+        for mut offer in matching { offer.status = "cancelled".to_string(); ctx.db.trade_offer().id().update(offer); }
         
         Ok(())
     } else {
@@ -1430,8 +1549,17 @@ pub fn set_vote_color(
             }
         }
         
-        vote.color = Some(color);
+        vote.color = Some(color.clone());
+        let vote_id_val = vote.id;
         ctx.db.vote().id().update(vote);
+        
+        // Sync the linked unit's vote_color
+        if let Some(mut linked_unit) = ctx.db.unit().iter()
+            .find(|u| u.vote_id == Some(vote_id_val)) {
+            linked_unit.vote_color = Some(color);
+            ctx.db.unit().id().update(linked_unit);
+        }
+        
         Ok(())
     } else {
         Err("Vote not found".to_string())
@@ -1530,10 +1658,38 @@ pub fn process_round_votes(
         (blue_voters, red_voters)
     };
     
-    // Eliminate majority voters
+    // Laborer-Vote Unification: destroy majority-voting units (their laborers die)
+    let majority_color = if red_votes > blue_votes { "red" } else { "blue" };
+    let majority_vote_ids: Vec<i32> = votes.iter()
+        .filter(|v| v.color.as_deref() == Some(majority_color))
+        .map(|v| v.id)
+        .collect();
+    
+    for vote_id_to_kill in &majority_vote_ids {
+        let linked_units: Vec<Unit> = ctx.db.unit().iter()
+            .filter(|u| u.vote_id == Some(*vote_id_to_kill))
+            .collect();
+        for unit in linked_units {
+            // Return equipped items to owner's pool before deletion
+            let unit_equips: Vec<Equipment> = ctx.db.equipment().iter()
+                .filter(|e| e.equipped_to_unit_id == Some(unit.id)).collect();
+            for mut eq in unit_equips { eq.equipped_to_unit_id = None; ctx.db.equipment().id().update(eq); }
+            ctx.db.unit_inventory().unit_id().delete(unit.id);
+            ctx.db.unit_stats().unit_id().delete(unit.id);
+            ctx.db.laborer_genetics().unit_id().delete(unit.id);
+            ctx.db.unit().id().delete(unit.id);
+        }
+    }
+
+    // Eliminate majority voters (player-level)
     if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
         for player_id in &majority_voters {
-            if !room.eliminated_players.contains(player_id) {
+            // Only eliminate if ALL their votes were majority (they have no remaining votes)
+            let remaining_votes = ctx.db.vote().iter()
+                .filter(|v| v.room_id == room_id && v.round_number == round_number 
+                    && v.player_id == *player_id && v.color.as_deref() != Some(majority_color))
+                .count();
+            if remaining_votes == 0 && !room.eliminated_players.contains(player_id) {
                 room.eliminated_players.push(player_id.clone());
             }
         }
@@ -1543,6 +1699,42 @@ pub fn process_round_votes(
             .filter(|id| !room.eliminated_players.contains(id))
             .collect();
         
+        // Resolve side bets for this round regardless of game outcome
+        let round_bets: Vec<SideBet> = ctx.db.side_bet().iter()
+            .filter(|s| s.room_id == room_id && s.round_number == round_number && s.status == "pending")
+            .collect();
+        let minority_color_str = if red_votes < blue_votes { "red" } else { "blue" };
+        for mut bet in round_bets {
+            let won = match bet.bet_type.as_str() {
+                "color_wins" => bet.bet_target == minority_color_str,
+                "player_eliminated" => room.eliminated_players.contains(&bet.bet_target),
+                _ => false,
+            };
+            if won {
+                bet.status = "won".to_string();
+                let payout = bet.amount * bet.payout_multiplier;
+                // Payout comes from the pot (capped at available pot)
+                let actual_payout = if let Some(mut r) = ctx.db.game_room().id().find(room_id) {
+                    let capped = payout.min(r.pot_size);
+                    r.pot_size -= capped;
+                    ctx.db.game_room().id().update(r);
+                    capped
+                } else { 0.0 };
+                if actual_payout > 0.0 {
+                    if let Some(user) = ctx.db.user().iter()
+                        .find(|u| u.identity.to_hex().to_string() == bet.bettor_id) {
+                        let mut uu = user.clone();
+                        uu.wallet_balance += actual_payout;
+                        ctx.db.user().identity().update(uu);
+                    }
+                }
+            } else {
+                bet.status = "lost".to_string();
+                // Lost bet amount already in pot from place_side_bet
+            }
+            ctx.db.side_bet().id().update(bet);
+        }
+
         if remaining_players.len() <= WIN_CONDITION_REMAINING {
             room.game_status = "completed".to_string();
             
@@ -1554,7 +1746,6 @@ pub fn process_round_votes(
                     updated_user.total_profit_loss += pot_per_winner - room.buyin_amount;
                     ctx.db.user().identity().update(updated_user);
                     
-                    // Record pot distribution
                     ctx.db.transaction().insert(Transaction {
                         id: 0,
                         room_id,
@@ -1569,8 +1760,29 @@ pub fn process_round_votes(
                 }
             }
         } else {
-            // Continue to next round
-            room.current_round += 1;
+            // Advance to next round: update surviving votes and reset their colors
+            let next_round = room.current_round + 1;
+            room.current_round = next_round;
+
+            let surviving_votes: Vec<Vote> = ctx.db.vote().iter()
+                .filter(|v| v.room_id == room_id && v.round_number == round_number
+                    && v.color.as_deref() != Some(majority_color))
+                .collect();
+            for sv in surviving_votes {
+                let mut updated = sv.clone();
+                updated.round_number = next_round;
+                updated.color = None;
+                ctx.db.vote().id().update(updated);
+            }
+
+            let surviving_units: Vec<Unit> = ctx.db.unit().iter()
+                .filter(|u| u.room_id == room_id && u.vote_id.is_some()
+                    && u.vote_color.as_deref() != Some(majority_color))
+                .collect();
+            for mut su in surviving_units {
+                su.vote_color = None;
+                ctx.db.unit().id().update(su);
+            }
         }
         
         ctx.db.game_room().id().update(room);
@@ -1782,7 +1994,7 @@ pub fn rebuy_into_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String>
             ctx.db.game_room().id().update(room);
             
             // Give player a new vote
-            ctx.db.vote().insert(Vote {
+            let new_vote = ctx.db.vote().insert(Vote {
                 id: 0,
                 room_id,
                 round_number: current_round,
@@ -1792,6 +2004,41 @@ pub fn rebuy_into_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String>
                 is_for_sale: false,
                 sale_price: None,
                 timestamp: ctx.timestamp,
+            });
+            
+            // Laborer-Vote Unification: create a linked unit for the new vote
+            let rebuy_unit = ctx.db.unit().insert(Unit {
+                id: 0,
+                room_id,
+                owner_id: player_id.clone(),
+                unit_type: "minion".to_string(),
+                position: Vector2 {
+                    x: ctx.rng().gen::<f32>() * 80.0 + 10.0,
+                    y: ctx.rng().gen::<f32>() * 80.0 + 10.0,
+                },
+                dimensions: Vector2 { x: 20.0, y: 20.0 },
+                fill_style: "#aaaaaa".to_string(),
+                task_type: None, target_id: None,
+                vote_color: None, vote_guarantee: None,
+                vote_price: None, vote_owner: None,
+                vote_id: Some(new_vote.id),
+                storage_capacity: None, is_storage: false,
+                building_type: None, construction_progress: None,
+                construction_max: None, assigned_unit_id: None,
+                building_recipe: None, tax_rate: None, contributors: vec![],
+            });
+            ctx.db.unit_stats().insert(UnitStats {
+                unit_id: rebuy_unit.id,
+                health: 100, max_health: 100, attack: 10, defense: 5,
+                speed: 3, gather_rate: 5, craft_rate: 3,
+            });
+            ctx.db.unit_inventory().insert(UnitInventory {
+                unit_id: rebuy_unit.id,
+                wood: 0, stone: 0, metal_ore: 0, coal: 0, gems: 0,
+                fiber: 0, hide: 0, sand: 0, food: 0,
+                wooden_pole: 0, lumber: 0, cut_stone: 0, metal_ingot: 0,
+                cloth: 0, rope: 0, leather: 0, glass: 0,
+                max_capacity: 100,
             });
             
             // Record transaction
@@ -1920,8 +2167,12 @@ pub fn leave_room(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
             .filter(|u| u.room_id == room_id && u.owner_id == player_id)
             .collect();
         for unit in &player_units {
+            let unit_equips: Vec<Equipment> = ctx.db.equipment().iter()
+                .filter(|e| e.equipped_to_unit_id == Some(unit.id)).collect();
+            for mut eq in unit_equips { eq.equipped_to_unit_id = None; ctx.db.equipment().id().update(eq); }
             ctx.db.unit_inventory().unit_id().delete(unit.id);
             ctx.db.unit_stats().unit_id().delete(unit.id);
+            ctx.db.laborer_genetics().unit_id().delete(unit.id);
             ctx.db.unit().id().delete(unit.id);
         }
 
@@ -2074,12 +2325,20 @@ pub fn accept_trade_offer(
         }
         
         // Transfer vote ownership
+        let transferring_vote_id = vote.id;
         vote.player_id = accepter_id.clone();
         vote.is_for_sale = false;
         vote.sale_price = None;
         ctx.db.vote().id().update(vote);
+
+        // Sync linked unit ownership (laborer-vote unification)
+        if let Some(mut linked_unit) = ctx.db.unit().iter()
+            .find(|u| u.vote_id == Some(transferring_vote_id)) {
+            linked_unit.owner_id = accepter_id.clone();
+            linked_unit.vote_owner = Some(accepter_id.clone());
+            ctx.db.unit().id().update(linked_unit);
+        }
         
-        // Record transaction
         ctx.db.transaction().insert(Transaction {
             id: 0,
             room_id,
@@ -2134,8 +2393,15 @@ pub fn accept_trade_offer(
         updated_vote.is_for_sale = false;
         updated_vote.sale_price = None;
         ctx.db.vote().id().update(updated_vote);
+
+        // Sync linked unit ownership (laborer-vote unification)
+        if let Some(mut linked_unit) = ctx.db.unit().iter()
+            .find(|u| u.vote_id == Some(vote_id)) {
+            linked_unit.owner_id = offer.from_player.clone();
+            linked_unit.vote_owner = Some(offer.from_player.clone());
+            ctx.db.unit().id().update(linked_unit);
+        }
         
-        // Record transaction
         ctx.db.transaction().insert(Transaction {
             id: 0,
             room_id,
@@ -2327,10 +2593,105 @@ pub fn game_tick(ctx: &ReducerContext, _timer: GameTickTimer) -> Result<(), Stri
             if resource.regeneration_timer > 0 {
                 resource.regeneration_timer -= 1;
             } else {
-                // Regenerate resource
                 resource.amount = (resource.amount + resource.regeneration_rate).min(resource.max_amount);
             }
             ctx.db.resource().id().update(resource);
+        }
+    }
+
+    // Phase C: Process building production (refinery/manufacturing)
+    let buildings: Vec<Unit> = ctx.db.unit().iter()
+        .filter(|u| u.building_type.is_some() && u.assigned_unit_id.is_some()
+            && u.construction_progress >= u.construction_max)
+        .collect();
+
+    for building in buildings {
+        let btype = building.building_type.as_deref().unwrap_or("");
+        if let Some(mut bldg_inv) = ctx.db.unit_inventory().unit_id().find(building.id) {
+            match btype {
+                "refinery_carpenter" => {
+                    if bldg_inv.wood >= 5 {
+                        bldg_inv.wood -= 5;
+                        bldg_inv.lumber += 2;
+                        ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                    }
+                }
+                "refinery_forge" => {
+                    if bldg_inv.metal_ore >= 5 && bldg_inv.coal >= 2 {
+                        bldg_inv.metal_ore -= 5;
+                        bldg_inv.coal -= 2;
+                        bldg_inv.metal_ingot += 2;
+                        ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                    }
+                }
+                "refinery_mason" => {
+                    if bldg_inv.stone >= 5 {
+                        bldg_inv.stone -= 5;
+                        bldg_inv.cut_stone += 2;
+                        ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                    }
+                }
+                "refinery_weaver" => {
+                    if bldg_inv.fiber >= 5 {
+                        bldg_inv.fiber -= 5;
+                        bldg_inv.cloth += 2;
+                        ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                    }
+                }
+                "refinery_tanner" => {
+                    if bldg_inv.hide >= 5 {
+                        bldg_inv.hide -= 5;
+                        bldg_inv.leather += 2;
+                        ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                    }
+                }
+                "refinery_glass_furnace" => {
+                    if bldg_inv.sand >= 5 && bldg_inv.coal >= 1 {
+                        bldg_inv.sand -= 5;
+                        bldg_inv.coal -= 1;
+                        bldg_inv.glass += 2;
+                        ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                    }
+                }
+                "refinery_kitchen" => {
+                    // Consumes raw food + coal to produce cooked food (stored as hide field, repurposed as "rations")
+                    // Net: 3 food + 1 coal -> 5 rations. Uses hide field for cooked output to avoid infinite loop.
+                    if bldg_inv.food >= 3 && bldg_inv.coal >= 1 {
+                        bldg_inv.food -= 3;
+                        bldg_inv.coal -= 1;
+                        bldg_inv.hide += 5; // "rations" stored in hide slot
+                        ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                    }
+                }
+                "extraction_wood" => {
+                    bldg_inv.wood += 3;
+                    ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                }
+                "extraction_mine" => {
+                    bldg_inv.metal_ore += 2;
+                    bldg_inv.coal += 1;
+                    ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                }
+                "extraction_quarry" => {
+                    bldg_inv.stone += 3;
+                    ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                }
+                "extraction_hunter" => {
+                    bldg_inv.hide += 2;
+                    bldg_inv.food += 1;
+                    ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                }
+                "extraction_farm" => {
+                    bldg_inv.food += 3;
+                    bldg_inv.fiber += 1;
+                    ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                }
+                "farm_food" => {
+                    bldg_inv.food += 4;
+                    ctx.db.unit_inventory().unit_id().update(bldg_inv);
+                }
+                _ => {}
+            }
         }
     }
     
@@ -2351,21 +2712,26 @@ pub fn create_storage_building(
         return Err("You are not a member of this room".to_string());
     }
     let storage = Unit {
-        id: 0, // Will be auto-incremented
+        id: 0,
         room_id,
         owner_id: ctx.sender().to_hex().to_string(),
         unit_type: "storage".to_string(),
         position,
-        dimensions: Vector2 { x: 40.0, y: 40.0 }, // Larger than regular units
-        fill_style: "#808080".to_string(), // Gray color for storage
-        task_type: None,
-        target_id: None,
-        vote_color: None,
-        vote_guarantee: None,
-        vote_price: None,
-        vote_owner: None,
+        dimensions: Vector2 { x: 40.0, y: 40.0 },
+        fill_style: "#808080".to_string(),
+        task_type: None, target_id: None,
+        vote_color: None, vote_guarantee: None,
+        vote_price: None, vote_owner: None,
+        vote_id: None,
         storage_capacity: Some(capacity),
         is_storage: true,
+        building_type: Some("storage".to_string()),
+        construction_progress: Some(100),
+        construction_max: Some(100),
+        assigned_unit_id: None,
+        building_recipe: None,
+        tax_rate: None,
+        contributors: vec![ctx.sender().to_hex().to_string()],
     };
     let inserted_storage = ctx.db.unit().insert(storage);
 
@@ -2855,6 +3221,1079 @@ pub fn unblock_user(ctx: &ReducerContext, user_id: Identity) -> Result<(), Strin
 }
 
 // ============================================================================
+// Phase B: Functional Buildings
+// ============================================================================
+
+#[reducer]
+pub fn construct_building(
+    ctx: &ReducerContext,
+    room_id: i32,
+    position: Vector2,
+    building_type: String,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
+    if !room.member_ids.contains(&caller_id) {
+        return Err("You are not a member of this room".to_string());
+    }
+
+    let (construction_max, unit_type_str) = match building_type.as_str() {
+        "extraction_wood" | "extraction_mine" | "extraction_quarry"
+        | "extraction_hunter" | "extraction_farm" => (50, "structure"),
+        "refinery_carpenter" | "refinery_forge" | "refinery_mason"
+        | "refinery_weaver" | "refinery_tanner" | "refinery_kitchen"
+        | "refinery_glass_furnace" => (80, "structure"),
+        "manufacturing_armorer" | "manufacturing_weaponsmith"
+        | "manufacturing_toolsmith" | "manufacturing_tailor"
+        | "manufacturing_glass_blower" | "manufacturing_infuser" => (120, "structure"),
+        "housing_dormitory" | "housing_player" => (60, "structure"),
+        "farm_food" => (40, "structure"),
+        "breeding" => (100, "structure"),
+        _ => return Err("Invalid building type".to_string()),
+    };
+
+    let building = ctx.db.unit().insert(Unit {
+        id: 0, room_id,
+        owner_id: caller_id.clone(),
+        unit_type: unit_type_str.to_string(),
+        position,
+        dimensions: Vector2 { x: 50.0, y: 50.0 },
+        fill_style: "#6b4423".to_string(),
+        task_type: None, target_id: None,
+        vote_color: None, vote_guarantee: None,
+        vote_price: None, vote_owner: None, vote_id: None,
+        storage_capacity: Some(200),
+        is_storage: false,
+        building_type: Some(building_type),
+        construction_progress: Some(0),
+        construction_max: Some(construction_max),
+        assigned_unit_id: None,
+        building_recipe: None,
+        tax_rate: Some(0.0),
+        contributors: vec![caller_id],
+    });
+
+    ctx.db.unit_inventory().insert(UnitInventory {
+        unit_id: building.id,
+        wood: 0, stone: 0, metal_ore: 0, coal: 0, gems: 0,
+        fiber: 0, hide: 0, sand: 0, food: 0,
+        wooden_pole: 0, lumber: 0, cut_stone: 0, metal_ingot: 0,
+        cloth: 0, rope: 0, leather: 0, glass: 0,
+        max_capacity: 200,
+    });
+
+    Ok(())
+}
+
+#[reducer]
+pub fn contribute_to_building(
+    ctx: &ReducerContext,
+    building_id: i32,
+    resource_type: String,
+    amount: i32,
+    source_unit_id: i32,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let source_unit = ctx.db.unit().id().find(source_unit_id).ok_or("Source unit not found")?;
+    if source_unit.owner_id != caller_id {
+        return Err("You don't own this unit".to_string());
+    }
+
+    let mut building = ctx.db.unit().id().find(building_id).ok_or("Building not found")?;
+    if building.building_type.is_none() {
+        return Err("Not a building".to_string());
+    }
+    let progress = building.construction_progress.unwrap_or(0);
+    let max_progress = building.construction_max.unwrap_or(100);
+    if progress >= max_progress {
+        return Err("Building already complete".to_string());
+    }
+
+    let mut source_inv = ctx.db.unit_inventory().unit_id().find(source_unit_id)
+        .ok_or("Source inventory not found")?;
+
+    let available = match resource_type.as_str() {
+        "wood" => source_inv.wood, "stone" => source_inv.stone,
+        "metal_ore" => source_inv.metal_ore, _ => return Err("Invalid resource".to_string()),
+    };
+    if available < amount { return Err("Not enough resources".to_string()); }
+
+    match resource_type.as_str() {
+        "wood" => source_inv.wood -= amount,
+        "stone" => source_inv.stone -= amount,
+        "metal_ore" => source_inv.metal_ore -= amount,
+        _ => {}
+    }
+    ctx.db.unit_inventory().unit_id().update(source_inv);
+
+    building.construction_progress = Some((progress + amount).min(max_progress));
+    if !building.contributors.contains(&caller_id) {
+        building.contributors.push(caller_id);
+    }
+    ctx.db.unit().id().update(building);
+
+    Ok(())
+}
+
+#[reducer]
+pub fn assign_unit_to_building(
+    ctx: &ReducerContext,
+    unit_id: i32,
+    building_id: i32,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let unit = ctx.db.unit().id().find(unit_id).ok_or("Unit not found")?;
+    if unit.owner_id != caller_id {
+        return Err("You don't own this unit".to_string());
+    }
+
+    let mut building = ctx.db.unit().id().find(building_id).ok_or("Building not found")?;
+    if building.building_type.is_none() {
+        return Err("Not a building".to_string());
+    }
+    let progress = building.construction_progress.unwrap_or(0);
+    let max_progress = building.construction_max.unwrap_or(100);
+    if progress < max_progress {
+        return Err("Building not yet complete".to_string());
+    }
+
+    building.assigned_unit_id = Some(unit_id);
+    ctx.db.unit().id().update(building);
+
+    let mut updated_unit = unit.clone();
+    updated_unit.task_type = Some("work_building".to_string());
+    updated_unit.target_id = Some(building_id.to_string());
+    ctx.db.unit().id().update(updated_unit);
+
+    Ok(())
+}
+
+#[reducer]
+pub fn set_building_tax(
+    ctx: &ReducerContext,
+    building_id: i32,
+    tax_rate: f32,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let mut building = ctx.db.unit().id().find(building_id).ok_or("Building not found")?;
+    if !building.contributors.contains(&caller_id) {
+        return Err("Only contributors can set tax".to_string());
+    }
+    if tax_rate < 0.0 || tax_rate > 0.5 {
+        return Err("Tax rate must be between 0 and 50%".to_string());
+    }
+    building.tax_rate = Some(tax_rate);
+    ctx.db.unit().id().update(building);
+    Ok(())
+}
+
+// ============================================================================
+// Phase D: Equipment System
+// ============================================================================
+
+#[table(accessor = equipment, public)]
+#[derive(Clone)]
+pub struct Equipment {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    room_id: i32,
+    owner_id: String,
+    equipped_to_unit_id: Option<i32>,
+    equipment_type: String,  // "helmet" | "body" | "weapon" | "shield" | etc.
+    slot: String,            // "head" | "body" | "hands" | "feet" | "main_hand" | "off_hand" | "ring1" | "ring2" | "amulet" | "belt"
+    item_name: String,
+    tier: i32,               // 1-5
+    material: String,        // "iron" | "steel" | "mithril" etc.
+    enchantment: Option<String>, // "magic" | "unique" | "legendary"
+    quality: String,         // "poor" | "normal" | "good" | "excellent"
+    surface: String,         // "rusted" | "worn" | "polished" | "exalted"
+    attack_bonus: i32,
+    defense_bonus: i32,
+    speed_bonus: i32,
+    health_bonus: i32,
+    durability: i32,
+    max_durability: i32,
+}
+
+#[reducer]
+pub fn craft_equipment(
+    ctx: &ReducerContext,
+    room_id: i32,
+    building_id: i32,
+    equipment_type: String,
+    material: String,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let building = ctx.db.unit().id().find(building_id).ok_or("Building not found")?;
+    
+    let btype = building.building_type.as_deref().unwrap_or("");
+    let valid = match equipment_type.as_str() {
+        "weapon" => btype == "manufacturing_weaponsmith",
+        "helmet" | "body" | "shield" => btype == "manufacturing_armorer",
+        "tool" => btype == "manufacturing_toolsmith",
+        "clothes" => btype == "manufacturing_tailor",
+        _ => false,
+    };
+    if !valid { return Err("Wrong building type for this equipment".to_string()); }
+
+    let slot = match equipment_type.as_str() {
+        "weapon" => "main_hand", "shield" => "off_hand",
+        "helmet" => "head", "body" => "body",
+        "tool" => "main_hand", "clothes" => "body",
+        _ => "main_hand",
+    };
+
+    let tier = match material.as_str() {
+        "iron" => 1, "steel" => 2, "mithril" => 3,
+        "adamantite" => 4, "titanite" => 5,
+        _ => 1,
+    };
+
+    // Consume resources from building inventory (tiered costs)
+    let mut bldg_inv = ctx.db.unit_inventory().unit_id().find(building_id)
+        .ok_or("Building inventory not found")?;
+    match tier {
+        1 => { // iron: 5 metal_ingot
+            if bldg_inv.metal_ingot < 5 { return Err("Need 5 metal ingots".to_string()); }
+            bldg_inv.metal_ingot -= 5;
+        }
+        2 => { // steel: 10 metal_ingot + 3 coal
+            if bldg_inv.metal_ingot < 10 || bldg_inv.coal < 3 {
+                return Err("Need 10 metal ingots + 3 coal".to_string());
+            }
+            bldg_inv.metal_ingot -= 10; bldg_inv.coal -= 3;
+        }
+        3 => { // mithril: 15 metal_ingot + 5 gems
+            if bldg_inv.metal_ingot < 15 || bldg_inv.gems < 5 {
+                return Err("Need 15 metal ingots + 5 gems".to_string());
+            }
+            bldg_inv.metal_ingot -= 15; bldg_inv.gems -= 5;
+        }
+        4 => { // adamantite: 20 metal_ingot + 10 gems + 5 cut_stone
+            if bldg_inv.metal_ingot < 20 || bldg_inv.gems < 10 || bldg_inv.cut_stone < 5 {
+                return Err("Need 20 metal ingots + 10 gems + 5 cut stone".to_string());
+            }
+            bldg_inv.metal_ingot -= 20; bldg_inv.gems -= 10; bldg_inv.cut_stone -= 5;
+        }
+        _ => { // titanite (tier 5): 30 metal_ingot + 15 gems + 10 cut_stone
+            if bldg_inv.metal_ingot < 30 || bldg_inv.gems < 15 || bldg_inv.cut_stone < 10 {
+                return Err("Need 30 metal ingots + 15 gems + 10 cut stone".to_string());
+            }
+            bldg_inv.metal_ingot -= 30; bldg_inv.gems -= 15; bldg_inv.cut_stone -= 10;
+        }
+    }
+    ctx.db.unit_inventory().unit_id().update(bldg_inv);
+
+    let stat_base = tier * 3;
+    ctx.db.equipment().insert(Equipment {
+        id: 0, room_id,
+        owner_id: caller_id,
+        equipped_to_unit_id: None,
+        equipment_type: equipment_type.clone(),
+        slot: slot.to_string(),
+        item_name: format!("{} {} {}", material, equipment_type, "Mk I"),
+        tier, material,
+        enchantment: None,
+        quality: "normal".to_string(),
+        surface: "polished".to_string(),
+        attack_bonus: if equipment_type == "weapon" { stat_base * 2 } else { 0 },
+        defense_bonus: if equipment_type == "shield" || equipment_type == "body" || equipment_type == "helmet" { stat_base * 2 } else { 0 },
+        speed_bonus: 0,
+        health_bonus: if equipment_type == "body" { stat_base } else { 0 },
+        durability: 100 + tier * 20,
+        max_durability: 100 + tier * 20,
+    });
+
+    Ok(())
+}
+
+#[reducer]
+pub fn equip_item(
+    ctx: &ReducerContext,
+    equipment_id: i32,
+    unit_id: i32,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let mut item = ctx.db.equipment().id().find(equipment_id).ok_or("Equipment not found")?;
+    if item.owner_id != caller_id { return Err("You don't own this equipment".to_string()); }
+
+    let unit = ctx.db.unit().id().find(unit_id).ok_or("Unit not found")?;
+    if unit.owner_id != caller_id { return Err("You don't own this unit".to_string()); }
+
+    let existing: Vec<Equipment> = ctx.db.equipment().iter()
+        .filter(|e| e.equipped_to_unit_id == Some(unit_id) && e.slot == item.slot)
+        .collect();
+    for mut old in existing {
+        old.equipped_to_unit_id = None;
+        ctx.db.equipment().id().update(old);
+    }
+
+    item.equipped_to_unit_id = Some(unit_id);
+    ctx.db.equipment().id().update(item);
+
+    recalculate_unit_stats(ctx, unit_id);
+    Ok(())
+}
+
+#[reducer]
+pub fn unequip_item(
+    ctx: &ReducerContext,
+    equipment_id: i32,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let mut item = ctx.db.equipment().id().find(equipment_id).ok_or("Equipment not found")?;
+    if item.owner_id != caller_id { return Err("You don't own this equipment".to_string()); }
+    let unit_id = item.equipped_to_unit_id;
+    item.equipped_to_unit_id = None;
+    ctx.db.equipment().id().update(item);
+
+    if let Some(uid) = unit_id {
+        recalculate_unit_stats(ctx, uid);
+    }
+    Ok(())
+}
+
+fn recalculate_unit_stats(ctx: &ReducerContext, unit_id: i32) {
+    let genetics = ctx.db.laborer_genetics().unit_id().find(unit_id);
+    let (base_combat, base_gather, base_craft, base_speed, base_health) = match &genetics {
+        Some(g) => (g.combat_iv, g.gathering_iv, g.crafting_iv, g.speed_iv, g.health_iv),
+        None => (15, 15, 15, 15, 15), // defaults for units without genetics
+    };
+
+    let equipped: Vec<Equipment> = ctx.db.equipment().iter()
+        .filter(|e| e.equipped_to_unit_id == Some(unit_id))
+        .collect();
+    let eq_atk: i32 = equipped.iter().map(|e| e.attack_bonus).sum();
+    let eq_def: i32 = equipped.iter().map(|e| e.defense_bonus).sum();
+    let eq_spd: i32 = equipped.iter().map(|e| e.speed_bonus).sum();
+    let eq_hp: i32 = equipped.iter().map(|e| e.health_bonus).sum();
+
+    if let Some(mut stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
+        stats.max_health = 80 + base_health * 2 + eq_hp;
+        stats.health = stats.health.min(stats.max_health);
+        stats.attack = 5 + base_combat + eq_atk;
+        stats.defense = 3 + base_combat / 2 + eq_def;
+        stats.speed = 2 + base_speed / 4 + eq_spd;
+        stats.gather_rate = 3 + base_gather / 3;
+        stats.craft_rate = 2 + base_craft / 3;
+        ctx.db.unit_stats().unit_id().update(stats);
+    }
+}
+
+// ============================================================================
+// Phase E: Battle Arena
+// ============================================================================
+
+#[table(accessor = battle_arena, public)]
+#[derive(Clone)]
+pub struct BattleArena {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    room_id: i32,
+    round_number: i32,
+    status: String,           // "pending" | "in_progress" | "completed"
+    turn_number: i32,
+    winner_team: Option<String>, // "red" | "blue"
+    created_at: Timestamp,
+}
+
+#[table(accessor = battle_unit, public)]
+#[derive(Clone)]
+pub struct BattleUnit {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    arena_id: i32,
+    source_unit_id: i32,
+    owner_id: String,
+    team: String,             // "red" | "blue"
+    current_health: i32,
+    max_health: i32,
+    attack: i32,
+    defense: i32,
+    speed: i32,
+    is_alive: bool,
+    position_x: f32,
+    position_y: f32,
+}
+
+#[reducer]
+pub fn create_battle_arena(
+    ctx: &ReducerContext,
+    room_id: i32,
+    red_unit_ids: Vec<i32>,
+    blue_unit_ids: Vec<i32>,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
+    if !room.member_ids.contains(&caller_id) {
+        return Err("You are not in this room".to_string());
+    }
+    if red_unit_ids.is_empty() || blue_unit_ids.is_empty() {
+        return Err("Both teams need at least one unit".to_string());
+    }
+
+    let arena = ctx.db.battle_arena().insert(BattleArena {
+        id: 0,
+        room_id,
+        round_number: room.current_round,
+        status: "in_progress".to_string(),
+        turn_number: 0,
+        winner_team: None,
+        created_at: ctx.timestamp,
+    });
+
+    // Snapshot each unit into BattleUnit with effective stats (base + equipment)
+    for (unit_ids, team) in [(&red_unit_ids, "red"), (&blue_unit_ids, "blue")] {
+        for (i, uid) in unit_ids.iter().enumerate() {
+            let unit = ctx.db.unit().id().find(*uid)
+                .ok_or(format!("Unit {} not found", uid))?;
+            if unit.room_id != room_id {
+                return Err(format!("Unit {} is not in this room", uid));
+            }
+            let stats = ctx.db.unit_stats().unit_id().find(*uid)
+                .ok_or(format!("Stats for unit {} not found", uid))?;
+
+            ctx.db.battle_unit().insert(BattleUnit {
+                id: 0,
+                arena_id: arena.id,
+                source_unit_id: *uid,
+                owner_id: unit.owner_id.clone(),
+                team: team.to_string(),
+                current_health: stats.health,
+                max_health: stats.max_health,
+                attack: stats.attack,
+                defense: stats.defense,
+                speed: stats.speed,
+                is_alive: true,
+                position_x: if team == "red" { 20.0 } else { 80.0 },
+                position_y: 30.0 + (i as f32) * 15.0,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+#[reducer]
+pub fn process_battle_turn(
+    ctx: &ReducerContext,
+    arena_id: i32,
+) -> Result<(), String> {
+    let mut arena = ctx.db.battle_arena().id().find(arena_id)
+        .ok_or("Arena not found")?;
+    if arena.status != "in_progress" {
+        return Err("Battle is not in progress".to_string());
+    }
+
+    let alive_units: Vec<BattleUnit> = ctx.db.battle_unit().iter()
+        .filter(|u| u.arena_id == arena_id && u.is_alive)
+        .collect();
+
+    let red_alive: Vec<&BattleUnit> = alive_units.iter().filter(|u| u.team == "red").collect();
+    let blue_alive: Vec<&BattleUnit> = alive_units.iter().filter(|u| u.team == "blue").collect();
+
+    if red_alive.is_empty() || blue_alive.is_empty() {
+        arena.status = "completed".to_string();
+        arena.winner_team = if red_alive.is_empty() { Some("blue".to_string()) } else { Some("red".to_string()) };
+        ctx.db.battle_arena().id().update(arena);
+        return Ok(());
+    }
+
+    // Sort by speed for initiative order
+    let mut turn_order_ids: Vec<(i32, i32)> = alive_units.iter().map(|u| (u.id, u.speed)).collect();
+    turn_order_ids.sort_by(|a, b| b.1.cmp(&a.1));
+
+    for (attacker_id, _) in &turn_order_ids {
+        // Re-read attacker from DB each iteration to reflect kills from earlier in this turn
+        let attacker = match ctx.db.battle_unit().id().find(*attacker_id) {
+            Some(a) if a.is_alive => a,
+            _ => continue,
+        };
+
+        let enemies: Vec<BattleUnit> = ctx.db.battle_unit().iter()
+            .filter(|u| u.arena_id == arena_id && u.is_alive && u.team != attacker.team)
+            .collect();
+        if enemies.is_empty() { break; }
+
+        let target_idx = ctx.rng().gen::<usize>() % enemies.len();
+        let target = &enemies[target_idx];
+
+        let damage = (attacker.attack as f32 * (1.0 - target.defense as f32 / (target.defense as f32 + 100.0))) as i32;
+        let damage = damage.max(1);
+
+        let mut updated_target = target.clone();
+        updated_target.current_health -= damage;
+
+        // Degrade attacker's weapon durability on every attack
+        let attacker_equip: Vec<Equipment> = ctx.db.equipment().iter()
+            .filter(|e| e.equipped_to_unit_id == Some(attacker.source_unit_id) && e.slot == "main_hand")
+            .collect();
+        for mut eq in attacker_equip {
+            eq.durability = (eq.durability - 1).max(0);
+            ctx.db.equipment().id().update(eq);
+        }
+
+        if updated_target.current_health <= 0 {
+            updated_target.is_alive = false;
+            updated_target.current_health = 0;
+        }
+        ctx.db.battle_unit().id().update(updated_target);
+    }
+
+    arena.turn_number += 1;
+
+    // Check if battle ended
+    let red_remaining = ctx.db.battle_unit().iter()
+        .filter(|u| u.arena_id == arena_id && u.is_alive && u.team == "red").count();
+    let blue_remaining = ctx.db.battle_unit().iter()
+        .filter(|u| u.arena_id == arena_id && u.is_alive && u.team == "blue").count();
+
+    if red_remaining == 0 || blue_remaining == 0 {
+        arena.status = "completed".to_string();
+        arena.winner_team = if red_remaining == 0 { Some("blue".to_string()) } else { Some("red".to_string()) };
+    }
+
+    ctx.db.battle_arena().id().update(arena);
+    Ok(())
+}
+
+// ============================================================================
+// Phase F: Laborer Genetics and Breeding
+// ============================================================================
+
+#[table(accessor = laborer_genetics, public)]
+#[derive(Clone)]
+pub struct LaborerGenetics {
+    #[primary_key]
+    unit_id: i32,
+    generation: i32,
+    parent_a_id: Option<i32>,
+    parent_b_id: Option<i32>,
+    combat_iv: i32,     // 0-31
+    gathering_iv: i32,
+    crafting_iv: i32,
+    speed_iv: i32,
+    health_iv: i32,
+    stamina_iv: i32,
+}
+
+#[reducer]
+pub fn breed_laborers(
+    ctx: &ReducerContext,
+    room_id: i32,
+    parent_a_id: i32,
+    parent_b_id: i32,
+    breeding_building_id: i32,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    if parent_a_id == parent_b_id {
+        return Err("Cannot breed a unit with itself".to_string());
+    }
+    let parent_a = ctx.db.unit().id().find(parent_a_id).ok_or("Parent A not found")?;
+    let parent_b = ctx.db.unit().id().find(parent_b_id).ok_or("Parent B not found")?;
+    if parent_a.owner_id != caller_id || parent_b.owner_id != caller_id {
+        return Err("You must own both parents".to_string());
+    }
+    if parent_a.room_id != room_id || parent_b.room_id != room_id {
+        return Err("Both parents must be in the same room".to_string());
+    }
+
+    let building = ctx.db.unit().id().find(breeding_building_id).ok_or("Building not found")?;
+    if building.building_type.as_deref() != Some("breeding") {
+        return Err("Must use a breeding building".to_string());
+    }
+
+    // Check food cost
+    let mut bldg_inv = ctx.db.unit_inventory().unit_id().find(breeding_building_id)
+        .ok_or("Building inventory not found")?;
+    if bldg_inv.food < 20 {
+        return Err("Breeding requires 20 food".to_string());
+    }
+    bldg_inv.food -= 20;
+    ctx.db.unit_inventory().unit_id().update(bldg_inv);
+
+    let gen_a = ctx.db.laborer_genetics().unit_id().find(parent_a_id);
+    let gen_b = ctx.db.laborer_genetics().unit_id().find(parent_b_id);
+
+    let inherit = |a_val: i32, b_val: i32| -> i32 {
+        let base = if ctx.rng().gen::<bool>() { a_val } else { b_val };
+        let mutation = ctx.rng().gen_range(-2..=2_i32);
+        (base + mutation).clamp(0, 31)
+    };
+
+    let (a_combat, a_gather, a_craft, a_speed, a_health, a_stam) = match &gen_a {
+        Some(g) => (g.combat_iv, g.gathering_iv, g.crafting_iv, g.speed_iv, g.health_iv, g.stamina_iv),
+        None => (15, 15, 15, 15, 15, 15),
+    };
+    let (b_combat, b_gather, b_craft, b_speed, b_health, b_stam) = match &gen_b {
+        Some(g) => (g.combat_iv, g.gathering_iv, g.crafting_iv, g.speed_iv, g.health_iv, g.stamina_iv),
+        None => (15, 15, 15, 15, 15, 15),
+    };
+
+    let gen_a_val = gen_a.as_ref().map(|g| g.generation).unwrap_or(0);
+    let gen_b_val = gen_b.as_ref().map(|g| g.generation).unwrap_or(0);
+
+    // Create the offspring unit (no vote linked -- must be acquired separately)
+    let offspring = ctx.db.unit().insert(Unit {
+        id: 0, room_id,
+        owner_id: caller_id.clone(),
+        unit_type: "minion".to_string(),
+        position: parent_a.position.clone(),
+        dimensions: Vector2 { x: 20.0, y: 20.0 },
+        fill_style: "#ffcc00".to_string(),
+        task_type: None, target_id: None,
+        vote_color: None, vote_guarantee: None,
+        vote_price: None, vote_owner: None, vote_id: None,
+        storage_capacity: None, is_storage: false,
+        building_type: None, construction_progress: None,
+        construction_max: None, assigned_unit_id: None,
+        building_recipe: None, tax_rate: None, contributors: vec![],
+    });
+
+    // Pre-compute all child IVs once to avoid double-roll divergence
+    let child_combat = inherit(a_combat, b_combat);
+    let child_gather = inherit(a_gather, b_gather);
+    let child_craft = inherit(a_craft, b_craft);
+    let child_speed = inherit(a_speed, b_speed);
+    let child_health = inherit(a_health, b_health);
+    let child_stam = inherit(a_stam, b_stam);
+
+    ctx.db.unit_stats().insert(UnitStats {
+        unit_id: offspring.id,
+        health: 80 + child_health * 2,
+        max_health: 80 + child_health * 2,
+        attack: 5 + child_combat,
+        defense: 3 + child_combat / 2,
+        speed: 2 + child_speed / 4,
+        gather_rate: 3 + child_gather / 3,
+        craft_rate: 2 + child_craft / 3,
+    });
+
+    ctx.db.unit_inventory().insert(UnitInventory {
+        unit_id: offspring.id,
+        wood: 0, stone: 0, metal_ore: 0, coal: 0, gems: 0,
+        fiber: 0, hide: 0, sand: 0, food: 0,
+        wooden_pole: 0, lumber: 0, cut_stone: 0, metal_ingot: 0,
+        cloth: 0, rope: 0, leather: 0, glass: 0,
+        max_capacity: 80,
+    });
+
+    ctx.db.laborer_genetics().insert(LaborerGenetics {
+        unit_id: offspring.id,
+        generation: gen_a_val.max(gen_b_val) + 1,
+        parent_a_id: Some(parent_a_id),
+        parent_b_id: Some(parent_b_id),
+        combat_iv: child_combat,
+        gathering_iv: child_gather,
+        crafting_iv: child_craft,
+        speed_iv: child_speed,
+        health_iv: child_health,
+        stamina_iv: child_stam,
+    });
+
+    Ok(())
+}
+
+// ============================================================================
+// Phase G: Vote Mechanics Polish
+// ============================================================================
+
+#[table(accessor = side_bet, public)]
+#[derive(Clone)]
+pub struct SideBet {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    room_id: i32,
+    round_number: i32,
+    bettor_id: String,
+    bet_type: String,        // "color_wins" | "player_eliminated"
+    bet_target: String,      // "red" | "blue" or player_id
+    amount: f64,
+    payout_multiplier: f64,
+    status: String,          // "pending" | "won" | "lost"
+    created_at: Timestamp,
+}
+
+#[reducer]
+pub fn place_side_bet(
+    ctx: &ReducerContext,
+    room_id: i32,
+    bet_type: String,
+    bet_target: String,
+    amount: f64,
+) -> Result<(), String> {
+    let bettor_id = ctx.sender().to_hex().to_string();
+    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
+    
+    // Must be eliminated or spectating
+    if room.member_ids.contains(&bettor_id) && !room.eliminated_players.contains(&bettor_id) {
+        return Err("Only eliminated or spectating players can place side bets".to_string());
+    }
+
+    if amount <= 0.0 { return Err("Bet amount must be positive".to_string()); }
+
+    let mut user = ctx.db.user().identity().find(ctx.sender()).ok_or("User not found")?;
+    if user.wallet_balance < amount { return Err("Insufficient funds".to_string()); }
+    user.wallet_balance -= amount;
+    ctx.db.user().identity().update(user);
+
+    // Bet amount goes into the pot (zero-sum backed economics)
+    if let Some(mut r) = ctx.db.game_room().id().find(room_id) {
+        r.pot_size += amount;
+        ctx.db.game_room().id().update(r);
+    }
+
+    let multiplier = match bet_type.as_str() {
+        "color_wins" => 1.8,
+        "player_eliminated" => 2.5,
+        _ => return Err("Invalid bet type".to_string()),
+    };
+
+    ctx.db.side_bet().insert(SideBet {
+        id: 0, room_id,
+        round_number: room.current_round,
+        bettor_id, bet_type, bet_target,
+        amount, payout_multiplier: multiplier,
+        status: "pending".to_string(),
+        created_at: ctx.timestamp,
+    });
+
+    Ok(())
+}
+
+#[reducer]
+pub fn vote_to_start_round(
+    ctx: &ReducerContext,
+    room_id: i32,
+) -> Result<(), String> {
+    // Same logic as vote_end_round but semantically for starting a round vote
+    vote_end_round(ctx, room_id)
+}
+
+// Spawn a new laborer (acquires a new vote slot)
+#[reducer]
+pub fn spawn_laborer(
+    ctx: &ReducerContext,
+    room_id: i32,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
+    if !room.member_ids.contains(&caller_id) {
+        return Err("You are not in this room".to_string());
+    }
+
+    // Server-determined cost based on buy-in amount (prevents client manipulation)
+    let cost = room.buyin_amount;
+
+    let mut user = ctx.db.user().identity().find(ctx.sender()).ok_or("User not found")?;
+    if user.wallet_balance < cost { return Err("Insufficient funds".to_string()); }
+    user.wallet_balance -= cost;
+    ctx.db.user().identity().update(user);
+
+    let fee = cost * TRANSACTION_FEE_RATE;
+    if let Some(mut r) = ctx.db.game_room().id().find(room_id) {
+        r.pot_size += cost - fee; // net cost goes to pot
+        ctx.db.game_room().id().update(r);
+    }
+
+    let new_vote = ctx.db.vote().insert(Vote {
+        id: 0, room_id,
+        round_number: room.current_round,
+        player_id: caller_id.clone(),
+        original_owner: caller_id.clone(),
+        color: None,
+        is_for_sale: false, sale_price: None,
+        timestamp: ctx.timestamp,
+    });
+
+    let new_unit = ctx.db.unit().insert(Unit {
+        id: 0, room_id,
+        owner_id: caller_id,
+        unit_type: "minion".to_string(),
+        position: Vector2 { x: ctx.rng().gen::<f32>() * 80.0 + 10.0, y: ctx.rng().gen::<f32>() * 80.0 + 10.0 },
+        dimensions: Vector2 { x: 20.0, y: 20.0 },
+        fill_style: "#aaaaaa".to_string(),
+        task_type: None, target_id: None,
+        vote_color: None, vote_guarantee: None,
+        vote_price: None, vote_owner: None,
+        vote_id: Some(new_vote.id),
+        storage_capacity: None, is_storage: false,
+        building_type: None, construction_progress: None,
+        construction_max: None, assigned_unit_id: None,
+        building_recipe: None, tax_rate: None, contributors: vec![],
+    });
+
+    ctx.db.unit_stats().insert(UnitStats {
+        unit_id: new_unit.id,
+        health: 100, max_health: 100,
+        attack: 10, defense: 5, speed: 3,
+        gather_rate: 5, craft_rate: 3,
+    });
+    ctx.db.unit_inventory().insert(UnitInventory {
+        unit_id: new_unit.id,
+        wood: 0, stone: 0, metal_ore: 0, coal: 0, gems: 0,
+        fiber: 0, hide: 0, sand: 0, food: 0,
+        wooden_pole: 0, lumber: 0, cut_stone: 0, metal_ingot: 0,
+        cloth: 0, rope: 0, leather: 0, glass: 0,
+        max_capacity: 100,
+    });
+
+    Ok(())
+}
+
+// ============================================================================
+// Phase H: Multi-Timeframe Server Hierarchy (tables and stubs)
+// ============================================================================
+
+#[table(accessor = server_node, public)]
+#[derive(Clone)]
+pub struct ServerNode {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    name: String,
+    server_type: String,         // "eternal" | "city" | "expedition" | "custom"
+    parent_id: Option<i32>,
+    trading_period_seconds: i64, // duration of one trading period
+    status: String,              // "active" | "terminated"
+    linked_room_id: Option<i32>,
+    created_at: Timestamp,
+}
+
+#[reducer]
+pub fn create_server_node(
+    ctx: &ReducerContext,
+    name: String,
+    server_type: String,
+    parent_id: Option<i32>,
+    trading_period_seconds: i64,
+) -> Result<(), String> {
+    if let Some(pid) = parent_id {
+        let parent = ctx.db.server_node().id().find(pid).ok_or("Parent server not found")?;
+        if parent.status == "terminated" {
+            return Err("Cannot create child of terminated server".to_string());
+        }
+    }
+
+    ctx.db.server_node().insert(ServerNode {
+        id: 0, name, server_type,
+        parent_id,
+        trading_period_seconds,
+        status: "active".to_string(),
+        linked_room_id: None,
+        created_at: ctx.timestamp,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn transfer_laborer_to_parent(
+    ctx: &ReducerContext,
+    unit_id: i32,
+    _parent_server_id: i32,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let unit = ctx.db.unit().id().find(unit_id).ok_or("Unit not found")?;
+    if unit.owner_id != caller_id {
+        return Err("You don't own this unit".to_string());
+    }
+
+    // Void the vote for this laborer (per design: vote is voided on upward transfer)
+    if let Some(vid) = unit.vote_id {
+        ctx.db.vote().id().delete(vid);
+    }
+
+    // Return equipped items to owner's pool before deletion
+    let unit_equips: Vec<Equipment> = ctx.db.equipment().iter()
+        .filter(|e| e.equipped_to_unit_id == Some(unit_id)).collect();
+    for mut eq in unit_equips { eq.equipped_to_unit_id = None; ctx.db.equipment().id().update(eq); }
+
+    ctx.db.unit_inventory().unit_id().delete(unit_id);
+    ctx.db.unit_stats().unit_id().delete(unit_id);
+    ctx.db.laborer_genetics().unit_id().delete(unit_id);
+    ctx.db.unit().id().delete(unit_id);
+
+    Ok(())
+}
+
+// ============================================================================
+// Phase I: Dual Currency (MT + MBLS)
+// ============================================================================
+
+// Note: wallet_balance on User serves as mt_balance.
+// We add mbls_balance tracking via a separate table to avoid breaking changes.
+#[table(accessor = player_currency, public)]
+#[derive(Clone)]
+pub struct PlayerCurrency {
+    #[primary_key]
+    player_id: String,
+    mt_balance: f64,    // mirrors User.wallet_balance for explicitness
+    mbls_balance: f64,  // Essence Marbles -- market-driven value
+}
+
+#[reducer]
+pub fn convert_mt_to_mbls(
+    ctx: &ReducerContext,
+    amount: f64,
+) -> Result<(), String> {
+    if amount <= 0.0 { return Err("Amount must be positive".to_string()); }
+
+    // Server-determined exchange rate (prevents client manipulation)
+    let exchange_rate: f64 = 100.0; // 1 MBLS = 100 MT
+
+    let caller_id = ctx.sender().to_hex().to_string();
+    let mut user = ctx.db.user().identity().find(ctx.sender()).ok_or("User not found")?;
+    if user.wallet_balance < amount {
+        return Err("Insufficient MT balance".to_string());
+    }
+
+    user.wallet_balance -= amount;
+    ctx.db.user().identity().update(user.clone());
+
+    let mbls_amount = amount / exchange_rate;
+
+    if let Some(mut pc) = ctx.db.player_currency().player_id().find(&caller_id) {
+        pc.mt_balance = user.wallet_balance; // sync with actual balance
+        pc.mbls_balance += mbls_amount;
+        ctx.db.player_currency().player_id().update(pc);
+    } else {
+        ctx.db.player_currency().insert(PlayerCurrency {
+            player_id: caller_id,
+            mt_balance: user.wallet_balance,
+            mbls_balance: mbls_amount,
+        });
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Phase J: Platform Features (tables and stubs)
+// ============================================================================
+
+#[table(accessor = tournament, public)]
+#[derive(Clone)]
+pub struct Tournament {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    name: String,
+    entry_fee: f64,
+    prize_pool: f64,
+    max_participants: i32,
+    current_round: i32,
+    status: String,          // "registration" | "active" | "completed"
+    bracket_type: String,    // "single_elimination" | "double_elimination" | "round_robin"
+    room_ids: Vec<i32>,
+    participant_ids: Vec<String>,
+    created_at: Timestamp,
+}
+
+#[reducer]
+pub fn create_tournament(
+    ctx: &ReducerContext,
+    name: String,
+    entry_fee: f64,
+    max_participants: i32,
+    bracket_type: String,
+) -> Result<(), String> {
+    ctx.db.tournament().insert(Tournament {
+        id: 0, name,
+        entry_fee,
+        prize_pool: 0.0,
+        max_participants,
+        current_round: 0,
+        status: "registration".to_string(),
+        bracket_type,
+        room_ids: vec![],
+        participant_ids: vec![],
+        created_at: ctx.timestamp,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn join_tournament(
+    ctx: &ReducerContext,
+    tournament_id: i32,
+) -> Result<(), String> {
+    let player_id = ctx.sender().to_hex().to_string();
+    let mut tournament = ctx.db.tournament().id().find(tournament_id)
+        .ok_or("Tournament not found")?;
+    
+    if tournament.status != "registration" {
+        return Err("Tournament registration is closed".to_string());
+    }
+    if tournament.participant_ids.len() >= tournament.max_participants as usize {
+        return Err("Tournament is full".to_string());
+    }
+    if tournament.participant_ids.contains(&player_id) {
+        return Err("Already registered".to_string());
+    }
+
+    let mut user = ctx.db.user().identity().find(ctx.sender()).ok_or("User not found")?;
+    if user.wallet_balance < tournament.entry_fee {
+        return Err("Insufficient funds for entry fee".to_string());
+    }
+    user.wallet_balance -= tournament.entry_fee;
+    ctx.db.user().identity().update(user);
+
+    tournament.prize_pool += tournament.entry_fee;
+    tournament.participant_ids.push(player_id);
+    ctx.db.tournament().id().update(tournament);
+
+    Ok(())
+}
+
+// Spectator tracking
+#[table(accessor = spectator, public)]
+#[derive(Clone)]
+pub struct Spectator {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    room_id: i32,
+    user_id: String,
+    joined_at: Timestamp,
+}
+
+#[reducer]
+pub fn spectate_room(
+    ctx: &ReducerContext,
+    room_id: i32,
+) -> Result<(), String> {
+    let user_id = ctx.sender().to_hex().to_string();
+    let _room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
+
+    let already = ctx.db.spectator().iter()
+        .any(|s| s.room_id == room_id && s.user_id == user_id);
+    if already { return Err("Already spectating".to_string()); }
+
+    ctx.db.spectator().insert(Spectator {
+        id: 0, room_id, user_id,
+        joined_at: ctx.timestamp,
+    });
+    Ok(())
+}
+
+#[reducer]
+pub fn stop_spectating(
+    ctx: &ReducerContext,
+    room_id: i32,
+) -> Result<(), String> {
+    let user_id = ctx.sender().to_hex().to_string();
+    let spec = ctx.db.spectator().iter()
+        .find(|s| s.room_id == room_id && s.user_id == user_id)
+        .ok_or("Not spectating")?;
+    ctx.db.spectator().id().delete(spec.id);
+    Ok(())
+}
+
+// ============================================================================
 // TEST UTILITIES - For E2E test isolation
 // ============================================================================
 
@@ -2947,7 +4386,53 @@ pub fn reset_test_data(ctx: &ReducerContext, confirmation: String) -> Result<(),
     for erv_id in erv_ids {
         ctx.db.end_round_vote().id().delete(erv_id);
     }
-    
+
+    // Clean up new Phase tables
+    let equip_ids: Vec<i32> = ctx.db.equipment().iter().map(|e| e.id).collect();
+    for eid in equip_ids { ctx.db.equipment().id().delete(eid); }
+
+    let arena_ids: Vec<i32> = ctx.db.battle_arena().iter().map(|a| a.id).collect();
+    for aid in arena_ids { ctx.db.battle_arena().id().delete(aid); }
+
+    let bu_ids: Vec<i32> = ctx.db.battle_unit().iter().map(|b| b.id).collect();
+    for bid in bu_ids { ctx.db.battle_unit().id().delete(bid); }
+
+    let gen_ids: Vec<i32> = ctx.db.laborer_genetics().iter().map(|g| g.unit_id).collect();
+    for gid in gen_ids { ctx.db.laborer_genetics().unit_id().delete(gid); }
+
+    let sb_ids: Vec<i32> = ctx.db.side_bet().iter().map(|s| s.id).collect();
+    for sid in sb_ids { ctx.db.side_bet().id().delete(sid); }
+
+    let sn_ids: Vec<i32> = ctx.db.server_node().iter().map(|s| s.id).collect();
+    for sid in sn_ids { ctx.db.server_node().id().delete(sid); }
+
+    let pc_ids: Vec<String> = ctx.db.player_currency().iter().map(|p| p.player_id.clone()).collect();
+    for pid in pc_ids { ctx.db.player_currency().player_id().delete(pid); }
+
+    let t_ids: Vec<i32> = ctx.db.tournament().iter().map(|t| t.id).collect();
+    for tid in t_ids { ctx.db.tournament().id().delete(tid); }
+
+    let spec_ids: Vec<i32> = ctx.db.spectator().iter().map(|s| s.id).collect();
+    for sid in spec_ids { ctx.db.spectator().id().delete(sid); }
+
+    let stats_ids: Vec<i32> = ctx.db.unit_stats().iter().map(|s| s.unit_id).collect();
+    for sid in stats_ids { ctx.db.unit_stats().unit_id().delete(sid); }
+
+    let inv_ids: Vec<i32> = ctx.db.unit_inventory().iter().map(|i| i.unit_id).collect();
+    for iid in inv_ids { ctx.db.unit_inventory().unit_id().delete(iid); }
+
+    let tq_ids: Vec<i32> = ctx.db.unit_task_queue().iter().map(|t| t.id).collect();
+    for tid in tq_ids { ctx.db.unit_task_queue().id().delete(tid); }
+
+    let res_ids: Vec<String> = ctx.db.resource().iter().map(|r| r.id.clone()).collect();
+    for rid in res_ids { ctx.db.resource().id().delete(rid); }
+
+    let tx_ids: Vec<i32> = ctx.db.transaction().iter().map(|t| t.id).collect();
+    for tid in tx_ids { ctx.db.transaction().id().delete(tid); }
+
+    let gp_ids: Vec<i32> = ctx.db.guarantee_purchase().iter().map(|g| g.id).collect();
+    for gid in gp_ids { ctx.db.guarantee_purchase().id().delete(gid); }
+
     log::info!("✅ Test data reset complete: {} rooms, {} ready states, {} chat rooms, {} votes, {} positions deleted", 
         room_count, ready_count, chat_count, vote_count, pos_count);
     

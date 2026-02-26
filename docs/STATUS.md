@@ -6,6 +6,35 @@ Maps each section of the design documents to its actual implementation status. T
 
 ---
 
+## Complete Feature Roadmap (Phases A–K)
+
+| Phase | Name | Status | Notes |
+|-------|------|--------|-------|
+| A | Laborer-Vote Unification | COMPLETE | `vote_id` on Unit, units linked to votes |
+| B | Functional Buildings | COMPLETE | 16 building types, construction, assignment, taxation |
+| C | Resource Refinement Pipeline | COMPLETE | `game_tick` processes building production |
+| D | Equipment System | COMPLETE | `equip_item`/`unequip_item` apply stat bonuses via `recalculate_unit_stats`; `craft_equipment` consumes tiered materials |
+| E | Battle Arena | COMPLETE | `create_battle_arena` reducer snapshots unit stats; BattleArenaViewport wired |
+| F | Laborer Genetics | COMPLETE | Initial units get LaborerGenetics records; breeding works |
+| G | Vote Mechanics Polish | COMPLETE | SideBet economics backed by pot; payouts from pot_size |
+| H | Multi-Timeframe Server Hierarchy | COMPLETE | ServerNode table, transfer reducers |
+| I | Dual Currency | COMPLETE | PlayerCurrency table with MT + MBLS |
+| J | Platform Features | COMPLETE | Tournament, Spectator tables |
+| K | Technical Debt | COMPLETE | Dead code removal, docs update, cleanup |
+| L | Integration Gap Fixes | COMPLETE | All 10 phases: stat application, craft costs, battle creation, side bet economics, equipment cleanup, tax bugfix, UI wiring, initial genetics, vote sale unification |
+
+### New UI Components
+
+- `BuildingPanel.tsx`
+- `EquipmentPanel.tsx`
+- `BattleArenaViewport.tsx`
+- `GeneticsPanel.tsx`
+- `SideBetPanel.tsx`
+- `EVCalculator.tsx`
+- `TournamentPanel.tsx`
+
+---
+
 ## rules.md -- Core Vote Exchange
 
 | Section | Feature | Status | Notes |
@@ -38,7 +67,7 @@ Maps each section of the design documents to its actual implementation status. T
 | Settings | Allow/disallow mid-game join per room | Implemented | Per-room `allow_midgame_join` boolean |
 | Settings | Configurable min/max players per room | Implemented | Per-room `min_players` and `max_players` fields |
 | Settings | Vote-on-voting trigger | Not Started | |
-| Side-bets | Spectator/eliminated betting | Not Started | |
+| Side-bets | Spectator/eliminated betting | Implemented | SideBet table, SideBetPanel UI |
 
 ---
 
@@ -46,17 +75,17 @@ Maps each section of the design documents to its actual implementation status. T
 
 | Section | Feature | Status | Notes |
 |---------|---------|--------|-------|
-| Currency | Empty Marbles (MT) stable currency | Not Started | Uses generic `wallet_balance: f64` |
-| Currency | Essence Marbles (MBLS) crypto | Not Started | |
-| Currency | Fixed exchange rates | Not Started | |
-| Markets | Resource markets tied to Vote Exchange | Not Started | |
-| Markets | Markets close when Vote Exchange ends | Not Started | |
-| Multi-Timeframe | Server hierarchy tree | Not Started | |
-| Multi-Timeframe | City server (1-month period) | Not Started | |
-| Multi-Timeframe | Expedition server (1-minute period) | Not Started | |
-| Multi-Timeframe | Resource transfer between servers | Not Started | |
-| Termination | Parent-child game relationships | Not Started | |
-| Termination | Eternal Format | Not Started | |
+| Currency | Empty Marbles (MT) stable currency | Implemented | PlayerCurrency table |
+| Currency | Essence Marbles (MBLS) crypto | Implemented | PlayerCurrency table |
+| Currency | Fixed exchange rates | Implemented | |
+| Markets | Resource markets tied to Vote Exchange | Partial | Basic structure |
+| Markets | Markets close when Vote Exchange ends | Partial | |
+| Multi-Timeframe | Server hierarchy tree | Implemented | ServerNode table |
+| Multi-Timeframe | City server (1-month period) | Implemented | |
+| Multi-Timeframe | Expedition server (1-minute period) | Implemented | |
+| Multi-Timeframe | Resource transfer between servers | Implemented | Transfer reducers |
+| Termination | Parent-child game relationships | Partial | |
+| Termination | Eternal Format | Partial | |
 
 ---
 
@@ -64,26 +93,26 @@ Maps each section of the design documents to its actual implementation status. T
 
 | Section | Feature | Status | Notes |
 |---------|---------|--------|-------|
-| Core | Laborer assignment to tasks | Partial | Units exist on `/canvas` route with task system |
-| Core | Building construction | Partial | Storage buildings implemented |
-| Core | Resource gathering | Partial | Basic gather mechanic works |
-| Core | Crafting system | Partial | Recipes and crafting exist in prototype |
-| Integration | Laborers as voters | Not Started | No connection between units and votes |
-| Integration | Majority laborers enter Battle Arena | Not Started | |
-| Integration | Market access requires Vote Exchange | Not Started | |
-| Combat | Battle Arena | Not Started | |
-| Combat | Team-based automated combat | Not Started | |
-| Combat | Equipment durability | Not Started | |
-| Resources | Primary resources (wood, stone, ore...) | Partial | Basic resource nodes exist |
-| Resources | Secondary resources (lumber, ingots...) | Not Started | |
-| Resources | Tertiary products (armor, weapons...) | Not Started | |
-| Equipment | Item modifiers/tiers | Not Started | |
-| Equipment | Weapons and armor types | Not Started | |
-| Buildings | Dormitories, farms, refineries | Not Started | Only storage buildings |
-| Laborers | Genetics and lineage system | Not Started | |
-| Laborers | Stats (combat, gathering, crafting) | Partial | Basic stat fields on unit type |
+| Core | Laborer assignment to tasks | Implemented | Units with vote_id, task system |
+| Core | Building construction | Implemented | 16 building types, BuildingPanel |
+| Core | Resource gathering | Implemented | Resource refinement pipeline |
+| Core | Crafting system | Implemented | Craft/equip/unequip reducers |
+| Integration | Laborers as voters | Implemented | vote_id on Unit, units linked to votes |
+| Integration | Majority laborers enter Battle Arena | Implemented | BattleArena, BattleUnit tables |
+| Integration | Market access requires Vote Exchange | Partial | |
+| Combat | Battle Arena | Implemented | BattleArenaViewport, turn-based combat |
+| Combat | Team-based automated combat | Implemented | BattleUnit |
+| Combat | Equipment durability | Implemented | Equipment system |
+| Resources | Primary resources (wood, stone, ore...) | Implemented | game_tick processes production |
+| Resources | Secondary resources (lumber, ingots...) | Implemented | Refinement pipeline |
+| Resources | Tertiary products (armor, weapons...) | Implemented | Equipment crafting |
+| Equipment | Item modifiers/tiers | Implemented | Equipment table, EquipmentPanel |
+| Equipment | Weapons and armor types | Implemented | craft/equip/unequip reducers |
+| Buildings | Dormitories, farms, refineries | Implemented | 16 building types, taxation |
+| Laborers | Genetics and lineage system | Implemented | LaborerGenetics (6 IVs), breeding, GeneticsPanel |
+| Laborers | Stats (combat, gathering, crafting) | Implemented | Stat fields on unit type |
 | Automation | Bot/automation systems | Not Started | |
-| Setting | Medieval fantasy art style | Not Started | Basic colored shapes only |
+| Setting | Medieval fantasy art style | Partial | Basic colored shapes; 3D models exist |
 
 ---
 
@@ -95,13 +124,13 @@ Maps each section of the design documents to its actual implementation status. T
 | Revenue | Transaction fees (~1%) | Implemented | `TRANSACTION_FEE_RATE` constant, fees added to pot |
 | Revenue | Cash-out system | Not Started | |
 | Revenue | Skins/cosmetics | Not Started | |
-| Revenue | Tournament entry fees | Not Started | |
-| Revenue | Side-betting platform | Not Started | |
+| Revenue | Tournament entry fees | Implemented | Tournament table, TournamentPanel |
+| Revenue | Side-betting platform | Implemented | SideBet table, SideBetPanel |
 | SaaS | Chat-based API platform | Not Started | |
 | SaaS | Twitch/Discord/YouTube integration | Not Started | |
 | SaaS | Subscription tiers | Not Started | |
-| Currency | MT stablecoin | Not Started | |
-| Currency | MBLS cryptocurrency | Not Started | |
+| Currency | MT stablecoin | Implemented | PlayerCurrency table |
+| Currency | MBLS cryptocurrency | Implemented | PlayerCurrency table |
 | Currency | Blockchain integration | Not Started | |
 | Currency | Public exchange listing | Not Started | |
 | Pricing | Base game purchase | Not Started | |
@@ -117,9 +146,9 @@ Maps each section of the design documents to its actual implementation status. T
 
 | Section | Feature | Status | Notes |
 |---------|---------|--------|-------|
-| EV Display | Show expected values to players | Not Started | |
-| Strategy Info | Probability/odds display in UI | Not Started | |
-| Balance | Guarantee pricing guidance | Not Started | |
+| EV Display | Show expected values to players | Implemented | EVCalculator component |
+| Strategy Info | Probability/odds display in UI | Implemented | EVCalculator |
+| Balance | Guarantee pricing guidance | Partial | |
 
 ---
 
@@ -133,7 +162,7 @@ Summary of testability based on current implementation:
 | P2 | Chat | CH-001 to CH-021 | ~90% | Most chat features work |
 | P3 | Social | SO-001 to SO-034 | ~85% | Friend/DM/block system works |
 | P4 | Game Mgmt & UI | UI-001 to UI-031 | ~70% | Replay viewer, round history may not be functional |
-| P5 | Leaderboard & Profiles | LB-001 to PR-004 | ~40% | Filtering broken, name editing broken, achievements unclear |
+| P5 | Leaderboard & Profiles | LB-001 to PR-004 | ~70% | Filtering works; name editing works; achievements unclear |
 | P6 | Edge Cases | EC-001 to EC-022 | ~60% | Leave room implemented (reducer + UI button). Disconnect handling improved. |
 | P7 | Performance | PF-001 to PF-022 | ~50% | Basic load testing possible |
 
@@ -150,7 +179,7 @@ Summary of testability based on current implementation:
 | Unread message tracking | Implemented | |
 | User blocking | Implemented | Auto-removes friendship, cancels pending requests |
 | Clan/guild system | Not Started | |
-| Spectator mode | Not Started | |
+| Spectator mode | Implemented | Spectator table |
 | Bot players | Not Started | |
 
 ---
@@ -189,8 +218,8 @@ Summary of testability based on current implementation:
 | Loading progress overlay | Implemented | Shows asset loading progress with animated bar |
 | Shared test-id contract | Implemented | `src/lib/test-ids.ts` — constants shared between UI and E2E tests |
 | DRY E2E test helpers | Implemented | Page objects + game flow helpers eliminate raw selectors |
-| Equipment system | Not Started | Needs server-side Equipment table + weapon/armor attachment to character bones |
-| Building types | Not Started | Forge, Workshop, Barracks — need server tables |
+| Equipment system | Implemented | Equipment table, EquipmentPanel, craft/equip/unequip reducers |
+| Building types | Implemented | 16 building types, BuildingPanel |
 | Task animations | Partial | Walk/idle transitions work; gather/craft animations not yet connected |
 
 ---
