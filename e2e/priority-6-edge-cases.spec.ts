@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { MultiPlayerHelper } from './helpers/multi-player';
 import { VoteGamePage } from './helpers/page-objects';
+import { setupPlayers } from './helpers/game-flows';
 
 /**
  * Priority 6: Edge Cases & Error Handling E2E Tests
@@ -11,11 +12,12 @@ import { VoteGamePage } from './helpers/page-objects';
 
 test.describe('6.1 Connection Issues', () => {
   test('EC-001: Page handles connection gracefully', async ({ page }) => {
-    await page.goto('/vote?multiuser=true');
+    const gamePage = new VoteGamePage(page);
+    await gamePage.goto();
     
     // Initially may show connecting state
     // Should eventually connect or show meaningful error
-    const connected = page.locator('text=Connected');
+    const connected = gamePage.connectionStatus;
     const disconnected = page.locator('text=/Disconnect|Connecting|Error/i');
     
     // Wait for either connected or error state
@@ -23,14 +25,15 @@ test.describe('6.1 Connection Issues', () => {
   });
 
   test('EC-003: Page recovers after reload', async ({ page }) => {
-    await page.goto('/vote?multiuser=true');
-    await expect(page.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    const gamePage = new VoteGamePage(page);
+    await gamePage.goto();
+    await gamePage.waitForConnection();
     
     // Reload the page
     await page.reload();
     
     // Should reconnect
-    await expect(page.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    await gamePage.waitForConnection();
   });
 });
 
@@ -116,16 +119,16 @@ test.describe('6.3 Concurrent Actions', () => {
     await Promise.all(gamePages.map(gp => gp.waitForConnection()));
     
     // All should be connected
-    for (const player of players) {
-      await expect(player.locator('text=Connected')).toBeVisible();
+    for (const gp of gamePages) {
+      await expect(gp.connectionStatus).toContainText('Connected');
     }
     
     // Player 1 creates room
-    await gamePages[0].createRoom('Concurrent Test', 10);
+    await gamePages[0].createRoom('Concurrent Test', { buyinAmount: 10 });
     
     // All should see it
-    for (const player of players) {
-      await expect(player.locator('text=Concurrent Test')).toBeVisible({ timeout: 10000 });
+    for (const gp of gamePages) {
+      await gp.waitForRoomTab('Concurrent Test');
     }
   });
 
@@ -137,16 +140,16 @@ test.describe('6.3 Concurrent Actions', () => {
     await gamePage.waitForConnection();
     
     // Create first room
-    await gamePage.createRoom('Rapid Test 1', 10);
-    await expect(player.locator('text=Rapid Test 1')).toBeVisible({ timeout: 10000 });
+    await gamePage.createRoom('Rapid Test 1', { buyinAmount: 10 });
+    await gamePage.waitForRoomTab('Rapid Test 1');
     
     // Create second room quickly
-    await gamePage.createRoom('Rapid Test 2', 20);
-    await expect(player.locator('text=Rapid Test 2')).toBeVisible({ timeout: 10000 });
+    await gamePage.createRoom('Rapid Test 2', { buyinAmount: 20 });
+    await gamePage.waitForRoomTab('Rapid Test 2');
     
     // Both rooms should exist
-    await expect(player.locator('text=Rapid Test 1')).toBeVisible();
-    await expect(player.locator('text=Rapid Test 2')).toBeVisible();
+    await expect(gamePage.roomTab('Rapid Test 1')).toBeVisible();
+    await expect(gamePage.roomTab('Rapid Test 2')).toBeVisible();
   });
 });
 
@@ -155,22 +158,10 @@ test.describe('Multiuser Mode Verification', () => {
     const multiPlayer = new MultiPlayerHelper(browser);
     
     try {
-      const [player1, player2] = await multiPlayer.createPlayers(2);
+      const { gamePages: [gp1, gp2] } = await setupPlayers(multiPlayer, 2);
       
-      await player1.goto('/vote?multiuser=true');
-      await player2.goto('/vote?multiuser=true');
-      
-      await expect(player1.locator('text=Connected')).toBeVisible({ timeout: 30000 });
-      await expect(player2.locator('text=Connected')).toBeVisible({ timeout: 30000 });
-      
-      // Get identities
-      const getIdentity = async (page: any) => {
-        const text = await page.locator('text=/Identity: [a-f0-9]+/').textContent();
-        return text?.match(/[a-f0-9]+/)?.[0] || '';
-      };
-      
-      const id1 = await getIdentity(player1);
-      const id2 = await getIdentity(player2);
+      const id1 = await gp1.getIdentity();
+      const id2 = await gp2.getIdentity();
       
       // Identities should be different
       expect(id1).not.toBe(id2);

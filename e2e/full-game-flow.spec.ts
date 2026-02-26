@@ -1,6 +1,7 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { MultiPlayerHelper } from './helpers/multi-player';
 import { VoteGamePage, uniqueRoomName } from './helpers/page-objects';
+import { setupPlayers } from './helpers/game-flows';
 
 /**
  * Full Game Flow E2E Tests
@@ -33,7 +34,7 @@ test.describe('Complete Game Flow', () => {
     await hostPage.waitForConnection();
     console.log('Host connected');
 
-    await hostPage.createRoom(roomName, 10);
+    await hostPage.createRoom(roomName, { buyinAmount: 10 });
     console.log('Room created');
 
     // Step 2: Other players join
@@ -44,9 +45,9 @@ test.describe('Complete Game Flow', () => {
     console.log('All players connected');
 
     // Step 3: All players see the room
-    await expect(host.locator(`[role="tab"]:has-text("${roomName}")`).first()).toBeVisible({ timeout: 10000 });
-    await expect(player2.locator(`[role="tab"]:has-text("${roomName}")`).first()).toBeVisible({ timeout: 10000 });
-    await expect(player3.locator(`[role="tab"]:has-text("${roomName}")`).first()).toBeVisible({ timeout: 10000 });
+    await hostPage.waitForRoomTab(roomName);
+    await player2Page.waitForRoomTab(roomName);
+    await player3Page.waitForRoomTab(roomName);
     console.log('All players see the room');
 
     // Step 4: All players click on the room tab
@@ -66,29 +67,23 @@ test.describe('Complete Game Flow', () => {
   });
 
   test('Multiple rooms can exist simultaneously', async () => {
-    const [player1, player2] = await multiPlayer.createPlayers(2);
-    const page1 = new VoteGamePage(player1);
-    const page2 = new VoteGamePage(player2);
+    const { gamePages } = await setupPlayers(multiPlayer, 2);
+    const [page1, page2] = gamePages;
 
     const roomA = uniqueRoomName('Room Alpha');
     const roomB = uniqueRoomName('Room Beta');
 
-    await page1.goto();
-    await page2.goto();
-    await page1.waitForConnection();
-    await page2.waitForConnection();
-
     // Player 1 creates Room A
-    await page1.createRoom(roomA, 15);
+    await page1.createRoom(roomA, { buyinAmount: 15 });
     
     // Player 2 creates Room B
-    await page2.createRoom(roomB, 25);
+    await page2.createRoom(roomB, { buyinAmount: 25 });
 
     // Both rooms should be visible to both players
-    await expect(player1.locator(`[role="tab"]:has-text("${roomA}")`).first()).toBeVisible({ timeout: 10000 });
-    await expect(player1.locator(`[role="tab"]:has-text("${roomB}")`).first()).toBeVisible({ timeout: 10000 });
-    await expect(player2.locator(`[role="tab"]:has-text("${roomA}")`).first()).toBeVisible({ timeout: 10000 });
-    await expect(player2.locator(`[role="tab"]:has-text("${roomB}")`).first()).toBeVisible({ timeout: 10000 });
+    await page1.waitForRoomTab(roomA);
+    await page1.waitForRoomTab(roomB);
+    await page2.waitForRoomTab(roomA);
+    await page2.waitForRoomTab(roomB);
   });
 
   test('Room shows correct player count as players join', async () => {
@@ -98,7 +93,7 @@ test.describe('Complete Game Flow', () => {
     // First player creates room
     await gamePages[0].goto();
     await gamePages[0].waitForConnection();
-    await gamePages[0].createRoom('Player Count Test', 10);
+    await gamePages[0].createRoom('Player Count Test', { buyinAmount: 10 });
     await gamePages[0].joinRoom('Player Count Test');
 
     // Check initial state
@@ -110,7 +105,7 @@ test.describe('Complete Game Flow', () => {
     for (let i = 1; i < 4; i++) {
       await gamePages[i].goto();
       await gamePages[i].waitForConnection();
-      await expect(players[i].locator('text=Player Count Test')).toBeVisible({ timeout: 10000 });
+      await gamePages[i].waitForRoomTab('Player Count Test');
     }
   });
 });
@@ -133,7 +128,7 @@ test.describe('Ready System Flow', () => {
 
     await gamePage.goto();
     await gamePage.waitForConnection();
-    await gamePage.createRoom(roomName, 10);
+    await gamePage.createRoom(roomName, { buyinAmount: 10 });
     await gamePage.joinRoom(roomName);
 
     // Click ready - should show toast
@@ -142,21 +137,14 @@ test.describe('Ready System Flow', () => {
   });
 
   test('Multiple players can ready up independently', async () => {
-    const [player1, player2] = await multiPlayer.createPlayers(2);
-    const page1 = new VoteGamePage(player1);
-    const page2 = new VoteGamePage(player2);
+    const { pages: [player1, player2], gamePages: [page1, page2] } = await setupPlayers(multiPlayer, 2);
     const roomName = uniqueRoomName('Multi Ready');
 
-    await page1.goto();
-    await page2.goto();
-    await page1.waitForConnection();
-    await page2.waitForConnection();
-
     // Player 1 creates room (becomes member automatically)
-    await page1.createRoom(roomName, 10);
+    await page1.createRoom(roomName, { buyinAmount: 10 });
     
     // Wait for room to be visible to player 2
-    await expect(player2.locator(`[role="tab"]:has-text("${roomName}")`).first()).toBeVisible({ timeout: 10000 });
+    await page2.waitForRoomTab(roomName);
 
     // Player 2 joins room
     await page2.joinRoom(roomName);
@@ -234,7 +222,7 @@ test.describe('UI Preset Tests', () => {
     await gamePage.goto();
     await gamePage.waitForConnection();
 
-    await gamePage.createRoom('Mode Info Test', 10);
+    await gamePage.createRoom('Mode Info Test', { buyinAmount: 10 });
     await gamePage.joinRoom('Mode Info Test');
 
     // Look for game mode info button
@@ -250,22 +238,25 @@ test.describe('UI Preset Tests', () => {
 
 test.describe('Connection Status Tests', () => {
   test('Shows connecting state initially', async ({ page }) => {
-    // Don't wait - check immediate state
-    await page.goto('/vote?multiuser=true');
+    const gamePage = new VoteGamePage(page);
+    await gamePage.goto();
     
     // Should eventually show connected
-    await expect(page.locator('text=Connected').first()).toBeVisible({ timeout: 30000 });
+    await gamePage.waitForConnection();
   });
 
   test('Shows identity after connection', async ({ page }) => {
-    await page.goto('/vote?multiuser=true');
+    const gamePage = new VoteGamePage(page);
+    await gamePage.goto();
+    await gamePage.waitForConnection();
     
-    await expect(page.locator('text=/Identity:.*[a-f0-9]/i')).toBeVisible({ timeout: 30000 });
+    await expect(gamePage.identityDisplay).toContainText(/[a-f0-9]/i, { timeout: 30000 });
   });
 
   test('Shows room count', async ({ page }) => {
-    await page.goto('/vote?multiuser=true');
-    await expect(page.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    const gamePage = new VoteGamePage(page);
+    await gamePage.goto();
+    await gamePage.waitForConnection();
     
     // Should show room count (even if 0)
     await expect(page.locator('text=/\\d+.*room/i').first()).toBeVisible({ timeout: 5000 });
@@ -306,7 +297,7 @@ test.describe('Toast Notifications', () => {
     await gamePage.goto();
     await gamePage.waitForConnection();
 
-    await gamePage.createRoom(roomName, 10);
+    await gamePage.createRoom(roomName, { buyinAmount: 10 });
     await gamePage.joinRoom(roomName);
 
     // Wait for ready button
@@ -315,7 +306,7 @@ test.describe('Toast Notifications', () => {
     await gamePage.clickReady();
 
     // Should see ready state on button (toast may not always appear in test env)
-    await expect(player.locator('[data-testid="ready-button"]')).toContainText(/unready/i, { timeout: 5000 });
+    await expect(gamePage.readyButton).toContainText(/unready/i, { timeout: 5000 });
   });
 });
 
@@ -332,11 +323,12 @@ test.describe('Error Handling', () => {
 
   test('Shows error message when disconnected', async () => {
     const player = await multiPlayer.createPlayer();
+    const gamePage = new VoteGamePage(player);
     
-    await player.goto('/vote?multiuser=true');
+    await gamePage.goto();
     
     // Should show some connection state
-    await expect(player.locator('text=/Connect|Disconnect|Status/i')).toBeVisible({ timeout: 30000 });
+    await expect(gamePage.connectionStatus).toBeVisible({ timeout: 30000 });
   });
 
   test('Handles rapid navigation', async () => {
@@ -347,7 +339,7 @@ test.describe('Error Handling', () => {
     await gamePage.waitForConnection();
 
     // Create room
-    await gamePage.createRoom('Rapid Nav Test', 10);
+    await gamePage.createRoom('Rapid Nav Test', { buyinAmount: 10 });
     
     // Rapidly switch between tabs (if multiple rooms exist)
     await gamePage.joinRoom('Rapid Nav Test');

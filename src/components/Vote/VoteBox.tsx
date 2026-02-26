@@ -13,6 +13,7 @@ import type { GameRoom, ReadyState } from "~/module_bindings/types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { resolvePlayerName } from "~/lib/game-utils";
+import { TID } from "~/lib/test-ids";
 
 /**
  * Check if multiuser mode is enabled via URL parameter.
@@ -306,21 +307,21 @@ const VoteBox: Component = () => {
               <Show
                 when={connected()}
                 fallback={
-                  <Badge variant="destructive" data-testid="connection-status" class="text-xs">
+                  <Badge variant="destructive" data-testid={TID.connectionStatus} class="text-xs">
                     Disconnected
                   </Badge>
                 }
               >
-                <Badge variant="secondary" data-testid="connection-status" class="text-xs">
+                <Badge variant="secondary" data-testid={TID.connectionStatus} class="text-xs">
                   Syncing...
                 </Badge>
               </Show>
             }
           >
-            <Badge variant="default" data-testid="connection-status" class="text-xs">
+            <Badge variant="default" data-testid={TID.connectionStatus} class="text-xs">
               Connected
             </Badge>
-            <span class="text-xs text-slate-500" data-testid="identity-display">
+            <span class="text-xs text-slate-500" data-testid={TID.identityDisplay}>
               {resolvePlayerName(identity()?.toHexString() || "", conn())}
             </span>
           </Show>
@@ -329,6 +330,7 @@ const VoteBox: Component = () => {
           size="sm"
           onClick={() => setShowCreateRoom(true)}
           disabled={!connected()}
+          data-testid={TID.createRoomBtn}
         >
           + New Room
         </Button>
@@ -348,6 +350,7 @@ const VoteBox: Component = () => {
                   onKeyDown={e => { if (e.key === "Enter" && newRoomName().trim() && connected()) handleCreateRoom(); }}
                   placeholder="My Game Room"
                   disabled={!connected()}
+                  data-testid={TID.roomNameInput}
                   class="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
                 />
               </div>
@@ -358,6 +361,7 @@ const VoteBox: Component = () => {
                   value={buyinAmount()}
                   onInput={e => setBuyinAmount(parseFloat(e.currentTarget.value) || 10)}
                   disabled={!connected()}
+                  data-testid={TID.buyinAmountInput}
                   class="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
                 />
               </div>
@@ -368,6 +372,7 @@ const VoteBox: Component = () => {
                   value={votesPerPlayer()}
                   onInput={e => setVotesPerPlayer(parseInt(e.currentTarget.value) || 5)}
                   disabled={!connected()}
+                  data-testid={TID.votesPerPlayerInput}
                   class="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
                 />
               </div>
@@ -375,20 +380,21 @@ const VoteBox: Component = () => {
             <div class="flex items-center justify-between">
               <div class="flex gap-4">
                 <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                  <input type="checkbox" checked={allowRebuy()} onChange={e => setAllowRebuy(e.currentTarget.checked)} class="rounded" />
+                  <input type="checkbox" checked={allowRebuy()} onChange={e => setAllowRebuy(e.currentTarget.checked)} data-testid={TID.allowRebuyCheckbox} class="rounded" />
                   Allow Re-buy
                 </label>
                 <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                  <input type="checkbox" checked={allowMidgameJoin()} onChange={e => setAllowMidgameJoin(e.currentTarget.checked)} class="rounded" />
+                  <input type="checkbox" checked={allowMidgameJoin()} onChange={e => setAllowMidgameJoin(e.currentTarget.checked)} data-testid={TID.allowMidgameJoinCheckbox} class="rounded" />
                   Mid-game Join
                 </label>
               </div>
               <div class="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setShowCreateRoom(false)}>Cancel</Button>
+                <Button size="sm" variant="outline" onClick={() => setShowCreateRoom(false)} data-testid={TID.cancelCreateRoomBtn}>Cancel</Button>
                 <Button
                   size="sm"
                   onClick={handleCreateRoom}
                   disabled={!connected() || !newRoomName().trim() || buyinAmount() <= 0}
+                  data-testid={TID.submitCreateRoomBtn}
                 >
                   Create (${buyinAmount().toFixed(0)} | {votesPerPlayer()}v)
                 </Button>

@@ -17,6 +17,7 @@ import { ToastHelper } from "~/lib/toast-helpers";
 import { sounds } from "~/lib/sounds";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import ColonyViewport, { type ColonyUnit, type TeamColor } from "../game/ColonyViewport";
+import { TID } from "~/lib/test-ids";
 
 interface VotingInterfaceProps {
   room: GameRoom;
@@ -220,6 +221,21 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [chatOpen, setChatOpen] = createSignal(false);
   const [viewportSelectedIds, setViewportSelectedIds] = createSignal<number[]>([]);
 
+  const handleDropZoneClick = (color: string) => {
+    const selected = viewportSelectedIds();
+    if (selected.length > 0) {
+      for (const voteId of selected) {
+        handleSetVoteColor(voteId, color);
+      }
+      setViewportSelectedIds([]);
+    } else {
+      const unset = unsetVotes();
+      if (unset.length > 0) {
+        handleSetVoteColor(unset[0].id, color);
+      }
+    }
+  };
+
   const colonyUnits = createMemo<ColonyUnit[]>(() => {
     const GROUND = 80;
     const half = GROUND / 2 - 4;
@@ -242,11 +258,38 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     }
   };
 
+  const [playersOpen, setPlayersOpen] = createSignal(true);
+  const [marketOpen, setMarketOpen] = createSignal(false);
+
   return (
     <ErrorBoundary>
-      <div class="flex h-screen flex-col bg-gradient-to-b from-slate-50 to-slate-100">
-        {/* Dev Tools (collapsed to corner) */}
-        <div class="absolute right-2 top-2 z-40 flex gap-1">
+      <div class="relative h-screen w-screen overflow-hidden bg-[#1a1a2e]">
+        {/* ===== FULL-SCREEN 3D VIEWPORT (layer 0) ===== */}
+        <div class="absolute inset-0 z-0">
+          <Show
+            when={myVotes().length > 0}
+            fallback={
+              <div class="flex h-full w-full items-center justify-center text-slate-500">
+                <div class="text-center">
+                  <div class="text-6xl mb-3 opacity-20">🏰</div>
+                  <p class="text-sm opacity-60">Waiting for votes to be assigned...</p>
+                </div>
+              </div>
+            }
+          >
+            <ColonyViewport
+              units={colonyUnits()}
+              selectedIds={viewportSelectedIds}
+              onSelect={setViewportSelectedIds}
+              onSetTeam={handleViewportSetTeam}
+            />
+          </Show>
+        </div>
+
+        {/* ===== HUD OVERLAYS (layer 10+) ===== */}
+
+        {/* Dev tools */}
+        <div class="absolute right-2 top-14 z-40 flex gap-1">
           <AdminPanel />
         </div>
         <DebugPanel
@@ -256,20 +299,21 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           players={allPlayers()}
         />
 
-        {/* ===== GAME HEADER BAR ===== */}
-        <div class="flex items-center gap-3 border-b bg-white px-4 py-2 shadow-sm" data-testid="game-header">
-          {/* Room Name + Round */}
+        {/* ── TOP BAR ── */}
+        <div
+          class="absolute left-0 right-0 top-0 z-10 flex items-center gap-3 px-4 py-2 bg-black/40 backdrop-blur-md border-b border-white/10"
+          data-testid={TID.gameHeader}
+        >
           <div class="flex items-center gap-2">
-            <span class="text-sm font-semibold text-slate-700">{props.room.name}</span>
-            <Badge variant="secondary" class="text-xs">
-              Round {props.room.currentRound}
-            </Badge>
+            <span class="text-sm font-semibold text-white/90">{props.room.name}</span>
+            <span class="rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-medium text-white/70">
+              R{props.room.currentRound}
+            </span>
           </div>
 
-          <div class="mx-2 h-6 w-px bg-slate-200" />
+          <div class="mx-1 h-5 w-px bg-white/20" />
 
-          {/* Compact Timer */}
-          <div class="flex items-center gap-2" data-testid="round-timer">
+          <div class="flex items-center gap-2 text-white/80" data-testid={TID.roundTimer}>
             <RoundTimer
               roundNumber={props.room.currentRound}
               roundStartTime={props.room.startTime ? BigInt(props.room.startTime) : undefined}
@@ -280,20 +324,20 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           <div class="flex-1" />
 
           {/* Pot */}
-          <div class="flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-1.5 border border-amber-200">
-            <span class="text-sm text-amber-700">Pot</span>
-            <span id="pot-amount" class="text-lg font-bold text-amber-900">
+          <div class="flex items-center gap-1.5 rounded-md bg-amber-500/20 px-2.5 py-1 border border-amber-400/30">
+            <span class="text-xs text-amber-300/80">Pot</span>
+            <span id="pot-amount" data-testid={TID.potAmount} class="text-base font-bold text-amber-200">
               ${props.room.potSize.toFixed(2)}
             </span>
           </div>
 
           {/* Wallet */}
-          <div class="flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 border border-emerald-200" data-testid="wallet-display">
-            <span class="text-sm text-emerald-700">Wallet</span>
-            <span class="text-lg font-bold text-emerald-900" data-testid="wallet-balance">
+          <div class="flex items-center gap-1.5 rounded-md bg-emerald-500/20 px-2.5 py-1 border border-emerald-400/30" data-testid={TID.walletDisplay}>
+            <span class="text-xs text-emerald-300/80">Wallet</span>
+            <span class="text-base font-bold text-emerald-200" data-testid={TID.walletBalance}>
               ${props.currentUser.walletBalance.toFixed(2)}
             </span>
-            <span class="text-xs text-slate-400" data-testid="profit-loss">
+            <span class="text-[10px] text-white/40" data-testid={TID.profitLoss}>
               ({props.currentUser.totalProfitLoss >= 0 ? "+" : ""}
               ${props.currentUser.totalProfitLoss.toFixed(2)})
             </span>
@@ -304,238 +348,244 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           <Button
             size="sm"
             variant="ghost"
-            class="text-red-500 hover:bg-red-50 hover:text-red-700"
+            class="text-red-400/80 hover:bg-red-500/20 hover:text-red-300"
             onClick={handleLeaveRoom}
             title="Leave Room"
+            data-testid={TID.leaveRoomBtn}
           >
             Leave
           </Button>
         </div>
 
-        {/* ===== MAIN GAME AREA ===== */}
-        <div class="flex flex-1 gap-3 overflow-hidden p-3">
-          {/* LEFT SIDEBAR: Players */}
-          <div class="flex w-56 flex-shrink-0 flex-col gap-2 overflow-auto">
-            <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 px-1">
-              Players ({remainingPlayers().length})
-            </div>
-            <For each={remainingPlayers()}>
-              {(player) => {
-                const playerVotes = () => votes().filter(
-                  (v) => v.playerId === player.identity.toHexString()
-                );
-                const isCurrentUser = player.identity.isEqual(
-                  props.currentUser.identity
-                );
-                const playerIndex = () => remainingPlayers().indexOf(player);
-                const borderColors = ["border-l-blue-500", "border-l-emerald-500", "border-l-violet-500", "border-l-amber-500", "border-l-rose-500", "border-l-cyan-500", "border-l-orange-500", "border-l-pink-500"];
-
-                return (
-                  <div
-                    class="flex items-center gap-2 rounded-md border border-l-4 bg-white p-2 shadow-sm transition-all hover:shadow"
-                    classList={{
-                      "ring-2 ring-blue-400 ring-offset-1": isCurrentUser,
-                      [borderColors[playerIndex() % borderColors.length]]: true,
-                    }}
-                  >
-                    <div class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
-                      {(player.name || "A")[0].toUpperCase()}
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="truncate text-sm font-medium">
-                        {player.name || "Anonymous"}
-                        {isCurrentUser && <span class="text-xs text-blue-500 ml-1">(you)</span>}
-                      </div>
-                      <div class="flex gap-1.5 text-xs text-slate-400">
-                        <span>{playerVotes().length}v</span>
-                        <span>${player.walletBalance.toFixed(0)}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }}
-            </For>
-
-            <Show when={eliminatedPlayers().length > 0}>
-              <div class="mt-2 text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">
-                Eliminated ({eliminatedPlayers().length})
-              </div>
-              <For each={eliminatedPlayers()}>
-                {(player) => (
-                  <div class="flex items-center gap-2 rounded-md border border-red-100 bg-red-50/50 p-2 opacity-60">
-                    <span class="text-sm">☠️</span>
-                    <span class="text-xs line-through text-slate-500">
-                      {player.name || "Anonymous"}
-                    </span>
-                  </div>
-                )}
-              </For>
+        {/* ── LEFT: Players Panel ── */}
+        <div class="absolute left-3 top-14 bottom-20 z-10 flex flex-col" classList={{ "w-52": playersOpen(), "w-8": !playersOpen() }}>
+          <button
+            class="mb-1 flex items-center gap-1.5 rounded-t-lg bg-black/50 backdrop-blur-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/60 border border-white/10 border-b-0 hover:text-white/80 transition-colors"
+            onClick={() => setPlayersOpen(!playersOpen())}
+          >
+            <Show when={playersOpen()} fallback={<span>▶</span>}>
+              <span>◀</span>
+              <span>Players ({remainingPlayers().length})</span>
             </Show>
-          </div>
+          </button>
+          <Show when={playersOpen()}>
+            <div class="flex flex-1 flex-col gap-1.5 overflow-auto rounded-b-lg rounded-tr-lg bg-black/50 backdrop-blur-md p-2 border border-white/10">
+              <For each={remainingPlayers()}>
+                {(player) => {
+                  const playerVotes = () => votes().filter(
+                    (v) => v.playerId === player.identity.toHexString()
+                  );
+                  const isCurrentUser = player.identity.isEqual(props.currentUser.identity);
+                  const playerIndex = () => remainingPlayers().indexOf(player);
+                  const accentColors = ["border-l-blue-400", "border-l-emerald-400", "border-l-violet-400", "border-l-amber-400", "border-l-rose-400", "border-l-cyan-400", "border-l-orange-400", "border-l-pink-400"];
 
-          {/* CENTER: Colony Viewport + Vote Controls */}
-          <div class="flex flex-1 flex-col gap-2 overflow-hidden">
-            {/* Colony Viewport */}
-            <div class="relative flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-200 shadow-sm">
-              <Show
-                when={myVotes().length > 0}
-                fallback={
-                  <div class="flex h-full items-center justify-center bg-slate-900 text-slate-500">
-                    <div class="text-center">
-                      <div class="text-4xl mb-2 opacity-30">🏰</div>
-                      <p class="text-sm">Waiting for votes to be assigned...</p>
+                  return (
+                    <div
+                      class="flex items-center gap-2 rounded-md border-l-[3px] bg-white/10 p-1.5 transition-all hover:bg-white/15"
+                      classList={{
+                        "ring-1 ring-blue-400/60": isCurrentUser,
+                        [accentColors[playerIndex() % accentColors.length]]: true,
+                      }}
+                    >
+                      <div class="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-[10px] font-bold text-white/80">
+                        {(player.name || "A")[0].toUpperCase()}
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div class="truncate text-xs font-medium text-white/90">
+                          {player.name || "Anonymous"}
+                          {isCurrentUser && <span class="text-[10px] text-blue-400 ml-1">(you)</span>}
+                        </div>
+                        <div class="flex gap-1.5 text-[10px] text-white/40">
+                          <span>{playerVotes().length}v</span>
+                          <span>${player.walletBalance.toFixed(0)}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                }
-              >
-                <ColonyViewport
-                  units={colonyUnits()}
-                  selectedIds={viewportSelectedIds}
-                  onSelect={setViewportSelectedIds}
-                  onSetTeam={handleViewportSetTeam}
-                />
-              </Show>
+                  );
+                }}
+              </For>
 
-              {/* Viewport toolbar overlay */}
-              <div class="absolute bottom-2 left-2 flex gap-1.5">
+              <Show when={eliminatedPlayers().length > 0}>
+                <div class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-white/30 px-1">
+                  Eliminated ({eliminatedPlayers().length})
+                </div>
+                <For each={eliminatedPlayers()}>
+                  {(player) => (
+                    <div class="flex items-center gap-2 rounded-md bg-red-500/10 p-1.5 opacity-60">
+                      <span class="text-xs">☠️</span>
+                      <span class="text-[10px] line-through text-white/40">
+                        {player.name || "Anonymous"}
+                      </span>
+                    </div>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </Show>
+        </div>
+
+        {/* ── RIGHT: Market Panel ── */}
+        <div class="absolute right-3 top-14 bottom-20 z-10 flex flex-col" classList={{ "w-72 xl:w-80": marketOpen(), "w-8": !marketOpen() }}>
+          <button
+            class="mb-1 flex items-center gap-1.5 rounded-t-lg bg-black/50 backdrop-blur-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/60 border border-white/10 border-b-0 hover:text-white/80 transition-colors"
+            onClick={() => setMarketOpen(!marketOpen())}
+          >
+            <Show when={marketOpen()} fallback={<span>◀</span>}>
+              <span>▶</span>
+              <span>Market</span>
+            </Show>
+          </button>
+          <Show when={marketOpen()}>
+            <div class="flex-1 overflow-auto rounded-b-lg rounded-tl-lg bg-black/50 backdrop-blur-md border border-white/10">
+              <VoteMarketPanel
+                votes={votes()}
+                transactions={transactions()}
+                roomId={props.room.id}
+                roundNumber={props.room.currentRound}
+                currentUserId={props.currentUser.identity.toHexString()}
+                userWalletBalance={props.currentUser.walletBalance}
+              />
+            </div>
+          </Show>
+        </div>
+
+        {/* ── BOTTOM CENTER: Vote Controls + Chat ── */}
+        <div class="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 w-full max-w-2xl px-3">
+          {/* Vote control bar */}
+          <div class="rounded-xl bg-black/50 backdrop-blur-md p-3 border border-white/10 shadow-2xl">
+            {/* Top row: vote summary + chips */}
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-xs font-semibold text-white/70">Votes ({myVotes().length})</span>
+              <div class="flex gap-1 ml-auto">
+                <span class="rounded bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-300 border border-red-500/30">{redVotes().length}R</span>
+                <span class="rounded bg-blue-500/30 px-1.5 py-0.5 text-[10px] font-bold text-blue-300 border border-blue-500/30">{blueVotes().length}B</span>
+                <Show when={unsetVotes().length > 0}>
+                  <span class="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white/50 border border-white/10">{unsetVotes().length}?</span>
+                </Show>
+              </div>
+            </div>
+
+            {/* Vote chips */}
+            <div class="flex flex-wrap gap-1 mb-2">
+              <For each={myVotes()}>
+                {(vote) => {
+                  const isSelected = () => viewportSelectedIds().includes(vote.id);
+                  return (
+                    <button
+                      class="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium transition-all"
+                      classList={{
+                        "border-red-400/60 bg-red-500/20 text-red-300": vote.color === "red",
+                        "border-blue-400/60 bg-blue-500/20 text-blue-300": vote.color === "blue",
+                        "border-dashed border-white/20 bg-white/5 text-white/40": !vote.color,
+                        "ring-2 ring-green-400/70 ring-offset-1 ring-offset-transparent": isSelected(),
+                      }}
+                      onClick={() => {
+                        setViewportSelectedIds(prev =>
+                          prev.includes(vote.id) ? prev.filter(id => id !== vote.id) : [...prev, vote.id]
+                        );
+                      }}
+                      data-testid={TID.voteChip(vote.id)}
+                    >
+                      <div
+                        class="h-2 w-2 rounded-full"
+                        classList={{
+                          "bg-red-400": vote.color === "red",
+                          "bg-blue-400": vote.color === "blue",
+                          "bg-white/30": !vote.color,
+                        }}
+                      />
+                      #{vote.id}
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+
+            {/* Drop zones — large, prominent */}
+            <div class="grid grid-cols-2 gap-2">
+              <div
+                data-testid={TID.voteRed}
+                role="button"
+                tabindex="0"
+                onDragOver={handleDragOver}
+                onDrop={() => handleDrop("red")}
+                onClick={() => handleDropZoneClick("red")}
+                class="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-red-500/40 bg-red-500/10 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/25 hover:border-red-400/60 transition-all"
+                classList={{ "border-red-400 bg-red-500/30": draggedVote() !== null }}
+              >
+                <div class="h-3 w-3 rounded-full bg-red-500" />
+                Red
+              </div>
+              <div
+                data-testid={TID.voteBlue}
+                role="button"
+                tabindex="0"
+                onDragOver={handleDragOver}
+                onDrop={() => handleDrop("blue")}
+                onClick={() => handleDropZoneClick("blue")}
+                class="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-blue-500/40 bg-blue-500/10 py-2 text-sm font-semibold text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 transition-all"
+                classList={{ "border-blue-400 bg-blue-500/30": draggedVote() !== null }}
+              >
+                <div class="h-3 w-3 rounded-full bg-blue-500" />
+                Blue
+              </div>
+            </div>
+
+            {/* Unit action toolbar (when units selected) */}
+            <Show when={viewportSelectedIds().length > 0}>
+              <div class="mt-2 flex items-center gap-2 rounded-lg bg-white/5 px-3 py-1.5 border border-white/10">
+                <span class="text-[11px] text-white/50">
+                  {viewportSelectedIds().length} unit{viewportSelectedIds().length !== 1 ? "s" : ""}
+                </span>
+                <div class="flex-1" />
                 <button
-                  class="rounded bg-red-600/90 px-2.5 py-1 text-[11px] font-medium text-white shadow backdrop-blur hover:bg-red-600 disabled:opacity-30"
-                  disabled={viewportSelectedIds().length === 0}
+                  class="rounded bg-red-600/80 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-red-500"
                   onClick={() => handleViewportSetTeam(viewportSelectedIds(), "red")}
                 >
                   Set Red
                 </button>
                 <button
-                  class="rounded bg-blue-600/90 px-2.5 py-1 text-[11px] font-medium text-white shadow backdrop-blur hover:bg-blue-600 disabled:opacity-30"
-                  disabled={viewportSelectedIds().length === 0}
+                  class="rounded bg-blue-600/80 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-blue-500"
                   onClick={() => handleViewportSetTeam(viewportSelectedIds(), "blue")}
                 >
                   Set Blue
                 </button>
                 <button
-                  class="rounded bg-slate-600/90 px-2.5 py-1 text-[11px] font-medium text-white shadow backdrop-blur hover:bg-slate-600 disabled:opacity-30"
-                  disabled={viewportSelectedIds().length === 0}
+                  class="rounded bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/60 hover:bg-white/20"
                   onClick={() => handleViewportSetTeam(viewportSelectedIds(), "unset")}
                 >
                   Unset
                 </button>
               </div>
+            </Show>
 
-              {/* Selection info overlay */}
-              <Show when={viewportSelectedIds().length > 0}>
-                <div class="absolute top-2 left-2 rounded bg-black/60 px-2 py-1 text-[11px] text-white backdrop-blur">
-                  {viewportSelectedIds().length} unit{viewportSelectedIds().length !== 1 ? "s" : ""} selected
-                </div>
-              </Show>
-            </div>
-
-            {/* Compact Vote Bar */}
-            <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-              <div class="flex items-center gap-2 mb-1.5">
-                <span class="text-xs font-semibold text-slate-600">Votes ({myVotes().length})</span>
-                <div class="flex gap-1 ml-auto">
-                  <Badge variant="destructive" class="px-1.5 py-0 text-[10px]">{redVotes().length}R</Badge>
-                  <Badge class="bg-blue-600 px-1.5 py-0 text-[10px]">{blueVotes().length}B</Badge>
-                  <Show when={unsetVotes().length > 0}>
-                    <Badge variant="secondary" class="px-1.5 py-0 text-[10px]">{unsetVotes().length}?</Badge>
-                  </Show>
-                </div>
+            {/* Chat toggle row */}
+            <button
+              class="mt-2 flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/50 hover:bg-white/10 hover:text-white/70 transition-colors border border-white/5"
+              onClick={() => setChatOpen(!chatOpen())}
+            >
+              <div class="flex items-center gap-2">
+                <span>💬</span>
+                <span>Chat</span>
               </div>
-              <div class="flex flex-wrap gap-1">
-                <For each={myVotes()}>
-                  {(vote) => {
-                    const isSelected = () => viewportSelectedIds().includes(vote.id);
-                    return (
-                      <button
-                        class="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium transition-all"
-                        classList={{
-                          "border-red-400 bg-red-50 text-red-700": vote.color === "red",
-                          "border-blue-400 bg-blue-50 text-blue-700": vote.color === "blue",
-                          "border-dashed border-slate-300 bg-slate-50 text-slate-500": !vote.color,
-                          "ring-2 ring-green-400 ring-offset-1": isSelected(),
-                        }}
-                        onClick={() => {
-                          setViewportSelectedIds(prev =>
-                            prev.includes(vote.id) ? prev.filter(id => id !== vote.id) : [...prev, vote.id]
-                          );
-                        }}
-                        data-testid={`vote-chip-${vote.id}`}
-                      >
-                        <div
-                          class="h-2 w-2 rounded-full"
-                          classList={{
-                            "bg-red-500": vote.color === "red",
-                            "bg-blue-500": vote.color === "blue",
-                            "bg-slate-300": !vote.color,
-                          }}
-                        />
-                        #{vote.id}
-                      </button>
-                    );
-                  }}
-                </For>
-              </div>
-              {/* Drop zones */}
-              <div class="grid grid-cols-2 gap-1.5 mt-1.5">
-                <div
-                  data-testid="vote-red"
-                  onDragOver={handleDragOver}
-                  onDrop={() => handleDrop("red")}
-                  class="flex items-center justify-center gap-1 rounded border border-dashed border-red-300 bg-red-50/50 py-1 text-[10px] font-medium text-red-600"
-                  classList={{ "border-red-500 bg-red-100": draggedVote() !== null }}
-                >
-                  Drop Red
-                </div>
-                <div
-                  data-testid="vote-blue"
-                  onDragOver={handleDragOver}
-                  onDrop={() => handleDrop("blue")}
-                  class="flex items-center justify-center gap-1 rounded border border-dashed border-blue-300 bg-blue-50/50 py-1 text-[10px] font-medium text-blue-600"
-                  classList={{ "border-blue-500 bg-blue-100": draggedVote() !== null }}
-                >
-                  Drop Blue
-                </div>
-              </div>
-            </div>
+              <span class="text-[10px]">{chatOpen() ? "▼ Close" : "▲ Open"}</span>
+            </button>
           </div>
 
-          {/* RIGHT SIDEBAR: Market */}
-          <div class="w-72 flex-shrink-0 overflow-auto xl:w-80">
-            <VoteMarketPanel
-              votes={votes()}
-              transactions={transactions()}
-              roomId={props.room.id}
-              roundNumber={props.room.currentRound}
-              currentUserId={props.currentUser.identity.toHexString()}
-              userWalletBalance={props.currentUser.walletBalance}
-            />
-          </div>
-        </div>
-
-        {/* ===== BOTTOM CHAT DRAWER ===== */}
-        <div class="border-t bg-white shadow-lg" classList={{ "h-10": !chatOpen(), "h-80": chatOpen() }}>
-          <button
-            class="flex w-full items-center justify-between px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            onClick={() => setChatOpen(!chatOpen())}
-          >
-            <div class="flex items-center gap-2">
-              <span>Chat</span>
-            </div>
-            <span class="text-xs">{chatOpen() ? "▼ Collapse" : "▲ Expand"}</span>
-          </button>
+          {/* Chat panel (expands below vote bar) */}
           <Show when={chatOpen()}>
-            <div class="h-[calc(100%-2.5rem)]">
+            <div class="mt-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 h-64 overflow-hidden">
               <Tabs defaultValue="chat">
-                <div class="border-b px-4">
-                  <TabsList class="grid w-full max-w-xs grid-cols-2">
-                    <TabsTrigger value="chat">Chat</TabsTrigger>
-                    <TabsTrigger value="replay">Replay</TabsTrigger>
+                <div class="border-b border-white/10 px-3 py-1">
+                  <TabsList class="grid w-full max-w-xs grid-cols-2 bg-white/5">
+                    <TabsTrigger value="chat" data-testid={TID.chatTab} class="text-xs data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/50">Chat</TabsTrigger>
+                    <TabsTrigger value="replay" class="text-xs data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/50">Replay</TabsTrigger>
                   </TabsList>
                 </div>
-                <TabsContent value="chat" class="h-[calc(100%-3rem)] p-0">
+                <TabsContent value="chat" class="h-[calc(100%-2.5rem)] p-0">
                   <ChatPanel roomId={props.room.id} roundNumber={props.room.currentRound} />
                 </TabsContent>
-                <TabsContent value="replay" class="h-[calc(100%-3rem)] overflow-auto p-4">
+                <TabsContent value="replay" class="h-[calc(100%-2.5rem)] overflow-auto p-3">
                   <ReplayViewer
                     roomId={props.room.id}
                     transactions={transactions()}
@@ -546,6 +596,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             </div>
           </Show>
         </div>
+
+        {/* ===== MODALS (layer 50) ===== */}
 
         {/* Elimination Modal */}
         <Show when={showEliminationModal()}>
@@ -564,17 +616,17 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
 
         {/* Game Over Modal */}
         <Show when={props.room.gameStatus === "completed"}>
-          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <Card class="w-96 shadow-2xl">
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <Card class="w-96 shadow-2xl border-white/20 bg-slate-900/90 backdrop-blur-xl">
               <CardHeader>
-                <CardTitle class="text-center text-2xl">Game Over!</CardTitle>
+                <CardTitle class="text-center text-2xl text-white">Game Over!</CardTitle>
               </CardHeader>
               <CardContent class="space-y-4">
                 <div class="text-center">
-                  <p class="text-lg font-semibold">Winners:</p>
+                  <p class="text-lg font-semibold text-white/80">Winners:</p>
                   <For each={remainingPlayers()}>
                     {(player) => (
-                      <p class="text-xl font-bold">
+                      <p class="text-xl font-bold text-emerald-400">
                         {player.name || "Anonymous"} - $
                         {(props.room.potSize / remainingPlayers().length).toFixed(2)}
                       </p>

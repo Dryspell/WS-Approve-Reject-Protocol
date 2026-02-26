@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { MultiPlayerHelper } from './helpers/multi-player';
+import { VoteGamePage } from './helpers/page-objects';
 
 /**
  * Priority 5: Leaderboard & Profiles E2E Tests
@@ -69,9 +70,10 @@ test.describe('Cross-Page Navigation', () => {
 
   test('Can navigate from vote to profile', async () => {
     const player = await multiPlayer.createPlayer();
+    const gamePage = new VoteGamePage(player);
     
-    await player.goto('/vote?multiuser=true');
-    await expect(player.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    await gamePage.goto();
+    await gamePage.waitForConnection();
 
     // Navigate to profile
     await player.goto('/profile?multiuser=true');
@@ -82,9 +84,10 @@ test.describe('Cross-Page Navigation', () => {
 
   test('Can navigate from vote to leaderboard', async () => {
     const player = await multiPlayer.createPlayer();
+    const gamePage = new VoteGamePage(player);
     
-    await player.goto('/vote?multiuser=true');
-    await expect(player.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    await gamePage.goto();
+    await gamePage.waitForConnection();
 
     // Navigate to leaderboard
     await player.goto('/leaderboard?multiuser=true');

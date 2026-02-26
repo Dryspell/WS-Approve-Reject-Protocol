@@ -8,6 +8,7 @@ import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import type { Identity } from "~/module_bindings";
 import type { ChatMessage as DBChatMessage } from "~/module_bindings/types";
 import { showToast } from "~/components/ui/toast";
+import { TID } from "~/lib/test-ids";
 
 interface ChatMessage {
   id: string;
@@ -403,7 +404,7 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
               >
                 🤝
               </Button>
-              <Button data-testid="send-button" onClick={sendMessage} disabled={!inputValue().trim()}>
+              <Button data-testid={TID.sendButton} onClick={sendMessage} disabled={!inputValue().trim()}>
                 Send
               </Button>
             </div>

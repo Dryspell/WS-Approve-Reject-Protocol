@@ -1,23 +1,25 @@
 import { Page, Locator, expect } from '@playwright/test';
+import { TID } from '../../src/lib/test-ids';
 
 /**
- * Generate a unique room name to avoid conflicts between test runs
+ * Build a data-testid locator string from a TID constant.
+ * Centralises the attribute format so tests never hardcode it.
  */
+const tid = (id: string) => `[data-testid="${id}"]`;
+
 export function uniqueRoomName(baseName: string): string {
   return `${baseName}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-/**
- * Page Object for the Vote Game interface
- * Provides reusable methods for common game actions
- */
+// ─── Vote Game Page ──────────────────────────────────────────────────────────
+
 export class VoteGamePage {
   readonly page: Page;
-  
-  // Connection status
+
+  // Connection
   readonly connectionStatus: Locator;
   readonly identityDisplay: Locator;
-  
+
   // Room management
   readonly createRoomButton: Locator;
   readonly roomNameInput: Locator;
@@ -27,50 +29,58 @@ export class VoteGamePage {
   readonly allowMidgameJoinCheckbox: Locator;
   readonly submitCreateRoomButton: Locator;
   readonly cancelCreateRoomButton: Locator;
-  
-  // Ready system
+  readonly leaveRoomButton: Locator;
+
+  // Lobby / Pre-start
   readonly readyButton: Locator;
-  
-  // Voting
-  readonly voteRedButton: Locator;
-  readonly voteBlueButton: Locator;
+  readonly lobbyHeader: Locator;
+
+  // Game header
+  readonly gameHeader: Locator;
   readonly roundTimer: Locator;
-  
-  // Wallet/Bank
+  readonly potAmount: Locator;
   readonly walletBalance: Locator;
-  readonly bankBalance: Locator;
-  readonly potDisplay: Locator;
+  readonly profitLoss: Locator;
+
+  // Voting
+  readonly voteRedZone: Locator;
+  readonly voteBlueZone: Locator;
+
+  // Chat (in-game panel)
+  readonly chatTab: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    
-    // Connection
-    this.connectionStatus = page.locator('[data-testid="connection-status"], text=Connected');
-    this.identityDisplay = page.locator('text=/Identity:/');
-    
-    // Room management
-    this.createRoomButton = page.locator('button:has-text("Create Room")').first();
-    this.roomNameInput = page.locator('input[placeholder="My Game Room"]');
-    this.buyinAmountInput = page.locator('label:has-text("Buy-in") + input, label:has-text("Buy-in") ~ input').first();
-    this.votesPerPlayerInput = page.locator('label:has-text("Votes per Player") + input, label:has-text("Votes per Player") ~ input').first();
-    this.allowRebuyCheckbox = page.locator('label:has-text("Allow Re-buy") input[type="checkbox"]');
-    this.allowMidgameJoinCheckbox = page.locator('label:has-text("Allow Mid-game Join") input[type="checkbox"]');
-    this.submitCreateRoomButton = page.locator('button:has-text("Create Room")').last();
-    this.cancelCreateRoomButton = page.locator('button:has-text("Cancel")');
-    
-    // Ready system - use specific text to avoid matching room tabs
-    this.readyButton = page.getByRole('button', { name: /Ready to Play|click to unready/i });
-    
-    // Voting
-    this.voteRedButton = page.locator('[data-testid="vote-red"], button:has-text("Red")');
-    this.voteBlueButton = page.locator('[data-testid="vote-blue"], button:has-text("Blue")');
-    this.roundTimer = page.locator('[data-testid="round-timer"]');
-    
-    // Wallet/Bank
-    this.walletBalance = page.locator('[data-testid="wallet-balance"]');
-    this.bankBalance = page.locator('[data-testid="bank-balance"]');
-    this.potDisplay = page.locator('text=/Pot/');
+
+    this.connectionStatus = page.locator(tid(TID.connectionStatus));
+    this.identityDisplay = page.locator(tid(TID.identityDisplay));
+
+    this.createRoomButton = page.locator(tid(TID.createRoomBtn));
+    this.roomNameInput = page.locator(tid(TID.roomNameInput));
+    this.buyinAmountInput = page.locator(tid(TID.buyinAmountInput));
+    this.votesPerPlayerInput = page.locator(tid(TID.votesPerPlayerInput));
+    this.allowRebuyCheckbox = page.locator(tid(TID.allowRebuyCheckbox));
+    this.allowMidgameJoinCheckbox = page.locator(tid(TID.allowMidgameJoinCheckbox));
+    this.submitCreateRoomButton = page.locator(tid(TID.submitCreateRoomBtn));
+    this.cancelCreateRoomButton = page.locator(tid(TID.cancelCreateRoomBtn));
+    this.leaveRoomButton = page.locator(tid(TID.leaveRoomBtn));
+
+    this.readyButton = page.locator(tid(TID.readyButton));
+    this.lobbyHeader = page.locator(tid(TID.lobbyHeader));
+
+    this.gameHeader = page.locator(tid(TID.gameHeader));
+    this.roundTimer = page.locator(tid(TID.roundTimer));
+    this.potAmount = page.locator(tid(TID.potAmount));
+    this.walletBalance = page.locator(tid(TID.walletBalance));
+    this.profitLoss = page.locator(tid(TID.profitLoss));
+
+    this.voteRedZone = page.locator(tid(TID.voteRed));
+    this.voteBlueZone = page.locator(tid(TID.voteBlue));
+
+    this.chatTab = page.locator(tid(TID.chatTab));
   }
+
+  // ── Navigation ───────────────────────────────────────────
 
   async goto() {
     await this.page.goto('/vote?multiuser=true');
@@ -78,21 +88,32 @@ export class VoteGamePage {
 
   async waitForConnection(timeout = 30000) {
     await this.page.waitForFunction(
-      () => {
-        const text = document.body.innerText;
-        return text.includes('Connected') || text.includes('Identity:');
+      (sel: string) => {
+        const el = document.querySelector(sel);
+        return el?.textContent?.includes('Connected');
       },
-      { timeout }
+      tid(TID.connectionStatus),
+      { timeout },
     );
   }
 
-  async createRoom(name: string, options: {
-    buyinAmount?: number;
-    votesPerPlayer?: number;
-    allowRebuy?: boolean;
-    allowMidgameJoin?: boolean;
-  } = {}) {
-    const { buyinAmount = 10, votesPerPlayer = 5, allowRebuy = true, allowMidgameJoin = false } = options;
+  // ── Room management ──────────────────────────────────────
+
+  async createRoom(
+    name: string,
+    options: {
+      buyinAmount?: number;
+      votesPerPlayer?: number;
+      allowRebuy?: boolean;
+      allowMidgameJoin?: boolean;
+    } = {},
+  ) {
+    const {
+      buyinAmount = 10,
+      votesPerPlayer = 5,
+      allowRebuy = true,
+      allowMidgameJoin = false,
+    } = options;
 
     await expect(this.createRoomButton).toBeEnabled({ timeout: 15000 });
     await this.createRoomButton.click();
@@ -106,68 +127,101 @@ export class VoteGamePage {
     }
 
     const rebuyChecked = await this.allowRebuyCheckbox.isChecked().catch(() => true);
-    if (rebuyChecked !== allowRebuy) {
-      await this.allowRebuyCheckbox.click();
-    }
+    if (rebuyChecked !== allowRebuy) await this.allowRebuyCheckbox.click();
 
     const midgameChecked = await this.allowMidgameJoinCheckbox.isChecked().catch(() => false);
-    if (midgameChecked !== allowMidgameJoin) {
-      await this.allowMidgameJoinCheckbox.click();
-    }
+    if (midgameChecked !== allowMidgameJoin) await this.allowMidgameJoinCheckbox.click();
 
     await this.submitCreateRoomButton.click();
-    await expect(this.page.locator(`[role="tab"]:has-text("${name}")`).first()).toBeVisible({ timeout: 10000 });
+    await expect(this.roomTab(name)).toBeVisible({ timeout: 10000 });
+  }
+
+  roomTab(roomName: string): Locator {
+    return this.page.locator(`[role="tab"]:has-text("${roomName}")`).first();
   }
 
   async joinRoom(roomName: string) {
-    // Click the room tab specifically
-    await this.page.locator(`[role="tab"]:has-text("${roomName}")`).first().click();
+    await this.roomTab(roomName).click();
   }
 
+  async waitForRoomTab(roomName: string, timeout = 15000) {
+    await expect(this.roomTab(roomName)).toBeVisible({ timeout });
+  }
+
+  async leaveRoom() {
+    await expect(this.leaveRoomButton).toBeVisible({ timeout: 5000 });
+    await this.leaveRoomButton.click();
+  }
+
+  // ── Ready / Lobby ────────────────────────────────────────
+
   async clickReady() {
-    // Wait for button to be visible and enabled
     await expect(this.readyButton).toBeVisible({ timeout: 10000 });
     await expect(this.readyButton).toBeEnabled({ timeout: 5000 });
     await this.readyButton.click();
   }
 
   async isReady(): Promise<boolean> {
-    const readyIndicator = this.page.locator('text=/✓.*Ready|Ready.*click to unready/');
-    return await readyIndicator.isVisible();
+    const text = await this.readyButton.textContent().catch(() => '');
+    return /unready/i.test(text || '');
   }
 
+  // ── Voting ───────────────────────────────────────────────
+
   async voteRed() {
-    await this.voteRedButton.click();
+    await this.voteRedZone.click();
   }
 
   async voteBlue() {
-    await this.voteBlueButton.click();
+    await this.voteBlueZone.click();
   }
+
+  async vote(color: 'red' | 'blue') {
+    if (color === 'red') await this.voteRed();
+    else await this.voteBlue();
+  }
+
+  voteChip(id: number): Locator {
+    return this.page.locator(tid(TID.voteChip(id)));
+  }
+
+  // ── Chat (in-game) ──────────────────────────────────────
+
+  async openChat() {
+    if (await this.chatTab.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await this.chatTab.click();
+    }
+  }
+
+  async sendChat(message: string) {
+    const input = this.page.locator(tid(TID.chatInput));
+    const send = this.page.locator(tid(TID.sendButton));
+    if (await input.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await input.fill(message);
+      await send.click();
+    }
+  }
+
+  // ── Identity ─────────────────────────────────────────────
 
   async getIdentity(): Promise<string> {
     const text = await this.identityDisplay.textContent();
-    const match = text?.match(/Identity:\s*([a-f0-9]+)/i);
-    return match?.[1] || '';
+    return text?.trim() || '';
   }
 
-  async getRoomTab(roomName: string): Locator {
-    return this.page.locator(`[role="tab"]:has-text("${roomName}")`);
+  // ── Game state queries ───────────────────────────────────
+
+  async waitForGameStart(timeout = 15000) {
+    await expect(this.potAmount).toBeVisible({ timeout });
   }
 
-  async waitForToast(message: string | RegExp, timeout = 5000) {
-    await this.page.waitForSelector(`text=${message}`, { timeout });
-  }
-
-  async getPlayerCount(roomName: string): Promise<number> {
-    const playersText = await this.page.locator(`text=/${roomName}.*player/`).textContent();
-    const match = playersText?.match(/(\d+)\s*player/);
-    return parseInt(match?.[1] || '0', 10);
+  playerCards(): Locator {
+    return this.page.locator(tid(TID.playerCard));
   }
 }
 
-/**
- * Page Object for the Chat interface
- */
+// ─── Chat Page ───────────────────────────────────────────────────────────────
+
 export class ChatPage {
   readonly page: Page;
   readonly chatInput: Locator;
@@ -176,9 +230,9 @@ export class ChatPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.chatInput = page.locator('[data-testid="chat-input"], input[placeholder*="message"], textarea[placeholder*="message"]');
-    this.sendButton = page.locator('[data-testid="send-button"], button:has-text("Send")');
-    this.chatMessages = page.locator('[data-testid="chat-messages"], .chat-messages');
+    this.chatInput = page.locator(tid(TID.chatInput));
+    this.sendButton = page.locator(tid(TID.sendButton));
+    this.chatMessages = page.locator(tid(TID.chatMessages));
   }
 
   async sendMessage(message: string) {
@@ -195,12 +249,11 @@ export class ChatPage {
   }
 }
 
-/**
- * Page Object for the Social/Friends interface
- */
+// ─── Social Page ─────────────────────────────────────────────────────────────
+
 export class SocialPage {
   readonly page: Page;
-  
+
   constructor(page: Page) {
     this.page = page;
   }

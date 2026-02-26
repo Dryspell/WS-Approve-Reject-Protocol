@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { MultiPlayerHelper } from './helpers/multi-player';
 import { VoteGamePage, uniqueRoomName } from './helpers/page-objects';
+import { setupPlayers } from './helpers/game-flows';
 
 /**
  * Priority 4: Game Management & UI E2E Tests
@@ -26,7 +27,7 @@ test.describe('4.1 Room Presets', () => {
 
     await gamePage.goto();
     await gamePage.waitForConnection();
-    await gamePage.createRoom('Quick Preset Test', 10);
+    await gamePage.createRoom('Quick Preset Test', { buyinAmount: 10 });
     await gamePage.joinRoom('Quick Preset Test');
 
     // Look for presets section
@@ -44,7 +45,7 @@ test.describe('4.1 Room Presets', () => {
 
     await gamePage.goto();
     await gamePage.waitForConnection();
-    await gamePage.createRoom('Standard Preset Test', 25);
+    await gamePage.createRoom('Standard Preset Test', { buyinAmount: 25 });
     await gamePage.joinRoom('Standard Preset Test');
 
     const presetsButton = player.locator('text=/Game Mode|Show.*Info/i');
@@ -74,17 +75,17 @@ test.describe('4.2 UI Components', () => {
 
     await page1.goto();
     await page1.waitForConnection();
-    await page1.createRoom('Player List Test', 10);
+    await page1.createRoom('Player List Test', { buyinAmount: 10 });
     await page1.joinRoom('Player List Test');
 
     await page2.goto();
     await page2.waitForConnection();
-    await expect(player2.locator('text=Player List Test')).toBeVisible({ timeout: 10000 });
+    await page2.waitForRoomTab('Player List Test');
     await page2.joinRoom('Player List Test');
 
     // Both players should see the room content
-    await expect(player1.locator('text=Player List Test')).toBeVisible();
-    await expect(player2.locator('text=Player List Test')).toBeVisible();
+    await expect(page1.roomTab('Player List Test')).toBeVisible();
+    await expect(page2.roomTab('Player List Test')).toBeVisible();
   });
 
   test('UI-013: Toast notifications appear for actions', async () => {
@@ -94,7 +95,7 @@ test.describe('4.2 UI Components', () => {
     await gamePage.goto();
     await gamePage.waitForConnection();
 
-    await gamePage.createRoom('Toast UI Test', 10);
+    await gamePage.createRoom('Toast UI Test', { buyinAmount: 10 });
 
     // Should see toast notification
     await expect(player.locator('text=/Room Created|Created|Success/i')).toBeVisible({ timeout: 5000 });
@@ -139,7 +140,7 @@ test.describe('4.3 Ready System UI', () => {
 
     await gamePage.goto();
     await gamePage.waitForConnection();
-    await gamePage.createRoom(roomName, 10);
+    await gamePage.createRoom(roomName, { buyinAmount: 10 });
     await gamePage.joinRoom(roomName);
 
     // Initial state - should show "Ready to Play" button
@@ -149,23 +150,16 @@ test.describe('4.3 Ready System UI', () => {
     await gamePage.clickReady();
 
     // Should show ready state - the button text changes to include "unready"
-    await expect(player.locator('[data-testid="ready-button"]')).toContainText(/unready/i, { timeout: 5000 });
+    await expect(gamePage.readyButton).toContainText(/unready/i, { timeout: 5000 });
   });
 
   test('UI-021: Ready count displays for multiple players', async () => {
-    const [player1, player2] = await multiPlayer.createPlayers(2);
-    const page1 = new VoteGamePage(player1);
-    const page2 = new VoteGamePage(player2);
+    const { pages: [player1, player2], gamePages: [page1, page2] } = await setupPlayers(multiPlayer, 2);
     const roomName = uniqueRoomName('Ready Count Test');
 
-    await page1.goto();
-    await page2.goto();
-    await page1.waitForConnection();
-    await page2.waitForConnection();
-
-    await page1.createRoom(roomName, 10);
+    await page1.createRoom(roomName, { buyinAmount: 10 });
     
-    await expect(player2.locator(`[role="tab"]:has-text("${roomName}")`).first()).toBeVisible({ timeout: 10000 });
+    await page2.waitForRoomTab(roomName);
 
     await page2.joinRoom(roomName);
     await page1.joinRoom(roomName);
@@ -177,7 +171,7 @@ test.describe('4.3 Ready System UI', () => {
     await page1.clickReady();
 
     // Should show ready state on the button
-    await expect(player1.locator('[data-testid="ready-button"]')).toContainText(/unready/i, { timeout: 5000 });
+    await expect(page1.readyButton).toContainText(/unready/i, { timeout: 5000 });
   });
 });
 
@@ -200,15 +194,15 @@ test.describe('Navigation & Tabs', () => {
     await gamePage.waitForConnection();
 
     // Create two rooms
-    await gamePage.createRoom('Tab Test A', 10);
-    await gamePage.createRoom('Tab Test B', 20);
+    await gamePage.createRoom('Tab Test A', { buyinAmount: 10 });
+    await gamePage.createRoom('Tab Test B', { buyinAmount: 20 });
 
     // Both tabs should be visible
-    await expect(player.locator('text=Tab Test A')).toBeVisible({ timeout: 10000 });
-    await expect(player.locator('text=Tab Test B')).toBeVisible({ timeout: 10000 });
+    await gamePage.waitForRoomTab('Tab Test A');
+    await gamePage.waitForRoomTab('Tab Test B');
 
     // Click on Tab A
-    await player.click('text=Tab Test A');
+    await gamePage.joinRoom('Tab Test A');
     
     // Tab A content should be active
     await expect(player.locator('text=/\\$10|10.*buy-in/i')).toBeVisible({ timeout: 5000 }).catch(() => {
@@ -216,7 +210,7 @@ test.describe('Navigation & Tabs', () => {
     });
 
     // Click on Tab B
-    await player.click('text=Tab Test B');
+    await gamePage.joinRoom('Tab Test B');
     
     // Tab B content should be active
     await expect(player.locator('text=/\\$20|20.*buy-in/i')).toBeVisible({ timeout: 5000 }).catch(() => {
@@ -230,7 +224,7 @@ test.describe('Navigation & Tabs', () => {
 
     await gamePage.goto();
     await gamePage.waitForConnection();
-    await gamePage.createRoom('Resize Test', 10);
+    await gamePage.createRoom('Resize Test', { buyinAmount: 10 });
     await gamePage.joinRoom('Resize Test');
 
     // Look for resizable handle
@@ -243,8 +237,9 @@ test.describe('Navigation & Tabs', () => {
 
 test.describe('Accessibility', () => {
   test('Page has proper heading structure', async ({ page }) => {
-    await page.goto('/vote?multiuser=true');
-    await expect(page.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    const gamePage = new VoteGamePage(page);
+    await gamePage.goto();
+    await gamePage.waitForConnection();
 
     // Check for headings
     const headings = page.locator('h1, h2, h3');
@@ -254,8 +249,9 @@ test.describe('Accessibility', () => {
   });
 
   test('Buttons are keyboard accessible', async ({ page }) => {
-    await page.goto('/vote?multiuser=true');
-    await expect(page.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    const gamePage = new VoteGamePage(page);
+    await gamePage.goto();
+    await gamePage.waitForConnection();
 
     // Tab to Create Room button
     await page.keyboard.press('Tab');
@@ -266,10 +262,11 @@ test.describe('Accessibility', () => {
   });
 
   test('Form inputs have labels', async ({ page }) => {
-    await page.goto('/vote?multiuser=true');
-    await expect(page.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    const gamePage = new VoteGamePage(page);
+    await gamePage.goto();
+    await gamePage.waitForConnection();
 
-    await page.click('button:has-text("Create Room")');
+    await gamePage.createRoomButton.click();
 
     // Check for labels
     await expect(page.locator('text=/Room Name|Buy-in/i')).toBeVisible();

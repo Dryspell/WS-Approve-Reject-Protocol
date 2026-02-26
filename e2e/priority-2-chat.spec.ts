@@ -143,7 +143,7 @@ test.describe('Chat in Vote Game Context', () => {
     await gamePage.goto();
     await gamePage.waitForConnection();
     
-    await gamePage.createRoom('Chat Room Test', 10);
+    await gamePage.createRoom('Chat Room Test', { buyinAmount: 10 });
     await gamePage.joinRoom('Chat Room Test');
     
     // Look for chat interface within the game
@@ -161,15 +161,15 @@ test.describe('Chat in Vote Game Context', () => {
     // Both players join
     await gamePage1.goto();
     await gamePage1.waitForConnection();
-    await gamePage1.createRoom('Sync Chat Test', 10);
+    await gamePage1.createRoom('Sync Chat Test', { buyinAmount: 10 });
     
     await gamePage2.goto();
     await gamePage2.waitForConnection();
-    await expect(player2.locator('text=Sync Chat Test')).toBeVisible({ timeout: 10000 });
+    await gamePage2.waitForRoomTab('Sync Chat Test');
     
     // Both players should be connected
-    await expect(player1.locator('text=Connected')).toBeVisible();
-    await expect(player2.locator('text=Connected')).toBeVisible();
+    await expect(gamePage1.connectionStatus).toContainText('Connected');
+    await expect(gamePage2.connectionStatus).toContainText('Connected');
   });
 });
 

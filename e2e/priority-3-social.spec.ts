@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { MultiPlayerHelper } from './helpers/multi-player';
-import { SocialPage } from './helpers/page-objects';
+import { SocialPage, VoteGamePage } from './helpers/page-objects';
 
 /**
  * Priority 3: Social Features E2E Tests
@@ -124,21 +124,21 @@ test.describe('Social Features in Vote Context', () => {
 
   test('Players in same game room are visible to each other', async () => {
     const [player1, player2] = await multiPlayer.createPlayers(2);
+    const gamePage1 = new VoteGamePage(player1);
+    const gamePage2 = new VoteGamePage(player2);
     
     // Player 1 creates room
-    await player1.goto('/vote?multiuser=true');
-    await expect(player1.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    await gamePage1.goto();
+    await gamePage1.waitForConnection();
     
-    await player1.click('button:has-text("Create Room")');
-    await player1.fill('input[placeholder="My Game Room"]', 'Social Test Room');
-    await player1.click('button:has-text("Create Room ($10")');
+    await gamePage1.createRoom('Social Test Room', { buyinAmount: 10 });
     
     // Player 2 joins
-    await player2.goto('/vote?multiuser=true');
-    await expect(player2.locator('text=Connected')).toBeVisible({ timeout: 30000 });
+    await gamePage2.goto();
+    await gamePage2.waitForConnection();
     
     // Both should see the room
-    await expect(player1.locator('text=Social Test Room')).toBeVisible({ timeout: 10000 });
-    await expect(player2.locator('text=Social Test Room')).toBeVisible({ timeout: 10000 });
+    await gamePage1.waitForRoomTab('Social Test Room');
+    await gamePage2.waitForRoomTab('Social Test Room');
   });
 });

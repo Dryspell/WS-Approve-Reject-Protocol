@@ -80,7 +80,7 @@ export const AdminPanel: Component = () => {
       {/* Toggle Button - Only show if admin */}
       <Show when={typeof window !== 'undefined' && window.location.hostname === 'localhost'}>
         <Button
-          class="fixed top-4 right-4 z-50 shadow-lg"
+          class="fixed bottom-4 right-4 z-50 shadow-lg"
           variant="outline"
           size="sm"
           onClick={() => {

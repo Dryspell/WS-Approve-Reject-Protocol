@@ -11,6 +11,7 @@ import { Badge } from "../ui/badge";
 import type { DbConnection } from "~/module_bindings/index";
 import RoomPresets from "../game/RoomPresets";
 import { resolvePlayerName } from "~/lib/game-utils";
+import { TID } from "~/lib/test-ids";
 
 export default function GamePreStartInteractions(props: {
   roomId: string;
@@ -109,7 +110,7 @@ export default function GamePreStartInteractions(props: {
   return (
     <div class="mx-auto max-w-2xl p-6 space-y-6">
       {/* Room Header Card */}
-      <div class="rounded-xl border bg-white p-6 shadow-sm">
+      <div class="rounded-xl border bg-white p-6 shadow-sm" data-testid={TID.lobbyHeader}>
         <div class="flex items-start justify-between">
           <div>
             <h2 class="text-xl font-bold text-slate-800">{room.name}</h2>
@@ -182,6 +183,7 @@ export default function GamePreStartInteractions(props: {
                     "ring-2 ring-blue-400 ring-offset-1": isMe(),
                     "border-green-200 bg-green-50/50": isReady() && !isMe(),
                   }}
+                  data-testid={TID.playerCard}
                 >
                   <div
                     class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
@@ -214,7 +216,7 @@ export default function GamePreStartInteractions(props: {
 
       {/* Ready Button */}
       <Button
-        data-testid="ready-button"
+        data-testid={TID.readyButton}
         variant={userIsReady(props.roomId, getUserIdForServer() || "", props.roomsPreStart) ? "outline" : "default"}
         class="w-full py-5 text-base font-semibold"
         onClick={handleToggleReady}

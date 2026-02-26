@@ -1,6 +1,7 @@
 import { Browser, BrowserContext, Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { TID } from '../../src/lib/test-ids';
 
 /**
  * Helper for managing multiple players in E2E tests.
@@ -87,13 +88,13 @@ export class MultiPlayerHelper {
    * Wait for all players to be connected to SpacetimeDB
    */
   async waitForAllConnected(): Promise<void> {
+    const sel = `[data-testid="${TID.connectionStatus}"]`;
     await Promise.all(
       this.pages.map(page =>
-        page.waitForSelector('[data-testid="connection-status-connected"], text=Connected', {
-          timeout: 30000,
-        }).catch(() => 
-          // Fallback: wait for the identity to appear
-          page.waitForSelector('text=/Identity:/', { timeout: 30000 })
+        page.waitForFunction(
+          (s: string) => document.querySelector(s)?.textContent?.includes('Connected'),
+          sel,
+          { timeout: 30000 },
         )
       )
     );
@@ -134,14 +135,11 @@ export class MultiPlayerHelper {
  * Wait for SpacetimeDB connection on a page
  */
 export async function waitForConnection(page: Page, timeout = 30000): Promise<void> {
+  const sel = `[data-testid="${TID.connectionStatus}"]`;
   await page.waitForFunction(
-    () => {
-      // Check for connection status indicator or identity display
-      const connected = document.body.innerText.includes('Connected');
-      const hasIdentity = document.body.innerText.includes('Identity:');
-      return connected || hasIdentity;
-    },
-    { timeout }
+    (s: string) => document.querySelector(s)?.textContent?.includes('Connected'),
+    sel,
+    { timeout },
   );
 }
 
