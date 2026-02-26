@@ -1,6 +1,6 @@
 # SocketSignal - The Vote Exchange
 
-A multiplayer game combining market-based voting mechanics with strategic elimination, built with SolidJS and SpacetimeDB.
+A multiplayer game combining market-based voting mechanics with strategic elimination, featuring a real-time 3D game viewport. Built with SolidJS, Three.js, and SpacetimeDB.
 
 ## Overview
 
@@ -35,7 +35,7 @@ See [docs/getting-started.md](./docs/getting-started.md) for detailed setup inst
 
 ## Project Status
 
-**Current Focus**: Fixing core game bugs and completing missing features  
+**Current Focus**: Server-side round processing, E2E test stability, and game design alignment  
 **Backend**: SpacetimeDB 2.0 (migrated Feb 2026)
 
 The Vote Exchange core loop is functional (vote, trade, eliminate, win), but has known issues with tie handling, guarantee tracking, and disconnect handling. See [STATUS.md](./docs/STATUS.md) for a detailed vision-vs-implementation mapping.
@@ -59,6 +59,7 @@ The Vote Exchange core loop is functional (vote, trade, eliminate, win), but has
 ## Tech Stack
 
 - **Frontend**: SolidJS, SolidStart, TailwindCSS, Solid-UI
+- **3D Rendering**: Three.js (low-poly colony viewport with spring physics)
 - **Backend**: SpacetimeDB (Rust)
 - **Real-time**: WebSocket via SpacetimeDB SDK
 - **Testing**: Vitest (unit), Playwright (E2E)
@@ -78,7 +79,9 @@ socketSignal/
 │   └── routes/          # Page routes
 ├── game-design/         # Game design documentation
 ├── docs/                # Technical documentation
-└── tests/               # Unit tests
+├── tests/               # Unit tests
+└── e2e/                 # Playwright E2E tests
+    └── helpers/         # Page objects, game flows, shared test IDs
 ```
 
 ## Development
@@ -88,6 +91,8 @@ pnpm dev          # Start development server
 pnpm generate     # Regenerate TypeScript bindings
 pnpm publish:local # Publish SpacetimeDB module
 pnpm test         # Run unit tests
+pnpm test:e2e     # Run E2E tests (headless)
+pnpm test:e2e:headed # Run E2E tests with visible browser
 pnpm build        # Build for production
 ```
 

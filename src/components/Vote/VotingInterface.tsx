@@ -1,6 +1,5 @@
 import { Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect, untrack } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import type { User, GameRoom, Vote, Transaction } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
@@ -602,7 +601,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         {/* Elimination Modal */}
         <Show when={showEliminationModal()}>
           <EliminationModal
-            roundNumber={props.room.currentRound - 1}
+            roundNumber={Math.max(props.room.currentRound - 1, 0)}
             eliminatedPlayers={eliminatedPlayers().map(p => p.identity.toHexString())}
             survivingPlayers={remainingPlayers().map(p => p.identity.toHexString())}
             minorityColor={getVoteTotals().minority}
@@ -628,7 +627,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                     {(player) => (
                       <p class="text-xl font-bold text-emerald-400">
                         {player.name || "Anonymous"} - $
-                        {(props.room.potSize / remainingPlayers().length).toFixed(2)}
+                        {(props.room.potSize / Math.max(remainingPlayers().length, 1)).toFixed(2)}
                       </p>
                     )}
                   </For>

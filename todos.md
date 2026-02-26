@@ -50,6 +50,17 @@
 
 ---
 
+## Phase 4.5: 3D Viewport & UI Architecture (Complete)
+
+- [x] **Three.js spike evaluation** -- compared Canvas, Three.js, Pixi.js; committed to Three.js for low-poly 3D
+- [x] **ColonyViewport component** -- Three.js viewport with humanoid units, spring physics, selection, drag-to-move
+- [x] **Full-screen viewport layout** -- 3D viewport fills screen, all game UI overlaid as glassmorphism HUD panels
+- [x] **Shared test-id system** -- `src/lib/test-ids.ts` constants imported by both UI components and E2E tests
+- [x] **DRY E2E refactoring** -- page objects use TID constants, game-flows.ts provides high-level test helpers
+- [x] **data-testid coverage** -- added test IDs to VoteBox, VotingInterface, GamePreStartInteractions, ChatPanel
+
+---
+
 ## Phase 5: Game Design Alignment (Partially Complete)
 
 - [x] **Transaction fees** -- 1% fee on vote sales, guarantee purchases, and trade offers (added to pot via `TRANSACTION_FEE_RATE`)
@@ -77,7 +88,8 @@
 ## Technical Debt
 
 - [ ] Split monolithic `lib.rs` (~2,200 lines) into separate modules for Vote Exchange vs Colony Builder
-- [ ] Move round processing to server-side scheduled timer (currently every client calls `processRoundVotes`)
+- [ ] Move round processing to server-side scheduled timer (every client currently calls `processRoundVotes` when timer expires — race condition risk)
+- [ ] Guard against division-by-zero in pot distribution (fixed in VotingInterface but server should also validate)
 - [ ] Server should derive `round_number` from room state instead of accepting it as client parameter
 - [ ] Remove dead code: `server/src/auth.rs` (unreferenced)
 - [ ] Wrap all client-side reducer calls in try-catch
@@ -99,4 +111,4 @@
 
 ---
 
-**Last Updated**: February 25, 2026
+**Last Updated**: February 26, 2026

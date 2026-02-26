@@ -134,7 +134,7 @@ Summary of testability based on current implementation:
 | P3 | Social | SO-001 to SO-034 | ~85% | Friend/DM/block system works |
 | P4 | Game Mgmt & UI | UI-001 to UI-031 | ~70% | Replay viewer, round history may not be functional |
 | P5 | Leaderboard & Profiles | LB-001 to PR-004 | ~40% | Filtering broken, name editing broken, achievements unclear |
-| P6 | Edge Cases | EC-001 to EC-022 | ~30% | Disconnect handling, leave room not implemented |
+| P6 | Edge Cases | EC-001 to EC-022 | ~60% | Leave room implemented (reducer + UI button). Disconnect handling improved. |
 | P7 | Performance | PF-001 to PF-022 | ~50% | Basic load testing possible |
 
 ---
@@ -170,4 +170,17 @@ Summary of testability based on current implementation:
 
 ---
 
-**Last Updated**: February 25, 2026
+## 3D Viewport & HUD System
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Three.js spike evaluation | Implemented | Compared Canvas, Three.js, Pixi.js; committed to Three.js |
+| ColonyViewport component | Implemented | Low-poly 3D with spring physics, selection, drag-to-move |
+| Full-screen viewport layout | Implemented | 3D viewport fills screen, UI overlays as glassmorphism HUD |
+| Collapsible HUD panels | Implemented | Players (left), Market (right), Votes (bottom center) |
+| Shared test-id contract | Implemented | `src/lib/test-ids.ts` — constants shared between UI and E2E tests |
+| DRY E2E test helpers | Implemented | Page objects + game flow helpers eliminate raw selectors |
+
+---
+
+**Last Updated**: February 26, 2026

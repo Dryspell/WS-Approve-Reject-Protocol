@@ -139,12 +139,56 @@ This document summarizes the development sprints for The Vote Exchange.
 
 ---
 
+## Sprint 9: 3D Viewport & Rendering Evaluation (Feb 25-26, 2026)
+
+**Focus**: Evaluate rendering technologies and integrate a 3D game viewport.
+
+### Completed
+- Interaction patterns study (React Flow drag physics, snap-to-grid, momentum, spring animations)
+- Three-way spike comparison: vanilla Canvas, Three.js, Pixi.js — each as production-quality demos
+- Decision: committed to Three.js for low-poly 3D visuals
+- Created `ColonyViewport` component: humanoid units, spring-eased drag-to-move, selection glow, resource nodes, shadows, fog, tone mapping
+- Integrated ColonyViewport into VotingInterface: votes represented as 3D units with team colors
+- Refactored global navigation bar to modern slate/white design
+
+### Key Files
+- `src/components/game/ColonyViewport.tsx` — Three.js viewport component
+- `src/routes/canvas/spike/` — spike implementations (canvas, threejs, pixi)
+- `docs/spike-evaluation.md` — evaluation document
+- `docs/interaction-patterns.md` — interaction patterns study
+
+---
+
+## Sprint 10: Full-Screen HUD & DRY Testing (Feb 26, 2026)
+
+**Focus**: Make the 3D viewport the main game view; eliminate test fragility.
+
+### Completed
+- Rewrote VotingInterface layout: 3D viewport fills entire screen, all UI overlays as glassmorphism HUD panels
+- Collapsible side panels: Players (left, open by default), Market (right, closed by default)
+- Bottom-center vote control bar with chat toggle
+- Dark glass theme (`bg-black/50 backdrop-blur-md`) across all HUD elements
+- Created shared `src/lib/test-ids.ts` — TID constants imported by both UI components and E2E page objects
+- Added `data-testid` attributes to all interactive elements: VoteBox (12), VotingInterface (10), GamePreStartInteractions (3), ChatPanel (3)
+- Rewrote `e2e/helpers/page-objects.ts` — all locators built from TID constants
+- Created `e2e/helpers/game-flows.ts` — high-level helpers (setupPlayers, startGame, setVotes, snapshot)
+- Refactored all 9 E2E spec files to use page objects and game flows (no raw selectors)
+- Fixed bugs: division-by-zero in pot distribution, negative round number in elimination modal, removed unused Badge import
+
+### Key Files
+- `src/lib/test-ids.ts` — shared test ID constants
+- `e2e/helpers/page-objects.ts` — page objects using TID
+- `e2e/helpers/game-flows.ts` — high-level test orchestration
+- `src/components/Vote/VotingInterface.tsx` — full-screen HUD layout
+
+---
+
 ## Project Statistics
 
-- **Total Components Created**: 27+
+- **Total Components Created**: 30+
 - **Lines of Rust Server Code**: ~2,200
 - **Unit Tests**: 24 passing (Colony Builder only -- no Vote Exchange tests)
-- **E2E Test Files**: 8 Playwright spec files (~116 test cases defined)
+- **E2E Test Files**: 9 Playwright spec files (~120 test cases across 5 simulation scenarios)
 - **Backend Reducers**: 30+
 - **Database Tables**: 6 Vote Exchange + 3 chat + 4 social + Colony Builder tables
 - **Sound Effects**: 13
@@ -156,29 +200,30 @@ This document summarizes the development sprints for The Vote Exchange.
 
 | Feature (from rules.md) | Server | Client UI | Tested | Notes |
 |--------------------------|--------|-----------|--------|-------|
-| Binary voting (Red/Blue) | Yes | Yes | E2E smoke | Core loop works |
-| Minority wins, majority eliminated | Yes | Yes | No | Untested beyond manual |
-| Vote trading (buy/sell) | Yes | Yes | No | Works but no counter-offers |
-| Multiple votes per player | Yes | Yes | No | Via trading only (start with 1) |
-| Vote splitting (multi-color) | Partial | Yes (drag/drop) | No | Server doesn't validate split semantics |
+| Binary voting (Red/Blue) | Yes | Yes | E2E | Core loop works; click drop zones or drag |
+| Minority wins, majority eliminated | Yes | Yes | E2E smoke | 5-scenario simulation |
+| Vote trading (buy/sell) | Yes | Yes | No | Works; marketplace panel |
+| Multiple votes per player | Yes | Yes | E2E | Configurable per room (default 5) |
+| Vote splitting (multi-color) | Partial | Yes (drag/drop + click) | No | Server doesn't validate split semantics |
 | Public guarantees | Yes | Yes | No | |
 | Private guarantees | Yes | Yes | No | |
-| Guarantee enforcement (per-vote) | Yes | Yes (GuaranteeMarket) | No | Server locks vote color when guarantee is purchased; per-vote model |
+| Guarantee enforcement (per-vote) | Yes | Yes (GuaranteeMarket) | No | Server locks vote color; per-vote model |
 | Wallet system | Yes | Yes | No | No wallet cap/limit |
 | Bank account | Yes | Yes | No | |
 | Buy-in system | Yes | Yes | No | |
-| Pot management | Yes | Yes | No | |
+| Pot management | Yes | Yes | No | Division-by-zero guard added |
 | Player elimination | Yes | Yes | No | |
 | Multi-round gameplay | Yes | Yes | No | |
-| Transaction recording | Yes | Yes (History tab) | No | All transaction types shown in VoteMarketPanel |
+| Transaction recording | Yes | Yes (History tab) | No | All transaction types in VoteMarketPanel |
 | Tie handling | Yes | Yes | No | Tie ends game and splits pot (intended) |
 | Post-elimination re-buy | Yes | Yes | No | 3x cost, 80% to pot |
 | Guarantee bluffing | Partial | Yes (warning text) | No | Bluffs not recorded/displayed |
-| Chat system | Yes | Yes | E2E smoke | |
-| Leave room / disconnect | Yes | No UI button yet | No | `leave_room` reducer handles mid-game departure |
-| Transaction fees | **No** | No | No | All trades are zero-fee |
+| Chat system | Yes | Yes | E2E | In-game chat panel via Three.js HUD |
+| Leave room / disconnect | Yes | Yes (HUD button) | No | `leave_room` reducer + UI Leave button |
+| Transaction fees | Yes | Yes | No | 1% fee via TRANSACTION_FEE_RATE |
 | Side-betting | **No** | No | No | |
 | Trade offers (negotiation) | Yes | Yes (ChatPanel) | No | Trade offer system via chat with accept/decline |
+| 3D Colony Viewport | N/A | Yes | No | Three.js low-poly with spring physics |
 
 ---
 
@@ -193,4 +238,4 @@ This document summarizes the development sprints for The Vote Exchange.
 
 ---
 
-**Last Updated**: February 25, 2026
+**Last Updated**: February 26, 2026

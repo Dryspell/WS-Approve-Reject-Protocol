@@ -38,6 +38,9 @@ The core Vote Exchange game loop is functional:
 - Player profiles with stats
 - Replay viewer UI
 - SpacetimeDB 2.0 integration with auto-generated TypeScript bindings
+- Three.js colony viewport with low-poly 3D visuals, spring-eased drag-to-move, selection, and team assignment
+- Full-screen 3D viewport layout with glassmorphism HUD overlay (game feels like a real game, not an app)
+- Shared test-id system (`src/lib/test-ids.ts`) and DRY E2E test architecture (page objects + game flow helpers)
 
 ### Partially Implemented (Has Gaps)
 
@@ -47,7 +50,7 @@ The core Vote Exchange game loop is functional:
 - **Player profile editing**: Name field displays but is not wired to the `set_name` reducer.
 - **Transaction history**: Server records all transactions, but no client UI component renders the history.
 - **Vote split semantics**: Drag-and-drop UI lets players split votes across colors, but server doesn't distinctly handle a player who voted on both sides (they should always survive as they're guaranteed minority).
-- **Colony Builder prototype**: Units, resources, crafting, storage buildings exist on the `/canvas` route but are completely disconnected from the Vote Exchange.
+- **Colony Builder prototype**: Colony-style 3D viewport (Three.js) is now the main game view for Vote Exchange. Units represent votes visually. Full colony builder (resources, crafting, tasks) exists as prototype on `/canvas` route.
 - **E2E testing**: 8 Playwright spec files exist with ~116 test cases, but many are smoke tests. Several reference features that don't fully work.
 
 ### Not Implemented
@@ -127,6 +130,21 @@ The core Vote Exchange game loop is functional:
 
 ---
 
+## Phase 4.5: 3D Viewport & UI Architecture
+
+**Priority**: HIGH | **Status**: Complete (Feb 26, 2026)
+
+### Tasks
+- [x] Evaluate rendering technologies (Canvas vs Three.js vs Pixi.js spike comparison)
+- [x] Implement ColonyViewport component with Three.js (low-poly units, spring physics, selection, shadows)
+- [x] Integrate viewport into VotingInterface (units represent votes, team colors = vote colors)
+- [x] Rewrite layout to full-screen viewport with glassmorphism HUD overlay
+- [x] Implement shared test-id system (TID constants in `src/lib/test-ids.ts`)
+- [x] Refactor all E2E tests to use page objects and game flow helpers (DRY)
+- [x] Add missing `data-testid` attributes to all interactive UI components
+
+---
+
 ## Phase 5: Game Design Alignment
 
 **Priority**: MEDIUM | **Status**: Partially Complete
@@ -179,4 +197,4 @@ The core Vote Exchange game loop is functional:
 
 ---
 
-**Last Updated**: February 25, 2026
+**Last Updated**: February 26, 2026

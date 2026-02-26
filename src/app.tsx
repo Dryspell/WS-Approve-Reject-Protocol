@@ -2,6 +2,7 @@ import { Router, useLocation } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
 import { Show, Suspense } from "solid-js";
 import Nav from "~/components/Nav";
+import ChatOverlay from "~/components/ChatOverlay";
 import "./app.css";
 import "@fontsource/inter";
 import { Toaster } from "./components/ui/toast";
@@ -10,17 +11,20 @@ import { SpacetimeDBProvider } from "~/hooks/useSpacetimeDB";
 
 function AppShell(props: { children: any }) {
 	const location = useLocation();
-	const showNav = () => !location.pathname.startsWith("/vote");
+	const isHome = () => location.pathname === "/";
+	const isGame = () => location.pathname.startsWith("/vote");
+	const showNav = () => !isHome() && !isGame();
 
 	return (
 		<SpacetimeDBProvider>
-			<div class="flex min-h-screen flex-col">
+			<div class="dark flex min-h-screen flex-col bg-[#1a1a2e]">
 				<Show when={showNav()}>
 					<Nav />
 				</Show>
 				<Suspense>
 					<main class={showNav() ? "flex-1" : "flex-1 h-screen"}>{props.children}</main>
 				</Suspense>
+				<ChatOverlay />
 			</div>
 		</SpacetimeDBProvider>
 	);
