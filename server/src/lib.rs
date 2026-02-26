@@ -329,7 +329,7 @@ pub fn create_room(
     });
 
     // Give creator chat permissions
-    if let Some(creator_identity) = ctx.db.user().iter().find(|u| u.identity.to_string() == creator_id) {
+    if let Some(creator_identity) = ctx.db.user().iter().find(|u| u.identity.to_hex().to_string() == creator_id) {
         ctx.db.chat_permission().insert(ChatPermission {
             id: 0,
             room_id: chat_room_id.clone(),
@@ -366,7 +366,7 @@ pub fn join_room(ctx: &ReducerContext, room_id: i32, user_id: String) -> Result<
 
             // Give chat permissions to new member (if not already granted)
             let chat_room_id = format!("game_{}", room_id);
-            if let Some(user_identity) = ctx.db.user().iter().find(|u| u.identity.to_string() == user_id) {
+            if let Some(user_identity) = ctx.db.user().iter().find(|u| u.identity.to_hex().to_string() == user_id) {
                 // Check if permission already exists to avoid duplicate key error
                 let existing_permission = ctx.db.chat_permission().iter()
                     .find(|p| p.room_id == chat_room_id && p.user_id == user_identity.identity);
@@ -443,7 +443,7 @@ pub fn start_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
         // Vote Exchange: Collect buy-ins and create pot
         let mut pot = 0.0;
         for member_id in &room.member_ids {
-            if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_string() == *member_id) {
+            if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_hex().to_string() == *member_id) {
                 let mut updated_user = user.clone();
                 
                 // Check if user has enough money
@@ -577,8 +577,11 @@ pub fn move_unit(
     unit_id: i32,
     target_position: Vector2,
 ) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
     if let Some(mut unit) = ctx.db.unit().id().find(unit_id) {
-        // Get unit stats for movement speed
+        if unit.owner_id != caller_id {
+            return Err("You don't own this unit".to_string());
+        }
         if let Some(stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
             let dx = target_position.x - unit.position.x;
             let dy = target_position.y - unit.position.y;
@@ -609,7 +612,11 @@ pub fn set_unit_task(
     task_type: String,
     target_id: String,
 ) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
     if let Some(mut unit) = ctx.db.unit().id().find(unit_id) {
+        if unit.owner_id != caller_id {
+            return Err("You don't own this unit".to_string());
+        }
         unit.task_type = Some(task_type);
         unit.target_id = Some(target_id);
         ctx.db.unit().id().update(unit);
@@ -645,7 +652,11 @@ pub fn gather_resource(
     unit_id: i32,
     resource_id: String,
 ) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
     if let Some(unit) = ctx.db.unit().id().find(unit_id) {
+        if unit.owner_id != caller_id {
+            return Err("You don't own this unit".to_string());
+        }
         if let Some(resource) = ctx.db.resource().id().find(&resource_id) {
             if let Some(stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
                 if let Some(mut inventory) = ctx.db.unit_inventory().unit_id().find(unit_id) {
@@ -704,6 +715,14 @@ pub fn upgrade_unit(
     unit_id: i32,
     upgrade_type: String,
 ) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    if let Some(unit) = ctx.db.unit().id().find(unit_id) {
+        if unit.owner_id != caller_id {
+            return Err("You don't own this unit".to_string());
+        }
+    } else {
+        return Err("Unit not found".to_string());
+    }
     if let Some(mut stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
         if let Some(inventory) = ctx.db.unit_inventory().unit_id().find(unit_id) {
             // Check if unit has enough resources for upgrade
@@ -974,7 +993,11 @@ pub fn set_unit_vote_color(
     unit_id: i32,
     color: String,
 ) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
     if let Some(mut unit) = ctx.db.unit().id().find(unit_id) {
+        if unit.owner_id != caller_id {
+            return Err("You don't own this unit".to_string());
+        }
         if color != "red" && color != "blue" {
             return Err("Invalid vote color".to_string());
         }
@@ -991,7 +1014,11 @@ pub fn trade_unit_vote(
     buyer_id: String,
     price: i32,
 ) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
     if let Some(mut unit) = ctx.db.unit().id().find(unit_id) {
+        if unit.owner_id != caller_id {
+            return Err("You don't own this unit".to_string());
+        }
         if unit.vote_price.is_none() {
             return Err("Unit vote is not for sale".to_string());
         }
@@ -1037,10 +1064,10 @@ pub fn transfer_vote_ownership(
         
         // Get buyer and seller
         let buyer = ctx.db.user().iter()
-            .find(|u| u.identity.to_string() == buyer_id)
+            .find(|u| u.identity.to_hex().to_string() == buyer_id)
             .ok_or("Buyer not found")?;
         let seller = ctx.db.user().iter()
-            .find(|u| u.identity.to_string() == seller_id)
+            .find(|u| u.identity.to_hex().to_string() == seller_id)
             .ok_or("Seller not found")?;
         
         // Check buyer has enough money
@@ -1102,8 +1129,7 @@ pub fn set_vote_for_sale(
     price: f64,
 ) -> Result<(), String> {
     if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
-        // Verify caller owns the vote
-        let caller_id = ctx.sender().to_string();
+        let caller_id = ctx.sender().to_hex().to_string();
         if vote.player_id != caller_id {
             return Err("You don't own this vote".to_string());
         }
@@ -1129,8 +1155,7 @@ pub fn remove_vote_from_sale(
     vote_id: i32,
 ) -> Result<(), String> {
     if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
-        // Verify caller owns the vote
-        let caller_id = ctx.sender().to_string();
+        let caller_id = ctx.sender().to_hex().to_string();
         if vote.player_id != caller_id {
             return Err("You don't own this vote".to_string());
         }
@@ -1233,10 +1258,10 @@ pub fn purchase_guarantee(
         
         // Get buyer and seller
         let buyer = ctx.db.user().iter()
-            .find(|u| u.identity.to_string() == buyer_id)
+            .find(|u| u.identity.to_hex().to_string() == buyer_id)
             .ok_or("Buyer not found")?;
         let seller = ctx.db.user().iter()
-            .find(|u| u.identity.to_string() == seller_id)
+            .find(|u| u.identity.to_hex().to_string() == seller_id)
             .ok_or("Seller not found")?;
         
         // Check buyer has enough money
@@ -1312,7 +1337,7 @@ pub fn set_vote_color(
     
     if let Some(mut vote) = ctx.db.vote().id().find(vote_id) {
         let caller_id = ctx.sender().to_hex().to_string();
-        if vote.player_id != caller_id && vote.player_id != ctx.sender().to_string() {
+        if vote.player_id != caller_id {
             return Err("You don't own this vote".to_string());
         }
         
@@ -1409,7 +1434,7 @@ pub fn process_round_votes(
                 for vote in &votes {
                     if let Some(color) = &vote.color {
                         let player_id = &vote.player_id;
-                        if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_string() == *player_id) {
+                        if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_hex().to_string() == *player_id) {
                             let mut updated_user = user.clone();
                             updated_user.wallet_balance += pot_per_vote;
                             ctx.db.user().identity().update(updated_user);
@@ -1446,7 +1471,7 @@ pub fn process_round_votes(
             
             let pot_per_winner = room.pot_size / remaining_players.len() as f64;
             for player_id in remaining_players {
-                if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_string() == *player_id) {
+                if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_hex().to_string() == *player_id) {
                     let mut updated_user = user.clone();
                     updated_user.wallet_balance += pot_per_winner;
                     updated_user.total_profit_loss += pot_per_winner - room.buyin_amount;
@@ -1706,7 +1731,7 @@ pub fn leave_room(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
                 if !remaining.is_empty() {
                     let pot_per_winner = room.pot_size / remaining.len() as f64;
                     for winner_id in &remaining {
-                        if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_string() == *winner_id) {
+                        if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_hex().to_string() == *winner_id) {
                             let mut updated_user = user.clone();
                             updated_user.wallet_balance += pot_per_winner;
                             updated_user.total_profit_loss += pot_per_winner - room.buyin_amount;
@@ -1729,6 +1754,34 @@ pub fn leave_room(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
             }
         }
         
+        // Cancel open trade offers from this player
+        let player_offers: Vec<TradeOffer> = ctx.db.trade_offer().iter()
+            .filter(|o| o.room_id == room_id && o.from_player == player_id && o.status == "open")
+            .collect();
+        for mut offer in player_offers {
+            offer.status = "cancelled".to_string();
+            ctx.db.trade_offer().id().update(offer);
+        }
+
+        // Remove chat permissions for the room's chat
+        let chat_room_name = format!("game_{}", room_id);
+        let perms: Vec<ChatPermission> = ctx.db.chat_permission().iter()
+            .filter(|p| p.room_name == chat_room_name && p.identity == ctx.sender())
+            .collect();
+        for perm in perms {
+            ctx.db.chat_permission().id().delete(perm.id);
+        }
+
+        // Clean up player's units from this room
+        let player_units: Vec<Unit> = ctx.db.unit().iter()
+            .filter(|u| u.room_id == room_id && u.owner_id == player_id)
+            .collect();
+        for unit in &player_units {
+            ctx.db.unit_inventory().unit_id().delete(unit.id);
+            ctx.db.unit_stats().unit_id().delete(unit.id);
+            ctx.db.unit().id().delete(unit.id);
+        }
+
         // If lobby is now empty, clean up
         if room.member_ids.is_empty() {
             room.game_status = "completed".to_string();
@@ -1843,7 +1896,7 @@ pub fn accept_trade_offer(
         
         // Verify buyer has funds
         let buyer = ctx.db.user().iter()
-            .find(|u| u.identity.to_string() == accepter_id)
+            .find(|u| u.identity.to_hex().to_string() == accepter_id)
             .ok_or("Buyer not found")?;
         if buyer.wallet_balance < price {
             return Err("Insufficient funds".to_string());
@@ -1864,7 +1917,7 @@ pub fn accept_trade_offer(
         ctx.db.user().identity().update(updated_buyer);
         
         let seller = ctx.db.user().iter()
-            .find(|u| u.identity.to_string() == offer.from_player)
+            .find(|u| u.identity.to_hex().to_string() == offer.from_player)
             .ok_or("Seller not found")?;
         let mut updated_seller = seller.clone();
         updated_seller.wallet_balance += seller_receives;
@@ -1905,7 +1958,7 @@ pub fn accept_trade_offer(
         
         // Verify buyer still has funds
         let buyer = ctx.db.user().iter()
-            .find(|u| u.identity.to_string() == offer.from_player)
+            .find(|u| u.identity.to_hex().to_string() == offer.from_player)
             .ok_or("Buyer not found")?;
         if buyer.wallet_balance < price {
             return Err("Buyer no longer has sufficient funds".to_string());
@@ -1919,7 +1972,7 @@ pub fn accept_trade_offer(
         ctx.db.user().identity().update(updated_buyer);
         
         let seller = ctx.db.user().iter()
-            .find(|u| u.identity.to_string() == accepter_id)
+            .find(|u| u.identity.to_hex().to_string() == accepter_id)
             .ok_or("Seller not found")?;
         let mut updated_seller = seller.clone();
         updated_seller.wallet_balance += seller_receives;
@@ -2148,11 +2201,16 @@ pub fn create_storage_building(
     position: Vector2,
     capacity: i32,
 ) -> Result<(), String> {
-    // Create storage building unit
+    let caller_id = ctx.sender().to_hex().to_string();
+    let room = ctx.db.game_room().id().find(room_id)
+        .ok_or("Room not found")?;
+    if !room.member_ids.contains(&caller_id) {
+        return Err("You are not a member of this room".to_string());
+    }
     let storage = Unit {
         id: 0, // Will be auto-incremented
         room_id,
-        owner_id: ctx.sender().to_string(),
+        owner_id: ctx.sender().to_hex().to_string(),
         unit_type: "storage".to_string(),
         position,
         dimensions: Vector2 { x: 40.0, y: 40.0 }, // Larger than regular units
@@ -2205,7 +2263,12 @@ pub fn transfer_resources(
     resource_type: String,
     amount: i32,
 ) -> Result<(), String> {
-    // Get source and target inventories
+    let caller_id = ctx.sender().to_hex().to_string();
+    let source_unit = ctx.db.unit().id().find(source_id)
+        .ok_or("Source unit not found")?;
+    if source_unit.owner_id != caller_id {
+        return Err("You don't own the source unit".to_string());
+    }
     if let (Some(mut source_inv), Some(mut target_inv)) = (
         ctx.db.unit_inventory().unit_id().find(source_id),
         ctx.db.unit_inventory().unit_id().find(target_id)

@@ -47,3 +47,6 @@ gitignore
 
 # E2E test logs and screenshots
 /test-logs
+
+# Source asset packs (raw KayKit kits — curated subset lives in public/assets/)
+/assets/

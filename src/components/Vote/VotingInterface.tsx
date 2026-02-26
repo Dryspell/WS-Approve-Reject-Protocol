@@ -1,7 +1,7 @@
-import { Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect, untrack } from "solid-js";
+import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect, untrack } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import type { User, GameRoom, Vote, Transaction } from "~/module_bindings/types";
+import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import RoundTimer from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
@@ -15,7 +15,9 @@ import { AdminPanel } from "~/components/dev/AdminPanel";
 import { ToastHelper } from "~/lib/toast-helpers";
 import { sounds } from "~/lib/sounds";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import ColonyViewport, { type ColonyUnit, type TeamColor } from "../game/ColonyViewport";
+import ColonyViewport, { type ColonyUnit, type ColonyResource, type TeamColor } from "../game/ColonyViewport";
+import UnitContextPanel from "../game/UnitContextPanel";
+import { characterForIndex } from "~/lib/asset-loader";
 import { TID } from "~/lib/test-ids";
 
 interface VotingInterfaceProps {
@@ -28,31 +30,50 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [votes, setVotes] = createSignal<Vote[]>([]);
   const [allPlayers, setAllPlayers] = createSignal<User[]>([]);
   const [transactions, setTransactions] = createSignal<Transaction[]>([]);
+  const [serverUnits, setServerUnits] = createSignal<Unit[]>([]);
+  const [serverResources, setServerResources] = createSignal<Resource[]>([]);
+  const [unitStats, setUnitStats] = createSignal<UnitStats[]>([]);
+  const [unitInventories, setUnitInventories] = createSignal<UnitInventory[]>([]);
+  const [unitTaskQueues, setUnitTaskQueues] = createSignal<UnitTaskQueue[]>([]);
   const [draggedVote, setDraggedVote] = createSignal<Vote | null>(null);
   const [roundProcessing, setRoundProcessing] = createSignal(false);
   const [showEliminationModal, setShowEliminationModal] = createSignal(false);
   const [lastProcessedRound, setLastProcessedRound] = createSignal(0);
 
+  let roundCheckInterval: ReturnType<typeof setInterval> | null = null;
+
   // Auto-process rounds when timer expires
   createEffect(() => {
-    if (!props.room.startTime || props.room.gameStatus !== "active") return;
+    if (!props.room.startTime || props.room.gameStatus !== "active") {
+      if (roundCheckInterval) {
+        clearInterval(roundCheckInterval);
+        roundCheckInterval = null;
+      }
+      return;
+    }
 
-    const checkRoundEnd = setInterval(() => {
+    if (roundCheckInterval) clearInterval(roundCheckInterval);
+
+    roundCheckInterval = setInterval(() => {
       untrack(() => {
         const now = Date.now();
         const roundStart = Number(props.room.startTime);
         const elapsed = Math.floor((now - roundStart) / 1000);
         const timeLeft = props.room.roundDuration - elapsed;
 
-        // Trigger round processing when time is up (with 1 second buffer)
         if (timeLeft <= 0 && !roundProcessing()) {
           setRoundProcessing(true);
           processRound();
         }
       });
-    }, 1000); // Check every second
+    }, 1000);
+  });
 
-    onCleanup(() => clearInterval(checkRoundEnd));
+  onCleanup(() => {
+    if (roundCheckInterval) {
+      clearInterval(roundCheckInterval);
+      roundCheckInterval = null;
+    }
   });
 
   const processRound = async () => {
@@ -118,6 +139,36 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
       setTransactions((prev) => [...prev, transaction]);
     });
 
+    // Subscribe to units
+    connection.db.unit.onInsert((ctx, unit) => {
+      setServerUnits((prev) => [...prev, unit]);
+    });
+    connection.db.unit.onUpdate((ctx, oldUnit, newUnit) => {
+      setServerUnits((prev) => prev.map((u) => (u.id === newUnit.id ? newUnit : u)));
+    });
+    connection.db.unit.onDelete((ctx, unit) => {
+      setServerUnits((prev) => prev.filter((u) => u.id !== unit.id));
+    });
+
+    // Subscribe to resources
+    connection.db.resource.onInsert((ctx, resource) => {
+      setServerResources((prev) => [...prev, resource]);
+    });
+    connection.db.resource.onUpdate((ctx, oldRes, newRes) => {
+      setServerResources((prev) => prev.map((r) => (r.id === newRes.id ? newRes : r)));
+    });
+    connection.db.resource.onDelete((ctx, resource) => {
+      setServerResources((prev) => prev.filter((r) => r.id !== resource.id));
+    });
+
+    // Subscribe to unit stats
+    connection.db.unit_stats.onInsert((ctx, stats) => {
+      setUnitStats((prev) => [...prev, stats]);
+    });
+    connection.db.unit_stats.onUpdate((ctx, oldStats, newStats) => {
+      setUnitStats((prev) => prev.map((s) => (s.unitId === newStats.unitId ? newStats : s)));
+    });
+
     // Initial load of all data
     const initialVotes = Array.from(connection.db.vote.iter());
     setVotes(initialVotes);
@@ -127,6 +178,31 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
 
     const initialTransactions = Array.from(connection.db.transaction.iter());
     setTransactions(initialTransactions);
+
+    // Subscribe to inventories
+    connection.db.unit_inventory.onInsert((ctx, inv) => {
+      setUnitInventories((prev) => [...prev, inv]);
+    });
+    connection.db.unit_inventory.onUpdate((ctx, oldInv, newInv) => {
+      setUnitInventories((prev) => prev.map((i) => (i.unitId === newInv.unitId ? newInv : i)));
+    });
+
+    // Subscribe to task queues
+    connection.db.unit_task_queue.onInsert((ctx, task) => {
+      setUnitTaskQueues((prev) => [...prev, task]);
+    });
+    connection.db.unit_task_queue.onUpdate((ctx, oldTask, newTask) => {
+      setUnitTaskQueues((prev) => prev.map((t) => (t.id === newTask.id ? newTask : t)));
+    });
+    connection.db.unit_task_queue.onDelete((ctx, task) => {
+      setUnitTaskQueues((prev) => prev.filter((t) => t.id !== task.id));
+    });
+
+    setServerUnits(Array.from(connection.db.unit.iter()));
+    setServerResources(Array.from(connection.db.resource.iter()));
+    setUnitStats(Array.from(connection.db.unit_stats.iter()));
+    setUnitInventories(Array.from(connection.db.unit_inventory.iter()));
+    setUnitTaskQueues(Array.from(connection.db.unit_task_queue.iter()));
 
     // Set initial round tracking
     setLastProcessedRound(props.room.currentRound);
@@ -169,20 +245,24 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     
     const red = currentRoundVotes.filter((v) => v.color === "red").length;
     const blue = currentRoundVotes.filter((v) => v.color === "blue").length;
-    const minority = red < blue ? "red" : blue < red ? "blue" : "red"; // In case of tie, doesn't matter
+    const minority: "red" | "blue" | "tie" =
+      red < blue ? "red" : blue < red ? "blue" : "tie";
 
-    return { red, blue, minority: minority as "red" | "blue" };
+    return { red, blue, minority };
   };
 
-  // Handle vote color setting
   const handleSetVoteColor = async (voteId: number, color: string) => {
+    if (color !== "red" && color !== "blue") {
+      ToastHelper.error("Invalid vote color");
+      return;
+    }
     const connection = conn();
     if (!connection) return;
 
     try {
       connection.reducers.setVoteColor({ voteId, color });
       ToastHelper.voteColorChanged(voteId, color);
-      sounds.voteSet(color as 'red' | 'blue');
+      sounds.voteSet(color);
     } catch (error) {
       ToastHelper.error("Failed to set vote color");
       sounds.error();
@@ -235,9 +315,40 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     }
   };
 
+  const roomUnits = createMemo(() =>
+    serverUnits().filter(
+      (u) => u.roomId === props.room.id && u.unitType === "minion",
+    ),
+  );
+
+  const roomResources = createMemo(() =>
+    serverResources().filter((r) => r.roomId === props.room.id),
+  );
+
+  const getStats = (unitId: number) =>
+    unitStats().find((s) => s.unitId === unitId);
+
   const colonyUnits = createMemo<ColonyUnit[]>(() => {
-    const GROUND = 80;
-    const half = GROUND / 2 - 4;
+    const units = roomUnits();
+
+    // If server has units for this room, use them
+    if (units.length > 0) {
+      return units.map((unit, i) => {
+        const stats = getStats(unit.id);
+        return {
+          id: unit.id,
+          team: (unit.voteColor || "unset") as TeamColor,
+          x: unit.position.x,
+          z: unit.position.y,
+          characterClass: characterForIndex(i),
+          taskType: unit.taskType ?? undefined,
+          health: stats?.health,
+          maxHealth: stats?.maxHealth,
+        };
+      });
+    }
+
+    // Fallback: derive from votes (pre-game or when server hasn't spawned units)
     return myVotes().map((vote, i) => {
       const angle = (i / Math.max(myVotes().length, 1)) * Math.PI * 2;
       const radius = 8 + (i % 3) * 5;
@@ -246,14 +357,71 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         team: (vote.color || "unset") as TeamColor,
         x: Math.cos(angle) * radius,
         z: Math.sin(angle) * radius,
+        characterClass: characterForIndex(i),
       };
     });
   });
 
+  const colonyResources = createMemo<ColonyResource[]>(() =>
+    roomResources().map((r) => ({
+      id: r.id,
+      type: r.resourceType,
+      x: r.position.x,
+      z: r.position.y,
+      amount: r.amount,
+      maxAmount: r.maxAmount,
+    })),
+  );
+
   const handleViewportSetTeam = (ids: number[], team: TeamColor) => {
-    const color = team === "unset" ? "" : team;
+    if (team === "unset") return;
     for (const id of ids) {
-      handleSetVoteColor(id, color);
+      handleSetVoteColor(id, team);
+    }
+  };
+
+  // Selected unit context data
+  const selectedUnit = createMemo(() => {
+    const ids = viewportSelectedIds();
+    if (ids.length !== 1) return null;
+    return serverUnits().find((u) => u.id === ids[0]) ?? null;
+  });
+
+  const selectedUnitStats = createMemo(() => {
+    const unit = selectedUnit();
+    return unit ? unitStats().find((s) => s.unitId === unit.id) : undefined;
+  });
+
+  const selectedUnitInventory = createMemo(() => {
+    const unit = selectedUnit();
+    return unit ? unitInventories().find((i) => i.unitId === unit.id) : undefined;
+  });
+
+  const selectedUnitTasks = createMemo(() => {
+    const unit = selectedUnit();
+    return unit ? unitTaskQueues().filter((t) => t.unitId === unit.id) : [];
+  });
+
+  const handleCancelTask = (taskId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.cancelUnitTask({ taskId });
+    } catch (error) {
+      ToastHelper.error("Failed to cancel task");
+    }
+  };
+
+  const handleSetUnitVoteColor = (color: string) => {
+    if (color !== "red" && color !== "blue") return;
+    const unit = selectedUnit();
+    if (!unit) return;
+    const connection = conn();
+    if (!connection) return;
+    try {
+      connection.reducers.setUnitVoteColor({ unitId: unit.id, color });
+    } catch (error) {
+      ToastHelper.error("Failed to set vote color");
     }
   };
 
@@ -278,6 +446,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           >
             <ColonyViewport
               units={colonyUnits()}
+              resources={colonyResources().length > 0 ? colonyResources() : undefined}
               selectedIds={viewportSelectedIds}
               onSelect={setViewportSelectedIds}
               onSetTeam={handleViewportSetTeam}
@@ -286,6 +455,21 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         </div>
 
         {/* ===== HUD OVERLAYS (layer 10+) ===== */}
+
+        {/* Unit Context Panel (right side) */}
+        <Show when={selectedUnit()}>
+          <div class="absolute right-4 top-16 z-30 pointer-events-none">
+            <UnitContextPanel
+              unit={selectedUnit()!}
+              stats={selectedUnitStats()}
+              inventory={selectedUnitInventory()}
+              tasks={selectedUnitTasks()}
+              onClose={() => setViewportSelectedIds([])}
+              onSetVoteColor={handleSetUnitVoteColor}
+              onCancelTask={handleCancelTask}
+            />
+          </div>
+        </Show>
 
         {/* Dev tools */}
         <div class="absolute right-2 top-14 z-40 flex gap-1">

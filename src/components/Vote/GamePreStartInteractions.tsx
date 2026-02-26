@@ -110,19 +110,19 @@ export default function GamePreStartInteractions(props: {
   return (
     <div class="mx-auto max-w-2xl p-6 space-y-6">
       {/* Room Header Card */}
-      <div class="rounded-xl border bg-white p-6 shadow-sm" data-testid={TID.lobbyHeader}>
+      <div class="rounded-xl border border-white/10 bg-[#1a1a2e]/80 backdrop-blur-md p-6 shadow-lg" data-testid={TID.lobbyHeader}>
         <div class="flex items-start justify-between">
           <div>
-            <h2 class="text-xl font-bold text-slate-800">{room.name}</h2>
-            <div class="mt-1 flex gap-3 text-sm text-slate-500">
+            <h2 class="text-xl font-bold text-white">{room.name}</h2>
+            <div class="mt-1 flex gap-3 text-sm text-slate-400">
               <span>{memberIds.length} player{memberIds.length !== 1 ? "s" : ""}</span>
               <span>${room.buyinAmount.toFixed(2)} buy-in</span>
               <span>{room.votesPerPlayer || 5} votes each</span>
             </div>
           </div>
           <div class="text-right">
-            <div class="text-xs font-medium uppercase text-amber-600">Pot</div>
-            <div class="text-3xl font-bold text-amber-700">
+            <div class="text-xs font-medium uppercase text-amber-400">Pot</div>
+            <div class="text-3xl font-bold text-amber-300">
               ${(room.buyinAmount * memberIds.length).toFixed(2)}
             </div>
           </div>
@@ -131,15 +131,15 @@ export default function GamePreStartInteractions(props: {
         {/* Room settings row */}
         <div class="mt-3 flex gap-2">
           <Show when={room.allowRebuy}>
-            <Badge variant="outline" class="text-xs">Re-buy allowed</Badge>
+            <Badge variant="outline" class="text-xs border-white/20 text-slate-300">Re-buy allowed</Badge>
           </Show>
           <Show when={room.allowMidgameJoin}>
-            <Badge variant="outline" class="text-xs">Mid-game join</Badge>
+            <Badge variant="outline" class="text-xs border-white/20 text-slate-300">Mid-game join</Badge>
           </Show>
           <Button
             variant="ghost"
             size="sm"
-            class="ml-auto text-xs text-slate-400"
+            class="ml-auto text-xs text-slate-400 hover:text-white"
             onClick={() => setShowPresets(!showPresets())}
           >
             {showPresets() ? "Hide presets" : "Game modes"}
@@ -166,7 +166,7 @@ export default function GamePreStartInteractions(props: {
           <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
             Players
           </span>
-          <span class="text-xs text-slate-400">
+          <span class="text-xs text-slate-500">
             {readyCount()}/{memberIds.length} ready
           </span>
         </div>
@@ -178,25 +178,25 @@ export default function GamePreStartInteractions(props: {
               const name = () => resolvePlayerName(memberId, props.conn());
               return (
                 <div
-                  class="flex flex-col items-center gap-1.5 rounded-lg border bg-white p-3 shadow-sm transition-all"
+                  class="flex flex-col items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 p-3 transition-all"
                   classList={{
-                    "ring-2 ring-blue-400 ring-offset-1": isMe(),
-                    "border-green-200 bg-green-50/50": isReady() && !isMe(),
+                    "ring-2 ring-blue-400/60": isMe(),
+                    "border-green-500/30 bg-green-500/10": isReady() && !isMe(),
                   }}
                   data-testid={TID.playerCard}
                 >
                   <div
                     class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
                     classList={{
-                      "bg-green-500": isReady(),
-                      "bg-slate-300": !isReady(),
+                      "bg-green-600": isReady(),
+                      "bg-slate-600": !isReady(),
                     }}
                   >
                     {name()[0].toUpperCase()}
                   </div>
-                  <div class="truncate text-xs font-medium text-slate-700 max-w-full">
+                  <div class="truncate text-xs font-medium text-slate-300 max-w-full">
                     {name()}
-                    {isMe() && <span class="text-blue-500"> (you)</span>}
+                    {isMe() && <span class="text-blue-400"> (you)</span>}
                   </div>
                   <Badge
                     variant={isReady() ? "default" : "secondary"}
@@ -226,7 +226,7 @@ export default function GamePreStartInteractions(props: {
           ? "Ready (click to unready)" 
           : "Ready to Play?"}
       </Button>
-      <p class="text-center text-xs text-slate-400">
+      <p class="text-center text-xs text-slate-500">
         {userIsReady(props.roomId, getUserIdForServer() || "", props.roomsPreStart)
           ? `Waiting for ${memberIds.length - readyCount()} more player${memberIds.length - readyCount() !== 1 ? "s" : ""}...`
           : `You'll pay $${room.buyinAmount.toFixed(2)} when the game starts`}

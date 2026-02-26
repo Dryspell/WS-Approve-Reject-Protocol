@@ -157,6 +157,19 @@ const VoteBox: Component = () => {
       }));
     });
 
+    // Listen for game room deletions
+    connection.db.game_room.onDelete((ctx, room) => {
+      console.log("🗑️ Game room deleted:", room.id);
+      setRooms(prev => {
+        const next = { ...prev };
+        delete next[room.id];
+        return next;
+      });
+      if (currentRoom() === String(room.id)) {
+        setCurrentRoom("");
+      }
+    });
+
     // Listen for ready state insertions
     connection.db.ready_state.onInsert((ctx, readyState) => {
       console.log("✅ New ready state inserted:", {
@@ -164,9 +177,7 @@ const VoteBox: Component = () => {
         readyUserIds: readyState.readyUserIds,
         round: readyState.round
       });
-      setRoomsReadyState({
-        [readyState.roomId]: readyState
-      });
+      setRoomsReadyState(readyState.roomId, readyState);
     });
 
     // Listen for ready state updates
@@ -177,9 +188,7 @@ const VoteBox: Component = () => {
         newReadyUserIds: newState.readyUserIds,
         round: newState.round
       });
-      setRoomsReadyState({
-        [newState.roomId]: newState
-      });
+      setRoomsReadyState(newState.roomId, newState);
     });
 
     // Mark subscriptions as set up

@@ -175,11 +175,35 @@ Summary of testability based on current implementation:
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Three.js spike evaluation | Implemented | Compared Canvas, Three.js, Pixi.js; committed to Three.js |
-| ColonyViewport component | Implemented | Low-poly 3D with spring physics, selection, drag-to-move |
+| ColonyViewport component | Implemented | KayKit character models (GLB), spring physics, selection, drag-to-move |
 | Full-screen viewport layout | Implemented | 3D viewport fills screen, UI overlays as glassmorphism HUD |
 | Collapsible HUD panels | Implemented | Players (left), Market (right), Votes (bottom center) |
+| KayKit asset integration | Implemented | Adventurers (6 characters), Dungeon (structures), ResourceBits (resource nodes) |
+| Asset loader with caching | Implemented | GLTFLoader + SkeletonUtils.clone, LoadingManager, progress tracking, CDN-ready |
+| Character animations | Implemented | Idle/walk transitions, animation mixer per unit, shared animation rig |
+| Team-color indicators | Implemented | Colored ring at feet, red/blue team banners in environment |
+| Server-driven units | Implemented | Unit table data drives viewport; fallback to vote-derived units |
+| Server-driven resources | Implemented | Resource table maps to KayKit ResourceBits models |
+| Unit Context Panel | Implemented | Stats, inventory, tasks, vote color on unit selection |
+| Health bars | Implemented | Billboard health bars above units from UnitStats |
+| Loading progress overlay | Implemented | Shows asset loading progress with animated bar |
 | Shared test-id contract | Implemented | `src/lib/test-ids.ts` — constants shared between UI and E2E tests |
 | DRY E2E test helpers | Implemented | Page objects + game flow helpers eliminate raw selectors |
+| Equipment system | Not Started | Needs server-side Equipment table + weapon/armor attachment to character bones |
+| Building types | Not Started | Forge, Workshop, Barracks — need server tables |
+| Task animations | Partial | Walk/idle transitions work; gather/craft animations not yet connected |
+
+---
+
+## Site Structure & Navigation
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Dark-themed landing page | Implemented | Hero, How It Works, Features, CTA sections |
+| Guest play flow | Implemented | GuestNamePrompt modal, auto-generated guest names |
+| Restyled Nav | Implemented | Dark theme, Play/Ranks/Profile links, no Chat/Social |
+| Chat overlay (Messenger-style) | Implemented | Floating panel with friends, DMs, chat rooms, notification badges |
+| Global chat availability | Implemented | ChatOverlay mounted in AppShell, works on all pages |
 
 ---
 
