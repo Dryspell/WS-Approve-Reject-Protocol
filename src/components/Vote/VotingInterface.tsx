@@ -1,7 +1,7 @@
 import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect, untrack } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue } from "~/module_bindings/types";
+import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue, EndRoundVote } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import RoundTimer from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
@@ -15,9 +15,9 @@ import { AdminPanel } from "~/components/dev/AdminPanel";
 import { ToastHelper } from "~/lib/toast-helpers";
 import { sounds } from "~/lib/sounds";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import ColonyViewport, { type ColonyUnit, type ColonyResource, type TeamColor } from "../game/ColonyViewport";
+import ColonyViewport, { type ColonyUnit, type ColonyResource, type TeamColor, type OtherPlayerAvatar } from "../game/ColonyViewport";
 import UnitContextPanel from "../game/UnitContextPanel";
-import { characterForIndex } from "~/lib/asset-loader";
+import { characterForIndex, type CharacterClass } from "~/lib/asset-loader";
 import { TID } from "~/lib/test-ids";
 
 interface VotingInterfaceProps {
@@ -39,6 +39,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [roundProcessing, setRoundProcessing] = createSignal(false);
   const [showEliminationModal, setShowEliminationModal] = createSignal(false);
   const [lastProcessedRound, setLastProcessedRound] = createSignal(0);
+  const [endRoundVotes, setEndRoundVotes] = createSignal<EndRoundVote[]>([]);
+  const [otherPlayerAvatars, setOtherPlayerAvatars] = createSignal<OtherPlayerAvatar[]>([]);
 
   let roundCheckInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -198,11 +200,41 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
       setUnitTaskQueues((prev) => prev.filter((t) => t.id !== task.id));
     });
 
+    // Subscribe to end-round votes
+    connection.db.end_round_vote.onInsert((ctx, erv) => {
+      setEndRoundVotes((prev) => [...prev, erv]);
+    });
+    connection.db.end_round_vote.onDelete((ctx, erv) => {
+      setEndRoundVotes((prev) => prev.filter((v) => v.id !== erv.id));
+    });
+
+    // Subscribe to player positions
+    const refreshPlayerPositions = () => {
+      const myId = props.currentUser.identity.toHexString();
+      const positions = Array.from(connection.db.player_position.iter())
+        .filter(p => p.roomId === props.room.id && p.identity.toHexString() !== myId)
+        .map((p, i) => ({
+          id: p.identity.toHexString(),
+          name: allPlayers().find(u => u.identity.isEqual(p.identity))?.name || `Player ${i + 1}`,
+          characterClass: characterForIndex(i + 1) as CharacterClass,
+          x: p.x,
+          z: p.z,
+          rotationY: p.rotationY,
+          isMoving: p.isMoving,
+        }));
+      setOtherPlayerAvatars(positions);
+    };
+    connection.db.player_position.onInsert(() => refreshPlayerPositions());
+    connection.db.player_position.onUpdate(() => refreshPlayerPositions());
+    connection.db.player_position.onDelete(() => refreshPlayerPositions());
+
     setServerUnits(Array.from(connection.db.unit.iter()));
     setServerResources(Array.from(connection.db.resource.iter()));
     setUnitStats(Array.from(connection.db.unit_stats.iter()));
     setUnitInventories(Array.from(connection.db.unit_inventory.iter()));
     setUnitTaskQueues(Array.from(connection.db.unit_task_queue.iter()));
+    setEndRoundVotes(Array.from(connection.db.end_round_vote.iter()));
+    refreshPlayerPositions();
 
     // Set initial round tracking
     setLastProcessedRound(props.room.currentRound);
@@ -338,8 +370,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         return {
           id: unit.id,
           team: (unit.voteColor || "unset") as TeamColor,
-          x: unit.position.x,
-          z: unit.position.y,
+          x: unit.position.x - 50,
+          z: unit.position.y - 50,
           characterClass: characterForIndex(i),
           taskType: unit.taskType ?? undefined,
           health: stats?.health,
@@ -366,8 +398,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     roomResources().map((r) => ({
       id: r.id,
       type: r.resourceType,
-      x: r.position.x,
-      z: r.position.y,
+      x: r.position.x - 50,
+      z: r.position.y - 50,
       amount: r.amount,
       maxAmount: r.maxAmount,
     })),
@@ -425,33 +457,58 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     }
   };
 
+  const endRoundVotesForCurrentRound = createMemo(() =>
+    endRoundVotes().filter(
+      (v) => v.roomId === props.room.id && v.round === props.room.currentRound,
+    ),
+  );
+
+  const hasVotedEndRound = createMemo(() =>
+    endRoundVotesForCurrentRound().some(
+      (v) => v.userId === props.currentUser.identity.toHexString(),
+    ),
+  );
+
+  const handleVoteEndRound = async () => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      await connection.reducers.voteEndRound({ roomId: props.room.id });
+    } catch (error: any) {
+      ToastHelper.error(error?.message || "Failed to vote to end round");
+    }
+  };
+
   const [playersOpen, setPlayersOpen] = createSignal(true);
   const [marketOpen, setMarketOpen] = createSignal(false);
 
+  const handleAvatarPositionUpdate = (x: number, z: number, rotY: number, moving: boolean) => {
+    const connection = conn();
+    if (!connection || !connected()) return;
+    connection.reducers.updatePlayerPosition({
+      roomId: props.room.id,
+      x,
+      z,
+      rotationY: rotY,
+      isMoving: moving,
+    });
+  };
+
   return (
     <ErrorBoundary>
-      <div class="relative h-screen w-screen overflow-hidden bg-[#1a1a2e]">
+      <div class="fixed inset-0 z-50 overflow-hidden bg-[#1a1a2e]">
         {/* ===== FULL-SCREEN 3D VIEWPORT (layer 0) ===== */}
         <div class="absolute inset-0 z-0">
-          <Show
-            when={myVotes().length > 0}
-            fallback={
-              <div class="flex h-full w-full items-center justify-center text-slate-500">
-                <div class="text-center">
-                  <div class="text-6xl mb-3 opacity-20">🏰</div>
-                  <p class="text-sm opacity-60">Waiting for votes to be assigned...</p>
-                </div>
-              </div>
-            }
-          >
-            <ColonyViewport
-              units={colonyUnits()}
-              resources={colonyResources().length > 0 ? colonyResources() : undefined}
-              selectedIds={viewportSelectedIds}
-              onSelect={setViewportSelectedIds}
-              onSetTeam={handleViewportSetTeam}
-            />
-          </Show>
+          <ColonyViewport
+            units={colonyUnits()}
+            resources={colonyResources().length > 0 ? colonyResources() : undefined}
+            selectedIds={viewportSelectedIds}
+            onSelect={setViewportSelectedIds}
+            playerName={props.currentUser.name || "Player"}
+            otherPlayers={otherPlayerAvatars()}
+            onPositionUpdate={handleAvatarPositionUpdate}
+            onSetTeam={handleViewportSetTeam}
+          />
         </div>
 
         {/* ===== HUD OVERLAYS (layer 10+) ===== */}
@@ -503,6 +560,24 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               roundDuration={props.room.roundDuration}
             />
           </div>
+
+          <Show when={props.room.gameStatus === "active" && !props.room.eliminatedPlayers.includes(props.currentUser.identity.toHexString())}>
+            <Button
+              size="sm"
+              variant={hasVotedEndRound() ? "default" : "outline"}
+              class={hasVotedEndRound()
+                ? "bg-green-600/80 text-white text-xs px-2 py-1 hover:bg-green-500 border-green-500/50"
+                : "text-white/70 border-white/20 text-xs px-2 py-1 hover:bg-white/10 hover:text-white"}
+              onClick={handleVoteEndRound}
+              disabled={hasVotedEndRound()}
+              data-testid={TID.endRoundBtn}
+            >
+              {hasVotedEndRound() ? "Ready" : "End Round"}
+              <span class="ml-1 text-[10px] opacity-70" data-testid={TID.endRoundCount}>
+                {endRoundVotesForCurrentRound().length}/{remainingPlayers().length}
+              </span>
+            </Button>
+          </Show>
 
           <div class="flex-1" />
 

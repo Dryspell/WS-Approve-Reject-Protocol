@@ -1,0 +1,51 @@
+---
+description: Pre-test compilation and validation checks
+globs:
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "e2e/**/*"
+  - "**/*.tsx"
+  - "**/*.ts"
+alwaysApply: false
+---
+## Pre-Test Validation
+
+Before running any E2E tests, always verify that edited files compile cleanly.
+
+### TypeScript / Client-Side
+
+1. After editing any `.ts` or `.tsx` file, run `pnpm typecheck` to catch type and JSX errors before they waste time in browser-based tests.
+2. The standard E2E scripts (`test:e2e`, `test:e2e:p1`, `test:e2e:flow`, `test:e2e:ready`) run `typecheck:warn` which reports errors but does not block (there are pre-existing type errors in legacy files). Use `test:e2e:fast` to skip even the warning check.
+3. When `pnpm typecheck` reports errors, check whether any are in files you just edited. Pre-existing errors in files you didn't touch can be ignored for now; new errors in files you changed must be fixed before proceeding.
+
+```bash
+# Strict check (fails on any error - use after cleaning up pre-existing issues)
+pnpm typecheck
+
+# Standard E2E pipeline (warns but continues)
+pnpm test:e2e
+
+# Quick re-run (skip typecheck entirely)
+pnpm test:e2e:fast
+```
+
+### Rust / Server-Side
+
+1. After editing Rust server code in `server/src/`, run `cargo check` inside `server/` before publishing.
+2. After `spacetime publish`, always regenerate client bindings with `pnpm generate`.
+
+```bash
+cd server && cargo check
+spacetime publish --server local -p . --yes game
+cd .. && pnpm generate
+```
+
+### Workflow Summary
+
+| Step | Command | When |
+|------|---------|------|
+| Typecheck client | `pnpm typecheck` | After any `.ts`/`.tsx` edit |
+| Check server | `cd server && cargo check` | After any `.rs` edit |
+| Publish server | `pnpm publish:local` | After server changes |
+| Regenerate bindings | `pnpm generate` | After `spacetime publish` |
+| Run E2E tests | `pnpm test:e2e` | After all checks pass |

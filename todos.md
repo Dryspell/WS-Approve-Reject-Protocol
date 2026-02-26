@@ -46,7 +46,7 @@
 - [x] **NPM scripts** -- `test:e2e:headed` and `test:e2e:simulate` for quick access
 - [x] **Rich E2E scenarios** -- Standard, Quick (3 votes), No-Rebuy, Tie, and Player Departure scenarios with chat, market, and guarantee interactions
 - [ ] **Add Rust integration tests for `process_round_votes`** (requires running SpacetimeDB)
-- [ ] **Fix any failing E2E tests** after running with dev server
+- [ ] **Fix failing E2E tests** -- 4 priority-1 tests currently failing (see Known E2E Issues below)
 
 ---
 
@@ -82,6 +82,17 @@
 - [ ] Bot players for solo practice
 - [ ] Spectator mode
 - [ ] Clan/guild system
+
+---
+
+## Known E2E Test Failures
+
+The following 4 priority-1 tests are currently failing (12 of 16 pass). Likely root cause: race conditions in SpacetimeDB room state synchronization or DOM overlay elements intercepting pointer events (similar to the `GamePreStartInteractions` fixed/absolute positioning bug).
+
+- [ ] **VG-003**: "Join existing room" -- room tab not visible to second player within timeout; timing/sync issue
+- [ ] **VG-004**: "Multiple players join - pot calculation" -- 5-player room sync; pot display timing
+- [ ] **VG-005**: "Room auto-start when all ready (3+ players)" -- ready state synchronization race condition
+- [ ] **VG-060**: "4 player room setup for tie scenario" -- room tab visibility for multiple players joining in sequence
 
 ---
 

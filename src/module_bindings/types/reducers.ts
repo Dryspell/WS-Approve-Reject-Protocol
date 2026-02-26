@@ -48,7 +48,9 @@ import TransferResourcesReducer from "../transfer_resources_reducer";
 import TransferToBankReducer from "../transfer_to_bank_reducer";
 import TransferVoteOwnershipReducer from "../transfer_vote_ownership_reducer";
 import UnblockUserReducer from "../unblock_user_reducer";
+import UpdatePlayerPositionReducer from "../update_player_position_reducer";
 import UpgradeUnitReducer from "../upgrade_unit_reducer";
+import VoteEndRoundReducer from "../vote_end_round_reducer";
 import WithdrawFromBankReducer from "../withdraw_from_bank_reducer";
 
 export type AcceptFriendRequestParams = __Infer<typeof AcceptFriendRequestReducer>;
@@ -93,6 +95,8 @@ export type TransferResourcesParams = __Infer<typeof TransferResourcesReducer>;
 export type TransferToBankParams = __Infer<typeof TransferToBankReducer>;
 export type TransferVoteOwnershipParams = __Infer<typeof TransferVoteOwnershipReducer>;
 export type UnblockUserParams = __Infer<typeof UnblockUserReducer>;
+export type UpdatePlayerPositionParams = __Infer<typeof UpdatePlayerPositionReducer>;
 export type UpgradeUnitParams = __Infer<typeof UpgradeUnitReducer>;
+export type VoteEndRoundParams = __Infer<typeof VoteEndRoundReducer>;
 export type WithdrawFromBankParams = __Infer<typeof WithdrawFromBankReducer>;
 

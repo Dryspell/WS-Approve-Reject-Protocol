@@ -161,6 +161,24 @@ export async function setMultipleVotes(
   }
 }
 
+// ─── End round early ─────────────────────────────────────────────────────────
+
+/**
+ * All players vote to end the round early, then wait for the round to advance.
+ * This dramatically speeds up tests by skipping the 5-minute round timer.
+ */
+export async function endRoundEarly(
+  { gamePages }: PlayerSet,
+  logStream?: fs.WriteStream,
+) {
+  for (let i = 0; i < gamePages.length; i++) {
+    await gamePages[i].clickEndRound();
+    if (logStream) log(logStream, `Player${i + 1} voted to end round`);
+  }
+  // Small wait for server to process
+  await gamePages[0].page.waitForTimeout(2000);
+}
+
 // ─── Chat flows ──────────────────────────────────────────────────────────────
 
 /**

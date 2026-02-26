@@ -197,6 +197,31 @@ pub struct ReadyState {
     round: i32,
 }
 
+#[table(accessor = end_round_vote, public)]
+pub struct EndRoundVote {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    room_id: i32,
+    user_id: String,
+    round: i32,
+}
+
+// Player avatar positions (lobby + in-game, per room for multi-room support)
+#[table(accessor = player_position, public)]
+#[derive(Clone, Debug)]
+pub struct PlayerPosition {
+    #[primary_key]
+    #[auto_inc]
+    id: i32,
+    identity: Identity,
+    room_id: i32,
+    x: f32,
+    z: f32,
+    rotation_y: f32,
+    is_moving: bool,
+}
+
 // Game resource types
 #[table(accessor = resource, public)]
 #[derive(Clone, Debug)]
@@ -606,6 +631,50 @@ pub fn move_unit(
 }
 
 #[reducer]
+pub fn update_player_position(
+    ctx: &ReducerContext,
+    room_id: i32,
+    x: f32,
+    z: f32,
+    rotation_y: f32,
+    is_moving: bool,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+
+    if let Some(room) = ctx.db.game_room().id().find(room_id) {
+        if !room.member_ids.contains(&caller_id) {
+            return Err("You are not in this room".to_string());
+        }
+    } else {
+        return Err("Room not found".to_string());
+    }
+
+    // Upsert: find existing row for (identity, room_id) or insert new
+    let existing: Option<PlayerPosition> = ctx.db.player_position().iter()
+        .find(|p| p.identity == ctx.sender() && p.room_id == room_id);
+
+    if let Some(mut pos) = existing {
+        pos.x = x;
+        pos.z = z;
+        pos.rotation_y = rotation_y;
+        pos.is_moving = is_moving;
+        ctx.db.player_position().id().update(pos);
+    } else {
+        ctx.db.player_position().insert(PlayerPosition {
+            id: 0,
+            identity: ctx.sender(),
+            room_id,
+            x,
+            z,
+            rotation_y,
+            is_moving,
+        });
+    }
+
+    Ok(())
+}
+
+#[reducer]
 pub fn set_unit_task(
     ctx: &ReducerContext,
     unit_id: i32,
@@ -831,6 +900,14 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
             "Disconnect event for unknown user with identity {:?}",
             ctx.sender()
         );
+    }
+
+    // Clean up all player positions on disconnect
+    let positions: Vec<PlayerPosition> = ctx.db.player_position().iter()
+        .filter(|p| p.identity == ctx.sender())
+        .collect();
+    for pos in positions {
+        ctx.db.player_position().id().delete(pos.id);
     }
 }
 
@@ -1502,6 +1579,64 @@ pub fn process_round_votes(
     Ok(())
 }
 
+#[reducer]
+pub fn vote_end_round(
+    ctx: &ReducerContext,
+    room_id: i32,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+
+    let room = ctx.db.game_room().id().find(room_id)
+        .ok_or("Room not found")?;
+
+    if room.game_status != "active" {
+        return Err("Game is not active".to_string());
+    }
+    if !room.member_ids.contains(&caller_id) {
+        return Err("You are not in this room".to_string());
+    }
+    if room.eliminated_players.contains(&caller_id) {
+        return Err("You have been eliminated".to_string());
+    }
+
+    let current_round = room.current_round;
+
+    let already_voted = ctx.db.end_round_vote().iter()
+        .any(|v| v.room_id == room_id && v.user_id == caller_id && v.round == current_round);
+    if already_voted {
+        return Err("You have already voted to end this round".to_string());
+    }
+
+    ctx.db.end_round_vote().insert(EndRoundVote {
+        id: 0,
+        room_id,
+        user_id: caller_id,
+        round: current_round,
+    });
+
+    let vote_count = ctx.db.end_round_vote().iter()
+        .filter(|v| v.room_id == room_id && v.round == current_round)
+        .count();
+
+    let active_players = room.member_ids.iter()
+        .filter(|id| !room.eliminated_players.contains(id))
+        .count();
+
+    if vote_count >= active_players {
+        // Clean up the end-round votes for this round
+        let votes_to_delete: Vec<i32> = ctx.db.end_round_vote().iter()
+            .filter(|v| v.room_id == room_id && v.round == current_round)
+            .map(|v| v.id)
+            .collect();
+        for vid in votes_to_delete {
+            ctx.db.end_round_vote().id().delete(vid);
+        }
+        process_round_votes(ctx, room_id, current_round)?;
+    }
+
+    Ok(())
+}
+
 #[table(accessor = game_tick_timer, scheduled(game_tick))]
 pub struct GameTickTimer {
     #[primary_key]
@@ -1764,12 +1899,20 @@ pub fn leave_room(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
         }
 
         // Remove chat permissions for the room's chat
-        let chat_room_name = format!("game_{}", room_id);
+        let chat_room_id = format!("game_{}", room_id);
         let perms: Vec<ChatPermission> = ctx.db.chat_permission().iter()
-            .filter(|p| p.room_name == chat_room_name && p.identity == ctx.sender())
+            .filter(|p| p.room_id == chat_room_id && p.user_id == ctx.sender())
             .collect();
         for perm in perms {
             ctx.db.chat_permission().id().delete(perm.id);
+        }
+
+        // Clean up player position for this room
+        let positions: Vec<PlayerPosition> = ctx.db.player_position().iter()
+            .filter(|p| p.identity == ctx.sender() && p.room_id == room_id)
+            .collect();
+        for pos in positions {
+            ctx.db.player_position().id().delete(pos.id);
         }
 
         // Clean up player's units from this room

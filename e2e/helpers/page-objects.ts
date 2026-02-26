@@ -45,6 +45,8 @@ export class VoteGamePage {
   // Voting
   readonly voteRedZone: Locator;
   readonly voteBlueZone: Locator;
+  readonly endRoundBtn: Locator;
+  readonly endRoundCount: Locator;
 
   // Chat (in-game panel)
   readonly chatTab: Locator;
@@ -76,6 +78,8 @@ export class VoteGamePage {
 
     this.voteRedZone = page.locator(tid(TID.voteRed));
     this.voteBlueZone = page.locator(tid(TID.voteBlue));
+    this.endRoundBtn = page.locator(tid(TID.endRoundBtn));
+    this.endRoundCount = page.locator(tid(TID.endRoundCount));
 
     this.chatTab = page.locator(tid(TID.chatTab));
   }
@@ -183,6 +187,14 @@ export class VoteGamePage {
 
   voteChip(id: number): Locator {
     return this.page.locator(tid(TID.voteChip(id)));
+  }
+
+  async clickEndRound() {
+    if (await this.endRoundBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      if (await this.endRoundBtn.isEnabled()) {
+        await this.endRoundBtn.click();
+      }
+    }
   }
 
   // ── Chat (in-game) ──────────────────────────────────────

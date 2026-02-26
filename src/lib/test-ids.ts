@@ -41,6 +41,8 @@ export const TID = {
   voteBlue: 'vote-blue',
   /** Dynamic: `vote-chip-${id}` */
   voteChip: (id: number) => `vote-chip-${id}` as const,
+  endRoundBtn: 'end-round-btn',
+  endRoundCount: 'end-round-count',
 
   // ── Chat ─────────────────────────────────────────────────
   chatMessages: 'chat-messages',

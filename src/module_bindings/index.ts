@@ -76,7 +76,9 @@ import TransferResourcesReducer from "./transfer_resources_reducer";
 import TransferToBankReducer from "./transfer_to_bank_reducer";
 import TransferVoteOwnershipReducer from "./transfer_vote_ownership_reducer";
 import UnblockUserReducer from "./unblock_user_reducer";
+import UpdatePlayerPositionReducer from "./update_player_position_reducer";
 import UpgradeUnitReducer from "./upgrade_unit_reducer";
+import VoteEndRoundReducer from "./vote_end_round_reducer";
 import WithdrawFromBankReducer from "./withdraw_from_bank_reducer";
 
 // Import all procedure arg schemas
@@ -88,6 +90,7 @@ import ChatPermissionRow from "./chat_permission_table";
 import ChatRoomRow from "./chat_room_table";
 import DirectMessageRow from "./direct_message_table";
 import DirectMessageConversationRow from "./direct_message_conversation_table";
+import EndRoundVoteRow from "./end_round_vote_table";
 import FriendRequestRow from "./friend_request_table";
 import FriendshipRow from "./friendship_table";
 import GameEventRow from "./game_event_table";
@@ -95,6 +98,7 @@ import GameRoomRow from "./game_room_table";
 import GuaranteeRow from "./guarantee_table";
 import GuaranteePurchaseRow from "./guarantee_purchase_table";
 import MessageRow from "./message_table";
+import PlayerPositionRow from "./player_position_table";
 import ReadyStateRow from "./ready_state_table";
 import ResourceRow from "./resource_table";
 import TradeOfferRow from "./trade_offer_table";
@@ -176,6 +180,17 @@ const tablesSchema = __schema({
       { name: 'direct_message_conversation_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, DirectMessageConversationRow),
+  end_round_vote: __table({
+    name: 'end_round_vote',
+    indexes: [
+      { name: 'id', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'end_round_vote_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, EndRoundVoteRow),
   friend_request: __table({
     name: 'friend_request',
     indexes: [
@@ -249,6 +264,17 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MessageRow),
+  player_position: __table({
+    name: 'player_position',
+    indexes: [
+      { name: 'id', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'player_position_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, PlayerPositionRow),
   ready_state: __table({
     name: 'ready_state',
     indexes: [
@@ -405,7 +431,9 @@ const reducersSchema = __reducers(
   __reducerSchema("transfer_to_bank", TransferToBankReducer),
   __reducerSchema("transfer_vote_ownership", TransferVoteOwnershipReducer),
   __reducerSchema("unblock_user", UnblockUserReducer),
+  __reducerSchema("update_player_position", UpdatePlayerPositionReducer),
   __reducerSchema("upgrade_unit", UpgradeUnitReducer),
+  __reducerSchema("vote_end_round", VoteEndRoundReducer),
   __reducerSchema("withdraw_from_bank", WithdrawFromBankReducer),
 );
 

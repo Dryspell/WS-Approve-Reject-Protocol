@@ -38,6 +38,16 @@ export interface ColonyResource {
   maxAmount: number;
 }
 
+export interface OtherPlayerAvatar {
+  id: string;
+  name: string;
+  characterClass: CharacterClass;
+  x: number;
+  z: number;
+  rotationY: number;
+  isMoving: boolean;
+}
+
 export interface ColonyViewportProps {
   units: ColonyUnit[];
   resources?: ColonyResource[];
@@ -46,6 +56,10 @@ export interface ColonyViewportProps {
   onMoveUnit?: (id: number, x: number, z: number) => void;
   onSetTeam?: (ids: number[], team: TeamColor) => void;
   onSelectResource?: (id: string) => void;
+  playerName?: string;
+  playerCharacter?: CharacterClass;
+  otherPlayers?: OtherPlayerAvatar[];
+  onPositionUpdate?: (x: number, z: number, rotY: number, moving: boolean) => void;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────
@@ -116,6 +130,19 @@ interface InternalResource {
   maxAmount: number;
 }
 
+interface PlayerAvatar {
+  mesh: THREE.Group;
+  mixer: THREE.AnimationMixer;
+  idleAction?: THREE.AnimationAction;
+  walkAction?: THREE.AnimationAction;
+  isMoving: boolean;
+  nameSprite?: THREE.Sprite;
+}
+
+const AVATAR_MOVE_SPEED = 10;
+const AVATAR_CAMERA_OFFSET = new THREE.Vector3(0, 35, 28);
+const AVATAR_CAMERA_LERP = 0.06;
+
 // ── Mesh factories ──────────────────────────────────────────────────────
 
 function createTeamRing(team: TeamColor): THREE.Mesh {
@@ -182,6 +209,35 @@ function createHealthBar(health: number, maxHealth: number): THREE.Group {
   return group;
 }
 
+function createAvatarNameSprite(name: string): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, 256, 64);
+
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.font = "bold 24px sans-serif";
+  const measured = ctx.measureText(name).width + 20;
+  const rectW = Math.min(measured, 240);
+  ctx.beginPath();
+  ctx.roundRect((256 - rectW) / 2, 8, rectW, 40, 8);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(name, 128, 28, 230);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(4, 1, 1);
+  sprite.position.set(0, 3.2, 0);
+  return sprite;
+}
+
 function createGridTexture(): THREE.CanvasTexture {
   const size = 512;
   const canvas = document.createElement("canvas");
@@ -224,6 +280,10 @@ export default function ColonyViewport(props: ColonyViewportProps) {
   let animationId: number;
   let clock: THREE.Clock;
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+  let playerAvatar: PlayerAvatar | null = null;
+  const otherAvatars: Map<string, PlayerAvatar> = new Map();
+  const otherAvatarTargets: Map<string, { x: number; z: number; rotY: number; isMoving: boolean }> = new Map();
 
   // Animation clip cache (shared across all units)
   let sharedAnimations: {
@@ -351,6 +411,65 @@ export default function ColonyViewport(props: ColonyViewportProps) {
       }).catch((err) => {
         console.warn("[ColonyViewport] Failed to create dynamic unit:", err);
       });
+    }
+  });
+
+  // React to other players list changes (networked avatars)
+  createEffect(() => {
+    const players = props.otherPlayers;
+    if (!players || !scene) return;
+
+    const existingIds = new Set(otherAvatars.keys());
+    const newIds = new Set(players.map(p => p.id));
+
+    // Remove departed player avatars
+    for (const id of existingIds) {
+      if (!newIds.has(id)) {
+        const a = otherAvatars.get(id)!;
+        a.mixer.stopAllAction();
+        disposeModel(a.mesh);
+        scene.remove(a.mesh);
+        otherAvatars.delete(id);
+        otherAvatarTargets.delete(id);
+      }
+    }
+
+    // Update lerp targets / spawn new
+    for (const p of players) {
+      otherAvatarTargets.set(p.id, { x: p.x, z: p.z, rotY: p.rotationY, isMoving: p.isMoving });
+
+      if (!otherAvatars.has(p.id)) {
+        const charPath = ASSETS.characters[p.characterClass || "knight"];
+        loadModel(charPath).then(({ scene: model, animations }) => {
+          model.scale.setScalar(CHARACTER_SCALE);
+          const group = new THREE.Group();
+          group.add(model);
+          group.position.set(p.x, 0, p.z);
+
+          const nameSprite = createAvatarNameSprite(p.name);
+          group.add(nameSprite);
+          scene.add(group);
+
+          const mixer = new THREE.AnimationMixer(model);
+          const allClips = [
+            ...animations,
+            ...(sharedAnimations.idle ? [sharedAnimations.idle] : []),
+            ...(sharedAnimations.walk ? [sharedAnimations.walk] : []),
+          ];
+
+          let idleAction: THREE.AnimationAction | undefined;
+          let walkAction: THREE.AnimationAction | undefined;
+          for (const clip of allClips) {
+            const n = clip.name.toLowerCase();
+            if (!idleAction && (n.includes("idle") || n.includes("rest"))) idleAction = mixer.clipAction(clip);
+            if (!walkAction && (n.includes("walk") || n.includes("run"))) walkAction = mixer.clipAction(clip);
+          }
+          if (!idleAction && allClips.length > 0) idleAction = mixer.clipAction(allClips[0]);
+          idleAction?.play();
+
+          otherAvatars.set(p.id, { mesh: group, mixer, idleAction, walkAction, isMoving: false, nameSprite });
+        }).catch(() => {});
+      }
     }
   });
 
@@ -628,12 +747,109 @@ export default function ColonyViewport(props: ColonyViewportProps) {
     el.addEventListener("pointerup", handlePointerUp);
     el.addEventListener("click", handleClick);
 
+    // ── WASD keyboard input ─────────────────────────────────────────
+    const wasdKeys: Record<string, boolean> = {};
+    let lastAvatarBroadcast = 0;
+    const AVATAR_BROADCAST_INTERVAL = 0.1;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      wasdKeys[e.key.toLowerCase()] = true;
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      wasdKeys[e.key.toLowerCase()] = false;
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
     // ── Start render loop immediately (shows ground while loading) ──
     let elapsed = 0;
     function animate() {
       animationId = requestAnimationFrame(animate);
       const dt = clock.getDelta();
       elapsed += dt;
+
+      // WASD moves player avatar (or pans camera if no avatar)
+      const moveDx = (wasdKeys["d"] || wasdKeys["arrowright"] ? 1 : 0) - (wasdKeys["a"] || wasdKeys["arrowleft"] ? 1 : 0);
+      const moveDz = (wasdKeys["s"] || wasdKeys["arrowdown"] ? 1 : 0) - (wasdKeys["w"] || wasdKeys["arrowup"] ? 1 : 0);
+
+      if (playerAvatar) {
+        const moving = moveDx !== 0 || moveDz !== 0;
+        if (moving) {
+          const len = Math.sqrt(moveDx * moveDx + moveDz * moveDz);
+          const nx = moveDx / len;
+          const nz = moveDz / len;
+          playerAvatar.mesh.position.x += nx * AVATAR_MOVE_SPEED * dt;
+          playerAvatar.mesh.position.z += nz * AVATAR_MOVE_SPEED * dt;
+
+          const hBound = GROUND_SIZE / 2 - 1;
+          playerAvatar.mesh.position.x = Math.max(-hBound, Math.min(hBound, playerAvatar.mesh.position.x));
+          playerAvatar.mesh.position.z = Math.max(-hBound, Math.min(hBound, playerAvatar.mesh.position.z));
+
+          playerAvatar.mesh.rotation.y = Math.atan2(nx, nz);
+        }
+
+        if (moving !== playerAvatar.isMoving) {
+          playerAvatar.isMoving = moving;
+          if (moving && playerAvatar.walkAction) {
+            playerAvatar.walkAction.reset().fadeIn(0.2).play();
+            playerAvatar.idleAction?.fadeOut(0.2);
+          } else if (!moving && playerAvatar.idleAction) {
+            playerAvatar.idleAction.reset().fadeIn(0.2).play();
+            playerAvatar.walkAction?.fadeOut(0.2);
+          }
+        }
+
+        lastAvatarBroadcast += dt;
+        if (lastAvatarBroadcast >= AVATAR_BROADCAST_INTERVAL && (moving || lastAvatarBroadcast > 1.0)) {
+          lastAvatarBroadcast = 0;
+          props.onPositionUpdate?.(
+            playerAvatar.mesh.position.x,
+            playerAvatar.mesh.position.z,
+            playerAvatar.mesh.rotation.y,
+            moving,
+          );
+        }
+
+        playerAvatar.mixer.update(dt);
+
+        // Camera follows avatar
+        const targetCam = playerAvatar.mesh.position.clone().add(AVATAR_CAMERA_OFFSET);
+        const camPos = new THREE.Vector3(
+          camera.position.x + (targetCam.x - camera.position.x) * AVATAR_CAMERA_LERP,
+          camera.position.y + (targetCam.y - camera.position.y) * AVATAR_CAMERA_LERP,
+          camera.position.z + (targetCam.z - camera.position.z) * AVATAR_CAMERA_LERP,
+        );
+        camera.position.copy(camPos);
+        controls.target.lerp(playerAvatar.mesh.position, AVATAR_CAMERA_LERP);
+      } else if (moveDx || moveDz) {
+        controls.target.x += moveDx * 15 * dt;
+        controls.target.z += moveDz * 15 * dt;
+      }
+
+      // Update other player avatars: lerp + animate
+      for (const [id, avatar] of otherAvatars) {
+        const target = otherAvatarTargets.get(id);
+        if (target) {
+          const lerpSpeed = 8 * dt;
+          avatar.mesh.position.x += (target.x - avatar.mesh.position.x) * lerpSpeed;
+          avatar.mesh.position.z += (target.z - avatar.mesh.position.z) * lerpSpeed;
+          avatar.mesh.rotation.y += (target.rotY - avatar.mesh.rotation.y) * lerpSpeed;
+
+          if (target.isMoving !== avatar.isMoving) {
+            avatar.isMoving = target.isMoving;
+            if (target.isMoving && avatar.walkAction) {
+              avatar.walkAction.reset().fadeIn(0.2).play();
+              avatar.idleAction?.fadeOut(0.2);
+            } else if (!target.isMoving && avatar.idleAction) {
+              avatar.idleAction.reset().fadeIn(0.2).play();
+              avatar.walkAction?.fadeOut(0.2);
+            }
+          }
+        }
+        avatar.mixer.update(dt);
+      }
+
       controls.update();
 
       // Update animation mixers
@@ -803,6 +1019,66 @@ export default function ColonyViewport(props: ColonyViewportProps) {
         console.warn("[ColonyViewport] Failed to load structure assets:", e);
       }
 
+      // Spawn player avatar if name is provided
+      if (props.playerName) {
+        try {
+          const charClass = props.playerCharacter || "knight";
+          const charPath = ASSETS.characters[charClass];
+          await preloadModels([charPath]);
+          const { scene: model, animations } = await loadModel(charPath);
+          model.scale.setScalar(CHARACTER_SCALE);
+
+          const group = new THREE.Group();
+          group.add(model);
+          group.position.set(0, 0, 5);
+
+          const nameSprite = createAvatarNameSprite(props.playerName);
+          group.add(nameSprite);
+          scene.add(group);
+
+          const mixer = new THREE.AnimationMixer(model);
+          const allClips = [
+            ...animations,
+            ...(sharedAnimations.idle ? [sharedAnimations.idle] : []),
+            ...(sharedAnimations.walk ? [sharedAnimations.walk] : []),
+          ];
+
+          let idleAction: THREE.AnimationAction | undefined;
+          let walkAction: THREE.AnimationAction | undefined;
+          for (const clip of allClips) {
+            const n = clip.name.toLowerCase();
+            if (!idleAction && (n.includes("idle") || n.includes("rest"))) idleAction = mixer.clipAction(clip);
+            if (!walkAction && (n.includes("walk") || n.includes("run"))) walkAction = mixer.clipAction(clip);
+          }
+          if (!idleAction && allClips.length > 0) idleAction = mixer.clipAction(allClips[0]);
+          idleAction?.play();
+
+          playerAvatar = { mesh: group, mixer, idleAction, walkAction, isMoving: false, nameSprite };
+        } catch (e) {
+          console.warn("[ColonyViewport] Failed to spawn player avatar:", e);
+        }
+      }
+
+      // Auto-center camera on player avatar or unit centroid
+      if (playerAvatar) {
+        const pos = playerAvatar.mesh.position;
+        controls.target.set(pos.x, 0, pos.z);
+        camera.position.set(pos.x + AVATAR_CAMERA_OFFSET.x, AVATAR_CAMERA_OFFSET.y, pos.z + AVATAR_CAMERA_OFFSET.z);
+        controls.update();
+      } else if (internalUnits.length > 0) {
+        let cx = 0, cz = 0;
+        for (const u of internalUnits) {
+          cx += u.spring.tx;
+          cz += u.spring.tz;
+        }
+        cx /= internalUnits.length;
+        cz /= internalUnits.length;
+        controls.target.set(cx, 0, cz);
+        camera.position.x += cx;
+        camera.position.z += cz;
+        controls.update();
+      }
+
       setAssetsReady(true);
       setLoadingProgress(100);
     } catch (error) {
@@ -818,9 +1094,19 @@ export default function ColonyViewport(props: ColonyViewportProps) {
       el.removeEventListener("pointermove", handlePointerMove);
       el.removeEventListener("pointerup", handlePointerUp);
       el.removeEventListener("click", handleClick);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
       cancelAnimationFrame(animationId);
       controls.dispose();
 
+      if (playerAvatar) {
+        playerAvatar.mixer.stopAllAction();
+        disposeModel(playerAvatar.mesh);
+      }
+      for (const [, a] of otherAvatars) {
+        a.mixer.stopAllAction();
+        disposeModel(a.mesh);
+      }
       for (const u of internalUnits) {
         u.mixer?.stopAllAction();
         disposeModel(u.mesh);

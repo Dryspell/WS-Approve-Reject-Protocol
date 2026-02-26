@@ -9,6 +9,7 @@ import {
   setVotes,
   setMultipleVotes,
   playerSendsChat,
+  endRoundEarly,
   snapshot,
   log,
   createLogStream,
@@ -150,7 +151,7 @@ test.describe('Full Game Simulation (5 Players)', () => {
     await setVotes(players, ['red', 'red', 'red', 'blue', 'blue'], logStream);
     await snapshot(pages, SC, 'votes-set', logStream);
 
-    await pages[0].waitForTimeout(5000);
+    await endRoundEarly(players, logStream);
 
     // Check P5 for absence of re-buy
     const rebuyButton = pages[4].locator('button:has-text("Re-Enter Game")');
@@ -203,7 +204,7 @@ test.describe('Full Game Simulation (5 Players)', () => {
     log(logStream, 'Player3 set 1 vote to Blue');
     await snapshot(pages, SC, 'votes-set', logStream);
 
-    await pages[0].waitForTimeout(5000);
+    await endRoundEarly(players, logStream);
 
     const completedText = pages[0].locator('text=/Game Over|Tie|Split|completed/i');
     const gameEnded = await completedText.isVisible({ timeout: 10000 }).catch(() => false);

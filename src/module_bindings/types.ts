@@ -62,6 +62,14 @@ export const DirectMessageConversation = __t.object("DirectMessageConversation",
 });
 export type DirectMessageConversation = __Infer<typeof DirectMessageConversation>;
 
+export const EndRoundVote = __t.object("EndRoundVote", {
+  id: __t.i32(),
+  roomId: __t.i32(),
+  userId: __t.string(),
+  round: __t.i32(),
+});
+export type EndRoundVote = __Infer<typeof EndRoundVote>;
+
 export const FriendRequest = __t.object("FriendRequest", {
   id: __t.i32(),
   fromUser: __t.identity(),
@@ -146,6 +154,17 @@ export const Message = __t.object("Message", {
   text: __t.string(),
 });
 export type Message = __Infer<typeof Message>;
+
+export const PlayerPosition = __t.object("PlayerPosition", {
+  id: __t.i32(),
+  identity: __t.identity(),
+  roomId: __t.i32(),
+  x: __t.f32(),
+  z: __t.f32(),
+  rotationY: __t.f32(),
+  isMoving: __t.bool(),
+});
+export type PlayerPosition = __Infer<typeof PlayerPosition>;
 
 export const ReadyState = __t.object("ReadyState", {
   roomId: __t.string(),

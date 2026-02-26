@@ -10,6 +10,13 @@ alwaysApply: false
 
 - **Unit Tests**: Vitest (`pnpm test`)
 - **E2E Tests**: Playwright (`pnpm test:e2e`)
+- **Type Checking**: `pnpm typecheck` (runs `tsc --noEmit`)
+
+## Pre-Test Validation
+
+Always run `pnpm typecheck` after editing `.ts`/`.tsx` files to catch compilation errors early. The standard E2E scripts (`test:e2e`, `test:e2e:p1`, `test:e2e:flow`, `test:e2e:ready`) include a `typecheck:warn` step that reports errors without blocking. Focus on errors in files you just changed; pre-existing errors in untouched files can be deferred.
+
+See `.cursor/rules/pre-test-validation.mdc` for the full validation workflow including Rust server checks.
 
 ## E2E Testing Guidelines
 
