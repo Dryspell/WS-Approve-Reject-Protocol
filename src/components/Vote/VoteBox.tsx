@@ -105,11 +105,12 @@ const VoteBox: Component = () => {
     }
   });
 
-  // Auto-select the first room tab when rooms arrive and nothing is selected
+  // Auto-select the first room tab for display when rooms arrive, but do NOT auto-join.
+  // The user explicitly joins by clicking the tab.
   createEffect(() => {
     const ids = roomIds();
     if (ids.length > 0 && !currentRoom()) {
-      handleJoinRoom(ids[0]);
+      setCurrentRoom(ids[0]);
     }
   });
 
@@ -250,6 +251,19 @@ const VoteBox: Component = () => {
       showToast({
         title: "Error",
         description: "Room name cannot be empty",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+      return;
+    }
+
+    const nameExists = Object.values(rooms()).some(
+      (r) => r.name.trim().toLowerCase() === roomName.trim().toLowerCase() && r.gameStatus === "lobby"
+    );
+    if (nameExists) {
+      showToast({
+        title: "Name taken",
+        description: `A room named "${roomName}" is already open. Choose a different name or join it.`,
         variant: "error",
         duration: DEFAULT_TOAST_DURATION,
       });
@@ -513,6 +527,12 @@ const VoteBox: Component = () => {
                           <Badge variant="secondary" class="ml-1.5 px-1 py-0 text-[10px]">
                             {room()?.memberIds?.length ?? 0}
                           </Badge>
+                          <Show when={
+                            room()?.maxPlayers &&
+                            (room()?.memberIds?.length ?? 0) >= (room()?.maxPlayers ?? Infinity)
+                          }>
+                            <Badge class="ml-1 px-1 py-0 text-[10px] bg-red-500/80 text-white border-0">Full</Badge>
+                          </Show>
                         </TabsTrigger>
                       );
                     }}

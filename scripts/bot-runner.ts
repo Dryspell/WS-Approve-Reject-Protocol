@@ -332,6 +332,25 @@ export class Bot {
         }
         this.log('Toggling ready');
         this.conn.reducers.toggleReady({ roomId: room.id, userId: this.identity.toHexString() });
+
+        // After a short grace period, if all members are ready, call startGame
+        setTimeout(() => {
+          if (this.state !== 'LOBBY' || !this.conn || !this.identity) return;
+          const currentRoom = this.findRoom();
+          if (!currentRoom || currentRoom.gameStatus !== 'lobby') return;
+          const readyStateRow = [...this.conn.db.ready_state.iter()].find(
+            (rs: any) => rs.roomId === currentRoom.id.toString()
+          ) as any;
+          const readyCount = readyStateRow?.readyUserIds?.length ?? 0;
+          const memberCount = currentRoom.memberIds?.length ?? 0;
+          const allReady = memberCount > 0 && readyCount >= memberCount;
+          if (allReady) {
+            this.log(`All ${memberCount} players ready — calling startGame`);
+            try {
+              this.conn.reducers.startGame({ roomId: currentRoom.id });
+            } catch (_e) { /* already started or permission denied */ }
+          }
+        }, 3000);
       }, delay);
     }
   }
@@ -434,6 +453,7 @@ export class Bot {
   // ---- Chat ---------------------------------------------------------------
 
   private tickChat(room: ReturnType<Bot['findRoom']>) {
+    if (this.state !== 'LOBBY' && this.state !== 'IN_GAME') return;
     if (!this.conn || !room) return;
     this.lastChatTick++;
     if (this.lastChatTick < 5) return;

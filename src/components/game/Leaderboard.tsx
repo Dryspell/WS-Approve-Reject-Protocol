@@ -1,4 +1,5 @@
 import { Component, createSignal, For, Show, createEffect } from "solid-js";
+import { useNavigate } from "@solidjs/router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -22,6 +23,7 @@ interface PlayerStats {
 export const Leaderboard: Component = () => {
   const { conn, connected } = useSpacetimeDB();
   const { dark } = useTheme();
+  const navigate = useNavigate();
   const [players, setPlayers] = createSignal<PlayerStats[]>([]);
   const [transactions, setTransactions] = createSignal<Transaction[]>([]);
   const [timeframe, setTimeframe] = createSignal<'all-time' | 'season' | 'weekly'>('all-time');
@@ -188,6 +190,13 @@ export const Leaderboard: Component = () => {
                       <span class="mb-2 text-4xl">{emptyMessage().icon}</span>
                       <p class={`text-sm font-medium ${heading()}`}>{emptyMessage().title}</p>
                       <p class={`mt-1 text-xs ${muted()}`}>{emptyMessage().body}</p>
+                      <Button
+                        class="mt-4"
+                        size="sm"
+                        onClick={() => navigate("/vote")}
+                      >
+                        Play Now
+                      </Button>
                     </div>
                   }>
                     {(player) => (

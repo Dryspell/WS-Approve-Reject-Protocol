@@ -69,7 +69,16 @@ export default function GamePreStartInteractions(props: {
         duration: DEFAULT_TOAST_DURATION,
       });
     } catch (error) {
-      showToast({ title: "Error", description: error instanceof Error ? error.message : "Failed to toggle ready state", variant: "error", duration: DEFAULT_TOAST_DURATION });
+      const msg = error instanceof Error ? error.message : String(error);
+      const isInsufficient = msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("funds") || msg.toLowerCase().includes("balance");
+      showToast({
+        title: isInsufficient ? "Insufficient Funds" : "Error",
+        description: isInsufficient
+          ? `You need at least $${currentRoom.buyinAmount.toFixed(2)} to ready up. Top up your wallet first.`
+          : msg,
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
     }
   };
 
@@ -80,16 +89,29 @@ export default function GamePreStartInteractions(props: {
 
   const isReady = () => userIsReady(props.roomId, getUserIdForServer() || "", props.roomsPreStart);
 
-  // Countdown when all players are ready
+  // Countdown when all players are ready — only fires when local player is a member
   createEffect(() => {
     const members = memberIds();
     const ready = readyCount();
-    if (members.length > 0 && ready === members.length && countdown() === null) {
+    const localId = getUserIdForServer();
+    const isLocalMember = localId ? members.includes(localId) : false;
+
+    if (isLocalMember && members.length > 0 && ready === members.length && countdown() === null) {
       setCountdown(3);
       const interval = setInterval(() => {
         setCountdown(prev => {
           if (prev === null || prev <= 1) {
             clearInterval(interval);
+            // All players are ready — call startGame (backend guards against double-starts)
+            const connection = props.conn();
+            const currentRoom = room();
+            if (connection && currentRoom) {
+              try {
+                connection.reducers.startGame({ roomId: currentRoom.id });
+              } catch (_e) {
+                // Already started or not permitted — ignore
+              }
+            }
             return null;
           }
           return prev - 1;
@@ -262,11 +284,12 @@ export default function GamePreStartInteractions(props: {
           </Show>
           <Show when={!showControls()}>
             <button
-              class="absolute top-14 left-4 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/40 text-xs text-white/30 hover:bg-black/60 hover:text-white/60 transition-colors"
+              class="absolute top-14 left-4 z-10 flex items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1 text-xs text-white/30 hover:bg-black/60 hover:text-white/60 transition-colors"
               title="Show controls"
               onClick={() => setShowControls(true)}
             >
-              ?
+              <span>?</span>
+              <span>Controls</span>
             </button>
           </Show>
 
@@ -327,21 +350,66 @@ export default function GamePreStartInteractions(props: {
                 </span>
               </div>
 
-              {/* Ready button */}
-              <Button
-                data-testid={TID.readyButton}
-                variant={isReady() ? "outline" : "default"}
-                class="w-full py-4 text-base font-semibold"
-                onClick={handleToggleReady}
-                disabled={!props.connected() || !props.identity()}
+              {/* Show Join or Ready button depending on membership */}
+              <Show
+                when={getUserIdForServer() && memberIds().includes(getUserIdForServer()!)}
+                fallback={
+                  <div class="space-y-2">
+                    <Button
+                      class="w-full py-4 text-base font-semibold"
+                      onClick={() => {
+                        const connection = props.conn();
+                        const userId = getUserIdForServer();
+                        const currentRoom = room();
+                        if (!connection || !userId || !currentRoom) return;
+                        try {
+                          connection.reducers.joinRoom({ roomId: currentRoom.id, userId });
+                        } catch (err) {
+                          showToast({ title: "Could not join", description: String(err), variant: "error", duration: DEFAULT_TOAST_DURATION });
+                        }
+                      }}
+                      disabled={!props.connected() || !props.identity()}
+                    >
+                      Join Room
+                    </Button>
+                    <p class="text-center text-xs text-white/30">
+                      ${currentRoom().buyinAmount.toFixed(2)} buy-in when the game starts
+                    </p>
+                  </div>
+                }
               >
-                {isReady() ? "Ready (click to unready)" : "Ready to Play?"}
-              </Button>
-              <p class="text-center text-xs text-white/30 mt-1.5">
-                {isReady()
-                  ? `Waiting for ${memberIds().length - readyCount()} more player${memberIds().length - readyCount() !== 1 ? "s" : ""}...`
-                  : `You'll pay $${currentRoom().buyinAmount.toFixed(2)} when the game starts`}
-              </p>
+                <Button
+                  data-testid={TID.readyButton}
+                  variant={isReady() ? "outline" : "default"}
+                  class="w-full py-4 text-base font-semibold"
+                  onClick={handleToggleReady}
+                  disabled={!props.connected() || !props.identity()}
+                >
+                  {isReady() ? "Ready (click to unready)" : "Ready to Play?"}
+                </Button>
+                <p class="text-center text-xs text-white/30 mt-1.5">
+                  {isReady()
+                    ? `Waiting for ${memberIds().length - readyCount()} more player${memberIds().length - readyCount() !== 1 ? "s" : ""}...`
+                    : `You'll pay $${currentRoom().buyinAmount.toFixed(2)} when the game starts`}
+                </p>
+
+                {/* Leave lobby button */}
+                <button
+                  class="w-full mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/40 hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400 transition-all"
+                  onClick={() => {
+                    const connection = props.conn();
+                    const currentRoom = room();
+                    if (!connection || !currentRoom) return;
+                    try {
+                      connection.reducers.leaveRoom({ roomId: currentRoom.id });
+                    } catch (err) {
+                      showToast({ title: "Could not leave", description: String(err), variant: "error", duration: DEFAULT_TOAST_DURATION });
+                    }
+                  }}
+                >
+                  Leave Lobby
+                </button>
+              </Show>
             </div>
           </div>
 

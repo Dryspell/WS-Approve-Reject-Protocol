@@ -6,6 +6,36 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { Progress } from "~/components/ui/progress";
 import type { Transaction, GameEvent } from "~/module_bindings/types";
 
+function formatGameEvent(event: GameEvent): string {
+  const src = event.sourceId ? event.sourceId.slice(0, 8) : 'unknown';
+  const tgt = event.targetId ? event.targetId.slice(0, 8) : '';
+  const val = event.value;
+
+  switch (event.eventType) {
+    case 'round_start':       return `Round ${val} started`;
+    case 'round_end':         return `Round ${val} ended`;
+    case 'game_start':        return `Game started`;
+    case 'game_end':          return `Game ended`;
+    case 'player_join':       return `${src} joined the game`;
+    case 'player_leave':      return `${src} left the game`;
+    case 'elimination':       return `${src} was eliminated`;
+    case 'vote_cast':         return tgt ? `${src} voted against ${tgt}` : `${src} cast a vote`;
+    case 'vote_color_set':    return `${src} set vote color`;
+    case 'trade_listed':      return `${src} listed a trade offer`;
+    case 'trade_accepted':    return tgt ? `${tgt} accepted trade from ${src}` : `Trade accepted by ${src}`;
+    case 'trade_cancelled':   return `${src} cancelled trade offer`;
+    case 'purchase':          return val ? `${src} made a purchase for $${val}` : `${src} made a purchase`;
+    case 'harvest':           return val ? `${src} harvested ${val} resources` : `${src} harvested resources`;
+    case 'guarantee_bought':  return `${src} bought a guarantee`;
+    case 'pot_won':           return val ? `${src} won $${val} from the pot` : `${src} won the pot`;
+    case 'buy_in':            return val ? `${src} paid $${val} buy-in` : `${src} paid buy-in`;
+    default:
+      return tgt
+        ? `${src} → ${tgt}${val ? ` (${val})` : ''} [${event.eventType}]`
+        : `${src}${val ? ` (${val})` : ''} [${event.eventType}]`;
+  }
+}
+
 interface ReplayEvent {
   timestamp: number;
   type: string;
@@ -72,16 +102,21 @@ export const ReplayViewer: Component<ReplayViewerProps> = (props) => {
     props.gameEvents.forEach((event) => {
       if (event.roomId !== props.roomId) return;
 
-      const timestamp = event.timestamp.seconds * 1000 + event.timestamp.nanoseconds / 1000000;
+      // GameEvent.timestamp is a raw i64 (microseconds since epoch)
+      const timestamp = Number(event.timestamp) / 1000;
       
       timeline.push({
         timestamp,
         type: event.eventType,
-        description: event.description,
+        description: formatGameEvent(event),
         details: event,
-        icon: event.eventType.includes('elimination') ? '❌' : 
-              event.eventType.includes('vote') ? '🗳️' : 
-              event.eventType.includes('round') ? '⏱️' : '📢',
+        icon: event.eventType.includes('elimination') ? '❌' :
+              event.eventType.includes('vote') ? '🗳️' :
+              event.eventType.includes('round') ? '⏱️' :
+              event.eventType.includes('trade') ? '🔄' :
+              event.eventType.includes('harvest') ? '🌾' :
+              event.eventType.includes('purchase') ? '🛒' :
+              event.eventType.includes('game') ? '🎮' : '📢',
       });
     });
 

@@ -267,7 +267,13 @@ export const PlayerProfile: Component<PlayerProfileProps> = (props) => {
               </div>
 
               {/* Quick Stats */}
-              <div class="mt-4 flex gap-6">
+              <div class="mt-4 flex gap-6 flex-wrap">
+                <div>
+                  <div class="text-2xl font-bold text-amber-400">
+                    ${(user()?.walletBalance ?? 0).toFixed(2)}
+                  </div>
+                  <div class={`text-xs ${textMuted()}`}>Wallet</div>
+                </div>
                 <div>
                   <div class="text-2xl font-bold" classList={{
                     'text-emerald-400': stats().totalProfit > 0,

@@ -306,6 +306,7 @@ export default function Home() {
           </div>
           <div class="flex gap-6">
             <a href="/leaderboard" class="hover:text-white/60 transition-colors">Leaderboard</a>
+            <a href="/history" class="hover:text-white/60 transition-colors">History</a>
             <a href="/profile" class="hover:text-white/60 transition-colors">Profile</a>
           </div>
         </div>

@@ -2,13 +2,15 @@ import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup
 import { useNavigate } from "@solidjs/router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue, EndRoundVote, Equipment, BattleArena, BattleUnit, SideBet, LaborerGenetics, Tournament } from "~/module_bindings/types";
+import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue, EndRoundVote, Equipment, BattleArena, BattleUnit, SideBet, LaborerGenetics, Tournament, GameEvent } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import RoundTimer from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
 import EliminationModal from "./EliminationModal";
 import ChatPanel from "../game/ChatPanel";
 import ReplayViewer from "../game/ReplayViewer";
+import ActivityFeed from "../game/ActivityFeed";
+import FloatingChatBubbles from "../game/ChatBubble";
 import { SoundToggle } from "~/components/ui/sound-toggle";
 import { ErrorBoundary } from "~/components/ui/error-boundary";
 import { DebugPanel } from "~/components/dev/DebugPanel";
@@ -62,6 +64,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [battleDismissed, setBattleDismissed] = createSignal(false);
   const [gameOverDismissed, setGameOverDismissed] = createSignal(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = createSignal(false);
+  const [gameEvents, setGameEvents] = createSignal<GameEvent[]>([]);
 
   // Round processing is now server-authoritative via RoundTimerEntry scheduler.
   // Clients are passive observers — room state changes drive the UI.
@@ -245,8 +248,32 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     connection.db.tournament.onDelete((ctx, t) => setTournaments(prev => prev.filter(x => x.id !== t.id)));
     setTournaments(Array.from(connection.db.tournament.iter()));
 
+    // Subscribe to game events for the activity feed and replay viewer
+    const roomIdStr = props.room.id.toString();
+    connection.db.game_event.onInsert((ctx, event) => {
+      if (event.roomId === roomIdStr) {
+        setGameEvents((prev) => [...prev, event]);
+      }
+    });
+    const initialGameEvents = Array.from(connection.db.game_event.iter())
+      .filter((e) => e.roomId === roomIdStr);
+    setGameEvents(initialGameEvents);
+
     // Set initial round tracking
     setLastProcessedRound(props.room.currentRound);
+
+    // Leave room automatically when the tab/window is closed to prevent ghost members
+    const handleBeforeUnload = () => {
+      try {
+        connection.reducers.leaveRoom({ roomId: props.room.id });
+      } catch (_e) {
+        // Best-effort — browser may not wait for async ops on unload
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    onCleanup(() => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    });
   });
 
   // Get player's votes
@@ -736,6 +763,9 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         </div>
 
         {/* ===== HUD OVERLAYS (layer 10+) ===== */}
+
+        {/* Floating chat bubbles (bottom-left, layer 20) */}
+        <FloatingChatBubbles roomId={props.room.id} players={allPlayers()} />
 
         {/* Unit Context Panel (right side) */}
         <Show when={selectedUnit()}>
@@ -1330,19 +1360,23 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             <div class="mt-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 h-64 overflow-hidden">
               <Tabs defaultValue="chat">
                 <div class="border-b border-white/10 px-3 py-1">
-                  <TabsList class="grid w-full max-w-xs grid-cols-2 bg-white/5">
+                  <TabsList class="grid w-full max-w-xs grid-cols-3 bg-white/5">
                     <TabsTrigger value="chat" data-testid={TID.chatTab} class="text-xs data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/50">Chat</TabsTrigger>
+                    <TabsTrigger value="activity" class="text-xs data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/50">Activity</TabsTrigger>
                     <TabsTrigger value="replay" class="text-xs data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/50">Replay</TabsTrigger>
                   </TabsList>
                 </div>
                 <TabsContent value="chat" class="h-[calc(100%-2.5rem)] p-0">
                   <ChatPanel roomId={props.room.id} roundNumber={props.room.currentRound} />
                 </TabsContent>
+                <TabsContent value="activity" class="h-[calc(100%-2.5rem)] overflow-auto">
+                  <ActivityFeed events={gameEvents()} roomId={props.room.id} players={allPlayers()} />
+                </TabsContent>
                 <TabsContent value="replay" class="h-[calc(100%-2.5rem)] overflow-auto p-3">
                   <ReplayViewer
                     roomId={props.room.id}
                     transactions={transactions()}
-                    gameEvents={[]}
+                    gameEvents={gameEvents()}
                   />
                 </TabsContent>
               </Tabs>
