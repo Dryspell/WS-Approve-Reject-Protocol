@@ -773,8 +773,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         >
           <div class="flex items-center gap-2">
             <span class="text-sm font-semibold text-white/90">{props.room.name}</span>
-            <span class="rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-medium text-white/70">
-              R{props.room.currentRound}
+            <span class="rounded bg-white/10 px-2 py-0.5 text-xs font-medium text-white/60" title="Current round">
+              Round {props.room.currentRound}
             </span>
           </div>
 
@@ -787,6 +787,33 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               roundDuration={props.room.roundDuration}
             />
           </div>
+
+          {/* In-game help button */}
+          {(() => {
+            const [helpOpen, setHelpOpen] = createSignal(false);
+            return (
+              <div class="relative">
+                <button
+                  class="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-xs text-white/50 hover:bg-white/20 hover:text-white/80 transition-colors"
+                  title="Game rules"
+                  onClick={() => setHelpOpen(!helpOpen())}
+                >
+                  ?
+                </button>
+                <Show when={helpOpen()}>
+                  <div class="absolute left-0 top-8 z-50 w-72 rounded-xl bg-black/90 backdrop-blur-xl border border-white/10 p-4 shadow-2xl text-xs text-white/70 space-y-2">
+                    <p class="font-semibold text-white">🗳️ Voting Phase</p>
+                    <p>Place your votes on Red or Blue using the drop zones. You can trade votes on the market, sell guarantees, and make deals with other players.</p>
+                    <p class="font-semibold text-white mt-2">⚡ Action Phase</p>
+                    <p>Time to finalize deals. Check the EV Calculator to see which strategy is best given the current vote distribution.</p>
+                    <p class="font-semibold text-white mt-2">📊 Resolution Phase</p>
+                    <p>Votes are counted. The <strong class="text-red-300">majority color</strong> is eliminated. Minority survivors split the pot.</p>
+                    <p class="text-white/40 mt-2">Click ? again to close.</p>
+                  </div>
+                </Show>
+              </div>
+            );
+          })()}
 
           <Show when={props.room.gameStatus === "active" && !props.room.eliminatedPlayers.includes(props.currentUser.identity.toHexString())}>
             {(() => {
@@ -837,10 +864,20 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             <span class="text-base font-bold text-emerald-200" data-testid={TID.walletBalance}>
               ${props.currentUser.walletBalance.toFixed(2)}
             </span>
-            <span class="text-[10px] text-white/40" data-testid={TID.profitLoss}>
-              ({props.currentUser.totalProfitLoss >= 0 ? "+" : ""}
-              ${props.currentUser.totalProfitLoss.toFixed(2)})
-            </span>
+            <Show when={props.currentUser.totalProfitLoss !== 0}>
+              <span
+                class="text-[10px]"
+                classList={{
+                  "text-emerald-400": props.currentUser.totalProfitLoss > 0,
+                  "text-red-400": props.currentUser.totalProfitLoss < 0,
+                }}
+                data-testid={TID.profitLoss}
+                title="Total profit/loss this session"
+              >
+                ({props.currentUser.totalProfitLoss >= 0 ? "+" : ""}
+                ${props.currentUser.totalProfitLoss.toFixed(2)})
+              </span>
+            </Show>
           </div>
 
           <div class="flex items-center gap-0.5 border-l border-white/10 pl-2">
@@ -1039,6 +1076,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               onAssignUnit={handleAssignUnit}
               onContribute={handleContribute}
               onSetTax={handleSetBuildingTax}
+              onSpawnLaborer={handleSpawnLaborer}
             />
           </div>
         </Show>
@@ -1126,12 +1164,24 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           <div class="rounded-xl bg-black/50 backdrop-blur-md p-3 border border-white/10 shadow-2xl">
             {/* Top row: vote summary + chips */}
             <div class="flex items-center gap-2 mb-2">
-              <span class="text-xs font-semibold text-white/70">Votes ({myVotes().length})</span>
+              <span class="text-xs font-semibold text-white/70">Your Votes ({myVotes().length})</span>
               <div class="flex gap-1 ml-auto">
-                <span class="rounded bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-300 border border-red-500/30">{redVotes().length}R</span>
-                <span class="rounded bg-blue-500/30 px-1.5 py-0.5 text-[10px] font-bold text-blue-300 border border-blue-500/30">{blueVotes().length}B</span>
+                <span
+                  class="rounded bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-300 border border-red-500/30"
+                  title={`${redVotes().length} vote${redVotes().length !== 1 ? "s" : ""} cast for Red`}
+                >
+                  {redVotes().length} 🔴
+                </span>
+                <span
+                  class="rounded bg-blue-500/30 px-1.5 py-0.5 text-[10px] font-bold text-blue-300 border border-blue-500/30"
+                  title={`${blueVotes().length} vote${blueVotes().length !== 1 ? "s" : ""} cast for Blue`}
+                >
+                  {blueVotes().length} 🔵
+                </span>
                 <Show when={unsetVotes().length > 0}>
-                  <span class="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white/50 border border-white/10">{unsetVotes().length}?</span>
+                  <span class="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white/50 border border-white/10" title="Votes not yet placed on a color">
+                    {unsetVotes().length} ❓
+                  </span>
                 </Show>
               </div>
             </div>
@@ -1260,17 +1310,6 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               </div>
             </Show>
 
-            {/* Spawn laborer */}
-            <button
-              class="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600/20 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-600/30 transition-colors border border-emerald-500/20"
-              onClick={handleSpawnLaborer}
-            >
-              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Spawn Laborer
-            </button>
-
             {/* Chat toggle row */}
             <button
               class="mt-2 flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/50 hover:bg-white/10 hover:text-white/70 transition-colors border border-white/5"
@@ -1280,7 +1319,9 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 <span>💬</span>
                 <span>Chat</span>
               </div>
-              <span class="text-[10px]">{chatOpen() ? "▼ Close" : "▲ Open"}</span>
+              <svg class="h-3 w-3 transition-transform" classList={{ "rotate-180": chatOpen() }} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
+              </svg>
             </button>
           </div>
 

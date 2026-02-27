@@ -91,41 +91,62 @@ const RoundTimer: Component<RoundTimerProps> = (props) => {
 
   const progressPercent = () => (timeRemaining() / duration()) * 100;
 
+  const isDone = () => timeRemaining() === 0 && !!props.roundStartTime;
+
+  const phasePillClass = () => {
+    if (isDone()) return "bg-slate-500/30 text-slate-300 border border-slate-400/30";
+    switch (phase()) {
+      case "voting":     return "bg-amber-500/25 text-amber-300 border border-amber-500/40";
+      case "action":     return "bg-green-500/25 text-green-300 border border-green-500/40";
+      case "resolution": return "bg-rose-500/25 text-rose-300 border border-rose-500/40";
+    }
+  };
+
   return (
     <div class="flex items-center gap-2">
       {/* Compact circular timer */}
       <div class="relative h-10 w-10 flex-shrink-0">
         <svg class="h-full w-full -rotate-90 transform">
-          <circle cx="20" cy="20" r="16" stroke="currentColor" stroke-width="3" fill="none" class="text-slate-200" />
-          <circle
-            cx="20" cy="20" r="16"
-            stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"
-            class={getPhaseColor()}
-            classList={{ "text-red-500": isWarning() }}
-            style={{
-              "stroke-dasharray": "100.53",
-              "stroke-dashoffset": `${100.53 * (1 - progressPercent() / 100)}`,
-              transition: "stroke-dashoffset 1s linear",
-            }}
-          />
+          <circle cx="20" cy="20" r="16" stroke="currentColor" stroke-width="3" fill="none" class="text-white/10" />
+          <Show when={!isDone()} fallback={
+            /* At 0:00 — full solid ring to indicate "done", not loading */
+            <circle cx="20" cy="20" r="16" stroke="currentColor" stroke-width="3" fill="none" class="text-slate-500" />
+          }>
+            <circle
+              cx="20" cy="20" r="16"
+              stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"
+              class={getPhaseColor()}
+              classList={{ "text-red-500": isWarning() }}
+              style={{
+                "stroke-dasharray": "100.53",
+                "stroke-dashoffset": `${100.53 * (1 - progressPercent() / 100)}`,
+                transition: "stroke-dashoffset 1s linear",
+              }}
+            />
+          </Show>
         </svg>
+        <Show when={isDone()}>
+          <span class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-400">✓</span>
+        </Show>
       </div>
-      <div class="flex flex-col">
+      <div class="flex flex-col gap-0.5">
         <div
           class="text-lg font-bold leading-tight"
-          classList={{ "text-red-500 animate-pulse": isWarning() }}
+          classList={{
+            "text-red-400 animate-pulse": isWarning(),
+            "text-white/90": !isWarning() && !isDone(),
+            "text-white/40": isDone(),
+          }}
         >
           {formatTime(timeRemaining())}
         </div>
-        <Badge
-          variant={isWarning() ? "destructive" : "outline"}
-          class="px-1 py-0 text-[10px] leading-tight"
-        >
+        {/* Larger, color-coded phase pill */}
+        <span class={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight ${phasePillClass()}`}>
           {getPhaseLabel()}
-        </Badge>
+        </span>
       </div>
       <Show when={!props.roundStartTime}>
-        <span class="text-xs text-slate-400">Not started</span>
+        <span class="text-xs text-white/30">Not started</span>
       </Show>
     </div>
   );

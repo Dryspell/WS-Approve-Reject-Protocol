@@ -196,8 +196,11 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
               fallback={
                 <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-white/10 bg-white/5 p-6 text-center">
                   <div class="text-2xl opacity-30">🏪</div>
-                  <p class="text-[10px] text-white/30">
-                    {filterColor() ? "Try clearing your color filter" : "No votes listed yet"}
+                  <p class="text-[11px] font-medium text-white/40">
+                    {filterColor() ? "No votes match that color filter" : "No votes listed yet"}
+                  </p>
+                  <p class="text-[10px] text-white/25">
+                    {filterColor() ? "Try clearing the filter above" : "Be the first to list a vote!"}
                   </p>
                 </div>
               }

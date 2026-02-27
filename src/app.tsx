@@ -1,6 +1,6 @@
 import { Router, useLocation } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
-import { Show, Suspense } from "solid-js";
+import { Show, Suspense, createSignal, onMount, createContext, useContext } from "solid-js";
 import Nav from "~/components/Nav";
 import ChatOverlay from "~/components/ChatOverlay";
 import "./app.css";
@@ -8,6 +8,11 @@ import "@fontsource/inter";
 import { Toaster } from "./components/ui/toast";
 import { MetaProvider, Title, Meta, Link } from "@solidjs/meta";
 import { SpacetimeDBProvider } from "~/hooks/useSpacetimeDB";
+
+// ── Theme context ──────────────────────────────────────────────────────────
+type ThemeContextType = { dark: () => boolean; toggle: () => void };
+export const ThemeContext = createContext<ThemeContextType>({ dark: () => true, toggle: () => {} });
+export const useTheme = () => useContext(ThemeContext);
 
 function AppShell(props: { children: any }) {
 	let location: ReturnType<typeof useLocation> | undefined;
@@ -20,21 +25,38 @@ function AppShell(props: { children: any }) {
 	const isGame = () => location?.pathname?.startsWith("/vote") ?? false;
 	const showNav = () => !isHome() && !isGame();
 
+	// Persist theme preference; default to dark for the game aesthetic
+	const [dark, setDark] = createSignal(true);
+	onMount(() => {
+		const stored = localStorage.getItem("theme");
+		setDark(stored !== "light");
+	});
+	const toggle = () => {
+		const next = !dark();
+		setDark(next);
+		localStorage.setItem("theme", next ? "dark" : "light");
+	};
+
 	return (
-		<SpacetimeDBProvider>
-			<div class="dark flex min-h-screen flex-col bg-[#1a1a2e]">
-				<Show when={showNav()}>
-					<Nav />
-				</Show>
-			<Suspense>
-				<main class={showNav() ? "flex-1" : "flex-1 h-screen"}>{props.children}</main>
-			</Suspense>
-			{/* Suppress global ChatOverlay during gameplay; the in-game ChatPanel handles chat */}
-			<Show when={!isGame()}>
-				<ChatOverlay />
-			</Show>
-			</div>
-		</SpacetimeDBProvider>
+		<ThemeContext.Provider value={{ dark, toggle }}>
+			<SpacetimeDBProvider>
+				<div
+					class="flex min-h-screen flex-col"
+					classList={{ dark: dark(), "bg-[#1a1a2e]": dark(), "bg-gray-50": !dark() }}
+				>
+					<Show when={showNav()}>
+						<Nav />
+					</Show>
+					<Suspense>
+						<main class={showNav() ? "flex-1" : "flex-1 h-screen"}>{props.children}</main>
+					</Suspense>
+					{/* Suppress global ChatOverlay during gameplay; the in-game ChatPanel handles chat */}
+					<Show when={!isGame()}>
+						<ChatOverlay />
+					</Show>
+				</div>
+			</SpacetimeDBProvider>
+		</ThemeContext.Provider>
 	);
 }
 

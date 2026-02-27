@@ -131,7 +131,11 @@ const TournamentPanel: Component<TournamentPanelProps> = (props) => {
         <Show
           when={props.tournaments.length > 0}
           fallback={
-            <p class="text-xs text-white/40">No tournaments available</p>
+            <div class="flex flex-col items-center py-8 text-center text-white/30 text-xs">
+              <span class="mb-2 text-2xl">🏆</span>
+              <p>No tournaments yet.</p>
+              <p class="mt-1">Create one to challenge room members!</p>
+            </div>
           }
         >
           <For each={props.tournaments}>

@@ -88,14 +88,17 @@ export default function Home() {
           </div>
 
           {/* Red vs Blue visual indicator */}
-          <div class="mt-12 flex items-center justify-center gap-8 text-sm text-white/40">
-            <div class="flex items-center gap-2">
-              <div class="h-3 w-3 rounded-full bg-red-500 shadow-lg shadow-red-500/50" />
+          <div class="mt-12 flex items-center justify-center gap-6 text-sm">
+            <div class="flex items-center gap-2 text-red-400 font-semibold">
+              <div class="h-4 w-4 rounded-full bg-red-500 shadow-lg shadow-red-500/60 animate-pulse" />
               <span>Red Team</span>
             </div>
-            <span class="text-white/20">vs</span>
-            <div class="flex items-center gap-2">
-              <div class="h-3 w-3 rounded-full bg-blue-500 shadow-lg shadow-blue-500/50" />
+            <div class="flex flex-col items-center gap-0.5">
+              <span class="text-xs font-black text-white/60 tracking-widest">VS</span>
+              <div class="h-px w-8 bg-gradient-to-r from-red-500 via-white/20 to-blue-500" />
+            </div>
+            <div class="flex items-center gap-2 text-blue-400 font-semibold">
+              <div class="h-4 w-4 rounded-full bg-blue-500 shadow-lg shadow-blue-500/60 animate-pulse" />
               <span>Blue Team</span>
             </div>
           </div>

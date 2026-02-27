@@ -7,6 +7,7 @@ interface BuildingPanelProps {
   onAssignUnit: (unitId: number, buildingId: number) => void;
   onContribute: (buildingId: number, resourceType: string, amount: number, sourceUnitId: number) => void;
   onSetTax: (buildingId: number, taxRate: number) => void;
+  onSpawnLaborer?: () => void;
   playerIdentity?: string; // If set, tax controls only show for buildings you contributed to
 }
 
@@ -147,6 +148,18 @@ const BuildingPanel: Component<BuildingPanelProps> = (props) => {
       {/* Header */}
       <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <h3 class="text-lg font-semibold text-amber-400">Building Panel</h3>
+        <Show when={props.onSpawnLaborer}>
+          <button
+            class="flex items-center gap-1.5 rounded-lg bg-emerald-600/20 px-2.5 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-600/30 transition-colors border border-emerald-500/20"
+            onClick={props.onSpawnLaborer}
+            title="Spawn a new laborer to gather resources and construct buildings"
+          >
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Spawn Laborer
+          </button>
+        </Show>
       </div>
 
       <div class="flex flex-1 overflow-hidden">
@@ -244,30 +257,40 @@ const BuildingPanel: Component<BuildingPanelProps> = (props) => {
           </Show>
 
           {/* Completed buildings */}
-          <div class="mb-2 text-[10px] text-emerald-400/80">Completed</div>
-          <div class="space-y-2">
-            <For each={completedBuildings()}>
-              {(b) => (
-                <div
-                  class="cursor-pointer rounded-lg border p-2.5 transition-colors"
-                  classList={{
-                    "border-emerald-500/40 bg-emerald-500/5": selectedBuildingId() === b.id,
-                    "border-white/10 bg-white/[0.02] hover:border-white/20": selectedBuildingId() !== b.id,
-                  }}
-                  onClick={() => setSelectedBuildingId(b.id)}
-                >
-                  <div class="mb-1 text-xs font-medium text-white">
-                    {Object.values(BUILDING_CATEGORIES)
-                      .flat()
-                      .find((d) => d.type === b.buildingType)?.label ?? b.buildingType}
+          <Show when={completedBuildings().length > 0} fallback={
+            <Show when={buildingBuildings().length === 0}>
+              <div class="flex flex-col items-center justify-center py-8 text-center text-white/30 text-xs">
+                <span class="mb-1 text-2xl">🏗️</span>
+                <p>No buildings yet.</p>
+                <p class="mt-1">Build one using the catalog on the left.</p>
+              </div>
+            </Show>
+          }>
+            <div class="mb-2 text-[10px] text-emerald-400/80">Completed ({completedBuildings().length})</div>
+            <div class="space-y-2">
+              <For each={completedBuildings()}>
+                {(b) => (
+                  <div
+                    class="cursor-pointer rounded-lg border p-2.5 transition-colors"
+                    classList={{
+                      "border-emerald-500/40 bg-emerald-500/5": selectedBuildingId() === b.id,
+                      "border-white/10 bg-white/[0.02] hover:border-white/20": selectedBuildingId() !== b.id,
+                    }}
+                    onClick={() => setSelectedBuildingId(b.id)}
+                  >
+                    <div class="mb-1 text-xs font-medium text-white">
+                      {Object.values(BUILDING_CATEGORIES)
+                        .flat()
+                        .find((d) => d.type === b.buildingType)?.label ?? b.buildingType}
+                    </div>
+                    <div class="text-[10px] text-white/40">
+                      Laborers: {assignedToBuilding(b.id).length}
+                    </div>
                   </div>
-                  <div class="text-[10px] text-white/40">
-                    Laborers: {assignedToBuilding(b.id).length}
-                  </div>
-                </div>
-              )}
-            </For>
-          </div>
+                )}
+              </For>
+            </div>
+          </Show>
         </div>
       </div>
 

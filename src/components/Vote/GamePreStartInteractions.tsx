@@ -33,6 +33,10 @@ export default function GamePreStartInteractions(props: {
   const [nearBuildingId, setNearBuildingId] = createSignal<string | null>(null);
   const [activeBuildingId, setActiveBuildingId] = createSignal<string | null>(null);
   const [countdown, setCountdown] = createSignal<number | null>(null);
+  const [showControls, setShowControls] = createSignal(true);
+
+  // Auto-dismiss controls hint after 8 seconds
+  setTimeout(() => setShowControls(false), 8000);
 
   const getUserIdForServer = (): string | null => {
     const identity = props.identity();
@@ -233,7 +237,7 @@ export default function GamePreStartInteractions(props: {
               <span class="text-xs text-white/50">${currentRoom().buyinAmount.toFixed(2)} buy-in</span>
               <span class="text-xs text-white/50">{currentRoom().votesPerPlayer || 5} votes</span>
               <Show when={currentRoom().allowRebuy}>
-                <Badge variant="outline" class="text-[10px] border-white/20 text-white/50">Re-buy</Badge>
+                <Badge variant="outline" class="text-[10px] border-white/20 text-white/50" title="Re-buy enabled — eliminated players can pay the buy-in again to re-enter">Re-buy ✦</Badge>
               </Show>
             </div>
             <div class="flex items-center gap-3">
@@ -246,14 +250,25 @@ export default function GamePreStartInteractions(props: {
             </div>
           </div>
 
-          {/* WASD hint (layer 10) */}
-          <div class="absolute top-14 left-4 z-10 pointer-events-none">
-            <div class="bg-black/40 backdrop-blur-sm rounded-lg px-3 py-2 text-white/40 text-xs">
-              <div class="font-medium text-white/60 mb-1">Controls</div>
-              <div>WASD / Arrow keys to move</div>
-              <div>Walk to buildings to interact</div>
+          {/* WASD hint (layer 10) — auto-dismisses, re-show with ? button */}
+          <Show when={showControls()}>
+            <div class="absolute top-14 left-4 z-10 pointer-events-none animate-in fade-in duration-300">
+              <div class="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2 text-white/40 text-xs">
+                <div class="font-medium text-white/60 mb-1">Controls</div>
+                <div>WASD / Arrow keys to move</div>
+                <div>Walk to buildings to interact</div>
+              </div>
             </div>
-          </div>
+          </Show>
+          <Show when={!showControls()}>
+            <button
+              class="absolute top-14 left-4 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/40 text-xs text-white/30 hover:bg-black/60 hover:text-white/60 transition-colors"
+              title="Show controls"
+              onClick={() => setShowControls(true)}
+            >
+              ?
+            </button>
+          </Show>
 
           {/* Building interaction prompt (layer 10) */}
           <Show when={nearBuildingId() && !activeBuildingId()}>

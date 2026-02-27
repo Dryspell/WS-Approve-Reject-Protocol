@@ -503,7 +503,12 @@ const VoteBox: Component = () => {
                     {(roomId) => {
                       const room = () => rooms()[roomId];
                       return (
-                        <TabsTrigger value={roomId} class="text-xs px-3">
+                        <TabsTrigger
+                          value={roomId}
+                          class="text-xs px-3"
+                          disabled={room()?.gameStatus === "active" && roomId !== currentRoom()}
+                          title={room()?.gameStatus === "active" && roomId !== currentRoom() ? "Game in progress — cannot switch rooms" : undefined}
+                        >
                           {room()?.name}
                           <Badge variant="secondary" class="ml-1.5 px-1 py-0 text-[10px]">
                             {room()?.memberIds?.length ?? 0}

@@ -67,7 +67,7 @@ const SideBetPanel: Component<SideBetPanelProps> = (props) => {
       <div class="mb-3 border-b border-white/10 pb-2">
         <h3 class="text-sm font-semibold text-white/90">Side Bets</h3>
         <p class="mt-1 text-xs text-white/50">
-          Round {props.roundNumber} · {activePlayers().length} active
+          Round {props.roundNumber} · {props.sideBets.filter(b => b.playerId !== props.currentUserId).length} global bet{props.sideBets.filter(b => b.playerId !== props.currentUserId).length !== 1 ? "s" : ""} · Your bets: {props.sideBets.filter(b => b.playerId === props.currentUserId).length}
         </p>
       </div>
 
@@ -176,8 +176,11 @@ const SideBetPanel: Component<SideBetPanelProps> = (props) => {
             onInput={(e) => setAmount(e.currentTarget.value)}
             class="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white placeholder:text-white/30 focus:border-white/30 focus:outline-none"
           />
-          <div class="flex items-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-emerald-400/90">
-            {multiplier()}x
+          <div
+            class="flex items-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-emerald-400/90 cursor-help"
+            title={`Payout multiplier: a winning bet returns ${multiplier()}× your stake. E.g. $10 bet → $${(10 * multiplier()).toFixed(2)} back.`}
+          >
+            {multiplier()}x ℹ
           </div>
         </div>
       </div>

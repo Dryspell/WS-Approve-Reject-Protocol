@@ -5,6 +5,7 @@ import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
+import { useTheme } from "~/app";
 import { resolvePlayerName } from "~/lib/game-utils";
 import type { User, Transaction } from "~/module_bindings/types";
 
@@ -20,6 +21,7 @@ interface PlayerStats {
 
 export const Leaderboard: Component = () => {
   const { conn, connected } = useSpacetimeDB();
+  const { dark } = useTheme();
   const [players, setPlayers] = createSignal<PlayerStats[]>([]);
   const [transactions, setTransactions] = createSignal<Transaction[]>([]);
   const [timeframe, setTimeframe] = createSignal<'all-time' | 'season' | 'weekly'>('all-time');
@@ -132,14 +134,29 @@ export const Leaderboard: Component = () => {
     }
   };
 
+  const cardBg = () => dark() ? "w-full border-white/10 bg-slate-900/80" : "w-full border-gray-200 bg-white";
+  const muted = () => dark() ? "text-white/40" : "text-gray-400";
+  const heading = () => dark() ? "text-white" : "text-gray-900";
+  const rowBg = () => dark() ? "border bg-white/5 transition-colors hover:bg-white/10" : "border bg-gray-50 transition-colors hover:bg-gray-100";
+  const rowBorder = (rank: number) => rank === 1 ? "border-yellow-400/60" : rank === 2 ? "border-slate-400/40" : rank === 3 ? "border-orange-400/40" : dark() ? "border-white/10" : "border-gray-200";
+  const divider = () => dark() ? "border-white/10" : "border-gray-200";
+
+  const emptyMessage = () => {
+    switch (timeframe()) {
+      case "weekly": return { icon: "📅", title: "No games this week", body: "Jump in and claim the top spot!" };
+      case "season": return { icon: "🌱", title: "No games this season yet", body: "The season just started — be the first on the board!" };
+      default: return { icon: "🏆", title: "No games recorded yet", body: "Be the first on the leaderboard!" };
+    }
+  };
+
   return (
-    <Card class="w-full border-white/10 bg-slate-900/80">
+    <Card class={cardBg()}>
       <CardHeader>
         <div class="flex items-center justify-between">
-          <CardTitle class="flex items-center gap-2 text-white">
+          <CardTitle class={`flex items-center gap-2 ${heading()}`}>
             🏆 Leaderboard
           </CardTitle>
-          <Button size="sm" variant="outline" class="border-white/20 text-white/70 hover:bg-white/10" onClick={loadLeaderboardData}>
+          <Button size="sm" variant="outline" class={dark() ? "border-white/20 text-white/70 hover:bg-white/10" : "border-gray-300 text-gray-600 hover:bg-gray-50"} onClick={loadLeaderboardData}>
             🔄 Refresh
           </Button>
         </div>
@@ -147,14 +164,14 @@ export const Leaderboard: Component = () => {
 
       <CardContent>
         <Show when={!connected()} fallback={null}>
-          <div class="py-8 text-center text-sm text-white/40">
+          <div class={`py-8 text-center text-sm ${muted()}`}>
             Not connected — waiting for SpacetimeDB…
           </div>
         </Show>
 
         <Show when={connected()}>
           <Tabs value={timeframe()} onChange={setTimeframe}>
-            <TabsList class="grid w-full grid-cols-3 bg-white/5">
+            <TabsList class="grid w-full grid-cols-3" classList={{ "bg-white/5": dark(), "bg-gray-100": !dark() }}>
               <TabsTrigger value="all-time">All Time</TabsTrigger>
               <TabsTrigger value="season">This Season</TabsTrigger>
               <TabsTrigger value="weekly">This Week</TabsTrigger>
@@ -163,24 +180,18 @@ export const Leaderboard: Component = () => {
             <TabsContent value={timeframe()}>
               <ScrollArea class="h-[600px]">
                 <Show when={loading()}>
-                  <div class="py-8 text-center text-sm text-white/40 animate-pulse">Loading…</div>
+                  <div class={`py-8 text-center text-sm ${muted()} animate-pulse`}>Loading…</div>
                 </Show>
                 <div class="space-y-2 pr-2">
                   <For each={players()} fallback={
-                    <div class="py-8 text-center text-sm text-white/40">
-                      No players yet. Start playing to appear on the leaderboard!
+                    <div class="flex flex-col items-center py-12 text-center">
+                      <span class="mb-2 text-4xl">{emptyMessage().icon}</span>
+                      <p class={`text-sm font-medium ${heading()}`}>{emptyMessage().title}</p>
+                      <p class={`mt-1 text-xs ${muted()}`}>{emptyMessage().body}</p>
                     </div>
                   }>
                     {(player) => (
-                      <Card
-                        class="border bg-white/5 transition-colors hover:bg-white/10"
-                        classList={{
-                          'border-yellow-400/60': player.rank === 1,
-                          'border-slate-400/40': player.rank === 2,
-                          'border-orange-400/40': player.rank === 3,
-                          'border-white/10': player.rank > 3,
-                        }}
-                      >
+                      <Card class={`${rowBg()} ${rowBorder(player.rank)}`}>
                         <CardContent class="p-4">
                           <div class="flex items-center gap-4">
                             {/* Rank */}
@@ -191,16 +202,16 @@ export const Leaderboard: Component = () => {
                             {/* Player Info */}
                             <div class="flex-1">
                               <div class="flex items-center gap-2">
-                                <span class="font-semibold text-white">
+                                <span class={`font-semibold ${heading()}`}>
                                   {player.user.name || 'Anonymous'}
                                 </span>
-                                {player.user.online && (
+                                <Show when={player.user.online}>
                                   <Badge variant="default" class="text-xs">
                                     🟢 Online
                                   </Badge>
-                                )}
+                                </Show>
                               </div>
-                              <div class="text-xs text-white/40">
+                              <div class={`text-xs ${muted()}`}>
                                 {resolvePlayerName(player.user.identity.toHexString(), conn())}
                               </div>
                             </div>
@@ -210,37 +221,39 @@ export const Leaderboard: Component = () => {
                               <div class="text-lg font-bold" classList={{
                                 'text-emerald-400': player.totalProfit > 0,
                                 'text-red-400': player.totalProfit < 0,
-                                'text-white/40': player.totalProfit === 0,
+                                'text-gray-400': player.totalProfit === 0 && !dark(),
+                                'text-white/40': player.totalProfit === 0 && dark(),
                               }}>
                                 {player.totalProfit >= 0 ? '+' : ''}
                                 ${player.totalProfit.toFixed(2)}
                               </div>
-                              <div class="text-xs text-white/40">
+                              <div class={`text-xs ${muted()}`}>
                                 {player.gamesWon}W / {Math.max(0, player.gamesPlayed - player.gamesWon)}L
                               </div>
                             </div>
                           </div>
 
                           {/* Expanded Stats */}
-                          <div class="mt-3 grid grid-cols-3 gap-2 border-t border-white/10 pt-3 text-xs">
+                          <div class={`mt-3 grid grid-cols-3 gap-2 border-t pt-3 text-xs ${divider()}`}>
                             <div>
-                              <div class="text-white/40">Win Rate</div>
-                              <div class="font-semibold text-white">
+                              <div class={muted()}>Win Rate</div>
+                              <div class={`font-semibold ${heading()}`}>
                                 {player.winRate.toFixed(1)}%
                               </div>
                             </div>
                             <div>
-                              <div class="text-white/40">Games</div>
-                              <div class="font-semibold text-white">
+                              <div class={muted()}>Games</div>
+                              <div class={`font-semibold ${heading()}`}>
                                 {player.gamesPlayed}
                               </div>
                             </div>
                             <div>
-                              <div class="text-white/40">Avg P/L</div>
+                              <div class={muted()}>Avg P/L</div>
                               <div class="font-semibold" classList={{
                                 'text-emerald-400': player.averageProfit > 0,
                                 'text-red-400': player.averageProfit < 0,
-                                'text-white/40': player.averageProfit === 0,
+                                'text-gray-400': player.averageProfit === 0 && !dark(),
+                                'text-white/40': player.averageProfit === 0 && dark(),
                               }}>
                                 ${player.averageProfit.toFixed(2)}
                               </div>
