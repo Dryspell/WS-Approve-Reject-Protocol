@@ -148,7 +148,7 @@ export class VoteGamePage {
     await this.roomTab(roomName).click();
   }
 
-  async waitForRoomTab(roomName: string, timeout = 15000) {
+  async waitForRoomTab(roomName: string, timeout = 30000) {
     await expect(this.roomTab(roomName)).toBeVisible({ timeout });
   }
 

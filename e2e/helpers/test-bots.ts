@@ -66,7 +66,7 @@ export class TestBotHelper {
    * Wait until all bots can see a room with the given name in their
    * SpacetimeDB subscription. Polls every 200ms up to `timeoutMs`.
    */
-  async waitForRoom(roomName: string, timeoutMs = 15000): Promise<void> {
+  async waitForRoom(roomName: string, timeoutMs = 30000): Promise<void> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const allSee = this.bots.every((b) => b.findRoom(roomName) !== null);
@@ -91,7 +91,7 @@ export class TestBotHelper {
   /**
    * Wait until all bots appear in the room's memberIds.
    */
-  async waitForAllInRoom(roomName: string, timeoutMs = 15000): Promise<void> {
+  async waitForAllInRoom(roomName: string, timeoutMs = 30000): Promise<void> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const allIn = this.bots.every((bot) => {

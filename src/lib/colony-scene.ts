@@ -9,6 +9,7 @@ import {
   characterForIndex,
   skeletonForIndex,
   resourceTypeToAsset,
+  buildingTypeToAsset,
   type CharacterClass,
 } from "./asset-loader";
 import {
@@ -68,6 +69,15 @@ export interface ActiveTradeOffer {
   type: "sell" | "buy" | "guarantee";
   price: number;
   color?: "red" | "blue" | null;
+}
+
+export interface ColonyBuilding {
+  id: number;
+  buildingType: string;
+  x: number;
+  z: number;
+  constructionProgress?: number;
+  constructionMax?: number;
 }
 
 export interface ColonySceneCallbacks {
@@ -138,7 +148,10 @@ interface InternalUnit {
   mixer?: THREE.AnimationMixer;
   idleAction?: THREE.AnimationAction;
   walkAction?: THREE.AnimationAction;
+  gatherAction?: THREE.AnimationAction;
+  craftAction?: THREE.AnimationAction;
   isMoving: boolean;
+  taskType?: string;
   healthBar?: THREE.Group;
 }
 
@@ -148,6 +161,13 @@ interface InternalResource {
   mesh: THREE.Group;
   amount: number;
   maxAmount: number;
+}
+
+interface InternalBuilding {
+  id: number;
+  buildingType: string;
+  mesh: THREE.Group;
+  progressBar?: THREE.Mesh;
 }
 
 // ── Mesh factories ─────────────────────────────────────────────────────
@@ -226,6 +246,7 @@ export class ColonySceneManager {
 
   private internalUnits: InternalUnit[] = [];
   private internalResources: InternalResource[] = [];
+  private internalBuildings: InternalBuilding[] = [];
   private sharedAnimations: SharedAnimations = {};
 
   private playerAvatar: ManagedCharacter | null = null;
@@ -302,6 +323,9 @@ export class ColonySceneManager {
     }
     for (const r of this.internalResources) {
       disposeModel(r.mesh);
+    }
+    for (const b of this.internalBuildings) {
+      disposeModel(b.mesh);
     }
 
     if (this.renderer) {
@@ -651,12 +675,28 @@ export class ColonySceneManager {
       const moving = !springSettled(u.spring, 0.1);
       if (moving !== u.isMoving) {
         u.isMoving = moving;
-        if (moving && u.walkAction) {
-          u.walkAction.reset().fadeIn(0.2).play();
+        if (moving) {
+          // Movement takes priority over task animations
+          const target = u.walkAction;
+          if (target) { target.reset().fadeIn(0.2).play(); }
           u.idleAction?.fadeOut(0.2);
-        } else if (!moving && u.idleAction) {
-          u.idleAction.reset().fadeIn(0.2).play();
-          u.walkAction?.fadeOut(0.2);
+          u.gatherAction?.fadeOut(0.2);
+          u.craftAction?.fadeOut(0.2);
+        } else {
+          // Settled: choose animation based on current task
+          const task = u.taskType;
+          if (task === 'gather' && u.gatherAction) {
+            u.gatherAction.reset().fadeIn(0.2).play();
+            u.idleAction?.fadeOut(0.2);
+            u.walkAction?.fadeOut(0.2);
+          } else if (task === 'craft' && u.craftAction) {
+            u.craftAction.reset().fadeIn(0.2).play();
+            u.idleAction?.fadeOut(0.2);
+            u.walkAction?.fadeOut(0.2);
+          } else if (u.idleAction) {
+            u.idleAction.reset().fadeIn(0.2).play();
+            u.walkAction?.fadeOut(0.2);
+          }
         }
       }
 
@@ -767,6 +807,14 @@ export class ColonySceneManager {
 
     const mixer = new THREE.AnimationMixer(model);
     const { idle, walk } = setupAnimationActions(mixer, animations, this.sharedAnimations);
+
+    // Look for dedicated gather / craft clips; fall back to walk / idle respectively
+    const allClips = [...animations, ...(this.sharedAnimations.idle ? [this.sharedAnimations.idle] : []), ...(this.sharedAnimations.walk ? [this.sharedAnimations.walk] : [])];
+    const gatherClip = allClips.find(c => /gather|mine|harvest|chop|attack/i.test(c.name));
+    const craftClip = allClips.find(c => /craft|forge|build|interact|work/i.test(c.name));
+    const gatherAction = gatherClip ? mixer.clipAction(gatherClip) : walk;
+    const craftAction = craftClip ? mixer.clipAction(craftClip) : idle;
+
     idle?.play();
 
     return {
@@ -780,7 +828,10 @@ export class ColonySceneManager {
       mixer,
       idleAction: idle,
       walkAction: walk,
+      gatherAction,
+      craftAction,
       isMoving: false,
+      taskType: pu.taskType,
       healthBar,
     };
   }
@@ -945,6 +996,7 @@ export class ColonySceneManager {
       if (iu) {
         iu.spring.tx = pu.x;
         iu.spring.tz = pu.z;
+        iu.taskType = pu.taskType;
       }
     }
   }
@@ -973,6 +1025,85 @@ export class ColonySceneManager {
           this.syncSelectionVisuals();
         })
         .catch((err) => console.warn("[ColonyScene] Failed to create dynamic unit:", err));
+    }
+  }
+
+  // ── Buildings ────────────────────────────────────────────────────────
+
+  private async createBuilding(b: ColonyBuilding): Promise<InternalBuilding> {
+    const assetPath = buildingTypeToAsset(b.buildingType);
+    const { scene: model } = await loadModel(assetPath);
+    model.scale.setScalar(2.2);
+
+    const group = new THREE.Group();
+    group.add(model);
+    group.position.set(b.x, 0, b.z);
+    group.userData.buildingId = b.id;
+    this.scene.add(group);
+
+    // Construction progress bar (shown when not fully built)
+    let progressBar: THREE.Mesh | undefined;
+    const progress = b.constructionProgress ?? 0;
+    const max = b.constructionMax ?? 1;
+    if (progress < max) {
+      progressBar = this.makeProgressBar(progress / max);
+      group.add(progressBar);
+    }
+
+    return { id: b.id, buildingType: b.buildingType, mesh: group, progressBar };
+  }
+
+  private makeProgressBar(ratio: number): THREE.Mesh {
+    const geo = new THREE.PlaneGeometry(1.0 * ratio, 0.12);
+    const color = ratio < 0.4 ? 0xef4444 : ratio < 0.7 ? 0xfbbf24 : 0x4ade80;
+    const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const bar = new THREE.Mesh(geo, mat);
+    bar.position.set(-(1.0 * (1 - ratio)) / 2, 3.2, 0);
+    bar.userData.isProgressBar = true;
+    return bar;
+  }
+
+  syncBuildings(propBuildings: ColonyBuilding[]) {
+    if (!this.scene) return;
+    const propIds = new Set(propBuildings.map((b) => b.id));
+    const internalIds = new Set(this.internalBuildings.map((b) => b.id));
+
+    // Remove stale buildings
+    const toRemove = this.internalBuildings.filter((ib) => !propIds.has(ib.id));
+    for (const ib of toRemove) {
+      this.scene.remove(ib.mesh);
+      disposeModel(ib.mesh);
+    }
+    if (toRemove.length > 0) {
+      this.internalBuildings = this.internalBuildings.filter((ib) => propIds.has(ib.id));
+    }
+
+    // Add new buildings
+    const toAdd = propBuildings.filter((pb) => !internalIds.has(pb.id));
+    for (const pb of toAdd) {
+      this.createBuilding(pb)
+        .then((ib) => this.internalBuildings.push(ib))
+        .catch((err) => console.warn("[ColonyScene] Failed to create building:", err));
+    }
+
+    // Update progress bars for existing buildings
+    for (const pb of propBuildings) {
+      const ib = this.internalBuildings.find((b) => b.id === pb.id);
+      if (!ib) continue;
+      const progress = pb.constructionProgress ?? 0;
+      const max = pb.constructionMax ?? 1;
+      const ratio = Math.min(1, progress / Math.max(max, 1));
+
+      if (ib.progressBar) {
+        ib.mesh.remove(ib.progressBar);
+        (ib.progressBar.material as THREE.Material).dispose();
+        ib.progressBar.geometry.dispose();
+        ib.progressBar = undefined;
+      }
+      if (ratio < 1) {
+        ib.progressBar = this.makeProgressBar(ratio);
+        ib.mesh.add(ib.progressBar);
+      }
     }
   }
 

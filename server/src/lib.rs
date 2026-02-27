@@ -4,6 +4,7 @@
 use spacetimedb::{reducer, table, Identity, ReducerContext, Table, Timestamp, rand, SpacetimeType, CaseConversionPolicy};
 use rand::Rng;
 
+
 #[spacetimedb::settings]
 const CASE_CONVERSION_POLICY: CaseConversionPolicy = CaseConversionPolicy::None;
 
@@ -514,10 +515,23 @@ pub fn start_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
         room.start_time = Some(ctx.timestamp.to_micros_since_unix_epoch() / 1000 + 5000); // 5 second countdown (millis)
         room.current_round = 1;
         room.game_status = "active".to_string();
+        let round_duration = room.round_duration;
         ctx.db.game_room().id().update(room);
 
         // Create initial units (for colony builder extension)
         create_initial_units(ctx, &room_clone)?;
+
+        // Schedule the first round timer: countdown (5s) + round duration
+        let first_round_micros = ctx.timestamp.to_micros_since_unix_epoch()
+            + 5_000_000i64  // 5-second countdown
+            + (round_duration as i64 * 1_000_000);
+        ctx.db.round_timer_entry().insert(RoundTimerEntry {
+            scheduled_id: 0,
+            scheduled_at: spacetimedb::ScheduleAt::Time(
+                spacetimedb::Timestamp::from_micros_since_unix_epoch(first_round_micros),
+            ),
+            room_id,
+        });
     }
     Ok(())
 }
@@ -955,10 +969,10 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
 // Chat-related reducers
 #[reducer]
 pub fn create_chat_room(ctx: &ReducerContext, name: String) -> Result<(), String> {
-    log::info!("🎯 create_chat_room CALLED! Name: {}, Sender: {:?}", name, ctx.sender());
+    log::info!("ðŸŽ¯ create_chat_room CALLED! Name: {}, Sender: {:?}", name, ctx.sender());
     
     let room_id = format!("room_{}", ctx.timestamp.to_micros_since_unix_epoch());
-    log::info!("📦 Generated room_id: {}", room_id);
+    log::info!("ðŸ“¦ Generated room_id: {}", room_id);
     
     ctx.db.chat_room().insert(ChatRoom {
         id: room_id.clone(),
@@ -966,7 +980,7 @@ pub fn create_chat_room(ctx: &ReducerContext, name: String) -> Result<(), String
         created_at: ctx.timestamp.to_micros_since_unix_epoch(),
         creator_id: ctx.sender().to_hex().to_string(),
     });
-    log::info!("✅ Inserted chat_room: {} ({})", name, room_id);
+    log::info!("âœ… Inserted chat_room: {} ({})", name, room_id);
 
     // Give creator full permissions
     ctx.db.chat_permission().insert(ChatPermission {
@@ -975,9 +989,9 @@ pub fn create_chat_room(ctx: &ReducerContext, name: String) -> Result<(), String
         user_id: ctx.sender(),
         permission: "write".to_string(),
     });
-    log::info!("🔐 Inserted chat_permission for user {:?}", ctx.sender());
+    log::info!("ðŸ” Inserted chat_permission for user {:?}", ctx.sender());
 
-    log::info!("🎉 create_chat_room COMPLETED successfully!");
+    log::info!("ðŸŽ‰ create_chat_room COMPLETED successfully!");
     Ok(())
 }
 
@@ -1566,13 +1580,32 @@ pub fn set_vote_color(
     }
 }
 
-// Vote Exchange: Process round votes and eliminate majority
+// Vote Exchange: Public reducer â€” thin wrapper with idempotency guard.
+// Clients may call this but server-side scheduling (process_round_scheduled) is the primary trigger.
 #[reducer]
 pub fn process_round_votes(
     ctx: &ReducerContext,
     room_id: i32,
-    round_number: i32,
 ) -> Result<(), String> {
+    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
+    if room.game_status != "active" {
+        return Ok(());
+    }
+    do_process_round(ctx, room_id)
+}
+
+// Vote Exchange: Server-side round processing â€” called by RoundTimerEntry scheduler.
+fn do_process_round(
+    ctx: &ReducerContext,
+    room_id: i32,
+) -> Result<(), String> {
+    // Derive round number from authoritative room state
+    let room_state = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
+    if room_state.game_status != "active" {
+        return Ok(());
+    }
+    let round_number = room_state.current_round;
+
     // Enforce purchased guarantees before tallying: lock any vote that has a
     // purchased guarantee to its guaranteed color (safety net for voters who
     // didn't explicitly set color or tried to circumvent the lock)
@@ -1735,7 +1768,10 @@ pub fn process_round_votes(
             ctx.db.side_bet().id().update(bet);
         }
 
-        if remaining_players.len() <= WIN_CONDITION_REMAINING {
+        if remaining_players.is_empty() {
+            // No players left â€” mark complete without distributing pot
+            room.game_status = "completed".to_string();
+        } else if remaining_players.len() <= WIN_CONDITION_REMAINING {
             room.game_status = "completed".to_string();
             
             let pot_per_winner = room.pot_size / remaining_players.len() as f64;
@@ -1783,6 +1819,17 @@ pub fn process_round_votes(
                 su.vote_color = None;
                 ctx.db.unit().id().update(su);
             }
+
+            // Schedule next round timer (server-owned round cadence)
+            let fire_at_micros = ctx.timestamp.to_micros_since_unix_epoch()
+                + (room.round_duration as i64 * 1_000_000);
+            ctx.db.round_timer_entry().insert(RoundTimerEntry {
+                scheduled_id: 0,
+                scheduled_at: spacetimedb::ScheduleAt::Time(
+                    spacetimedb::Timestamp::from_micros_since_unix_epoch(fire_at_micros),
+                ),
+                room_id,
+            });
         }
         
         ctx.db.game_room().id().update(room);
@@ -1843,7 +1890,7 @@ pub fn vote_end_round(
         for vid in votes_to_delete {
             ctx.db.end_round_vote().id().delete(vid);
         }
-        process_round_votes(ctx, room_id, current_round)?;
+        do_process_round(ctx, room_id)?;
     }
 
     Ok(())
@@ -1855,6 +1902,23 @@ pub struct GameTickTimer {
     #[auto_inc]
     scheduled_id: u64,
     scheduled_at: spacetimedb::ScheduleAt,
+}
+
+// Server-owned round timer: inserted by start_game and re-inserted after each round advance.
+// When it fires, process_round_scheduled derives the round from the room's current_round.
+#[table(accessor = round_timer_entry, scheduled(process_round_scheduled))]
+#[derive(Clone)]
+pub struct RoundTimerEntry {
+    #[primary_key]
+    #[auto_inc]
+    scheduled_id: u64,
+    scheduled_at: spacetimedb::ScheduleAt,
+    pub room_id: i32,
+}
+
+#[reducer]
+pub fn process_round_scheduled(ctx: &ReducerContext, timer: RoundTimerEntry) -> Result<(), String> {
+    do_process_round(ctx, timer.room_id)
 }
 
 #[table(accessor = unit_task_queue, public)]
@@ -2879,724 +2943,51 @@ pub fn transfer_resources(
     }
 }
 
-// ============================================================================
-// Social System: Friends & Direct Messaging Reducers
-// ============================================================================
-
-/// Helper function to get sorted identities for consistent friendship/conversation keys
-fn get_sorted_identities(a: Identity, b: Identity) -> (Identity, Identity) {
-    let a_hex = a.to_hex().to_string();
-    let b_hex = b.to_hex().to_string();
-    if a_hex < b_hex {
-        (a, b)
-    } else {
-        (b, a)
-    }
-}
-
-/// Helper to generate a conversation ID from two user identities
-fn get_conversation_id(user1: &Identity, user2: &Identity) -> String {
-    let (sorted1, sorted2) = get_sorted_identities(*user1, *user2);
-    format!("dm_{}_{}", sorted1.to_hex(), sorted2.to_hex())
-}
-
-/// Check if a user is blocked by another user
-fn is_blocked(ctx: &ReducerContext, blocker: Identity, blocked: Identity) -> bool {
-    ctx.db.blocked_user().iter()
-        .any(|b| b.blocker == blocker && b.blocked == blocked)
-}
-
-/// Check if two users are friends
-fn are_friends(ctx: &ReducerContext, user1: Identity, user2: Identity) -> bool {
-    let (sorted1, sorted2) = get_sorted_identities(user1, user2);
-    ctx.db.friendship().iter()
-        .any(|f| f.user1 == sorted1 && f.user2 == sorted2)
-}
-
-/// Send a friend request to another user
-#[reducer]
-pub fn send_friend_request(ctx: &ReducerContext, to_user: Identity) -> Result<(), String> {
-    let from_user = ctx.sender();
-    
-    // Can't send request to yourself
-    if from_user == to_user {
-        return Err("Cannot send friend request to yourself".to_string());
-    }
-    
-    // Check if target user exists
-    if ctx.db.user().identity().find(to_user).is_none() {
-        return Err("User not found".to_string());
-    }
-    
-    // Check if already friends
-    if are_friends(ctx, from_user, to_user) {
-        return Err("Already friends with this user".to_string());
-    }
-    
-    // Check if blocked by target user
-    if is_blocked(ctx, to_user, from_user) {
-        return Err("Cannot send friend request to this user".to_string());
-    }
-    
-    // Check if you blocked the target user
-    if is_blocked(ctx, from_user, to_user) {
-        return Err("You have blocked this user. Unblock them first.".to_string());
-    }
-    
-    // Check for existing pending request (either direction)
-    let existing_request = ctx.db.friend_request().iter()
-        .find(|r| r.status == "pending" && 
-            ((r.from_user == from_user && r.to_user == to_user) ||
-             (r.from_user == to_user && r.to_user == from_user)));
-    
-    if existing_request.is_some() {
-        return Err("A pending friend request already exists".to_string());
-    }
-    
-    // Create the friend request
-    ctx.db.friend_request().insert(FriendRequest {
-        id: 0, // auto-increment
-        from_user,
-        to_user,
-        status: "pending".to_string(),
-        created_at: ctx.timestamp,
-    });
-    
-    log::info!("Friend request sent from {:?} to {:?}", from_user, to_user);
-    Ok(())
-}
-
-/// Accept a friend request
-#[reducer]
-pub fn accept_friend_request(ctx: &ReducerContext, request_id: i32) -> Result<(), String> {
-    let request = ctx.db.friend_request().id().find(request_id)
-        .ok_or("Friend request not found")?;
-    
-    // Only the recipient can accept
-    if request.to_user != ctx.sender() {
-        return Err("You can only accept requests sent to you".to_string());
-    }
-    
-    // Must be pending
-    if request.status != "pending" {
-        return Err("Request is no longer pending".to_string());
-    }
-    
-    // Update request status
-    let mut updated_request = request.clone();
-    updated_request.status = "accepted".to_string();
-    ctx.db.friend_request().id().update(updated_request);
-    
-    // Create friendship record with sorted identities
-    let (user1, user2) = get_sorted_identities(request.from_user, request.to_user);
-    ctx.db.friendship().insert(Friendship {
-        id: 0, // auto-increment
-        user1,
-        user2,
-        created_at: ctx.timestamp,
-    });
-    
-    log::info!("Friend request {} accepted. Friendship created between {:?} and {:?}", 
-        request_id, user1, user2);
-    Ok(())
-}
-
-/// Reject a friend request
-#[reducer]
-pub fn reject_friend_request(ctx: &ReducerContext, request_id: i32) -> Result<(), String> {
-    let request = ctx.db.friend_request().id().find(request_id)
-        .ok_or("Friend request not found")?;
-    
-    // Only the recipient can reject
-    if request.to_user != ctx.sender() {
-        return Err("You can only reject requests sent to you".to_string());
-    }
-    
-    // Must be pending
-    if request.status != "pending" {
-        return Err("Request is no longer pending".to_string());
-    }
-    
-    // Update request status
-    let mut updated_request = request.clone();
-    updated_request.status = "rejected".to_string();
-    ctx.db.friend_request().id().update(updated_request);
-    
-    log::info!("Friend request {} rejected", request_id);
-    Ok(())
-}
-
-/// Cancel an outgoing friend request
-#[reducer]
-pub fn cancel_friend_request(ctx: &ReducerContext, request_id: i32) -> Result<(), String> {
-    let request = ctx.db.friend_request().id().find(request_id)
-        .ok_or("Friend request not found")?;
-    
-    // Only the sender can cancel
-    if request.from_user != ctx.sender() {
-        return Err("You can only cancel requests you sent".to_string());
-    }
-    
-    // Must be pending
-    if request.status != "pending" {
-        return Err("Request is no longer pending".to_string());
-    }
-    
-    // Delete the request
-    ctx.db.friend_request().id().delete(request_id);
-    
-    log::info!("Friend request {} cancelled", request_id);
-    Ok(())
-}
-
-/// Remove a friend
-#[reducer]
-pub fn remove_friend(ctx: &ReducerContext, friend_id: Identity) -> Result<(), String> {
-    let (user1, user2) = get_sorted_identities(ctx.sender(), friend_id);
-    
-    // Find the friendship
-    let friendship = ctx.db.friendship().iter()
-        .find(|f| f.user1 == user1 && f.user2 == user2)
-        .ok_or("Friendship not found")?;
-    
-    // Delete the friendship
-    ctx.db.friendship().id().delete(friendship.id);
-    
-    log::info!("Friendship removed between {:?} and {:?}", user1, user2);
-    Ok(())
-}
-
-/// Send a direct message to a friend
-#[reducer]
-pub fn send_direct_message(ctx: &ReducerContext, to_user: Identity, text: String) -> Result<(), String> {
-    let from_user = ctx.sender();
-    
-    // Validate message
-    if text.trim().is_empty() {
-        return Err("Message cannot be empty".to_string());
-    }
-    
-    // Can't message yourself
-    if from_user == to_user {
-        return Err("Cannot send message to yourself".to_string());
-    }
-    
-    // Check if blocked
-    if is_blocked(ctx, to_user, from_user) {
-        return Err("Cannot send message to this user".to_string());
-    }
-    
-    // Check if friends (required for DMs)
-    if !are_friends(ctx, from_user, to_user) {
-        return Err("You must be friends to send direct messages".to_string());
-    }
-    
-    let conversation_id = get_conversation_id(&from_user, &to_user);
-    let (user1, user2) = get_sorted_identities(from_user, to_user);
-    let now = ctx.timestamp.to_micros_since_unix_epoch();
-    
-    // Get or create conversation
-    if ctx.db.direct_message_conversation().id().find(&conversation_id).is_none() {
-        ctx.db.direct_message_conversation().insert(DirectMessageConversation {
-            id: conversation_id.clone(),
-            user1,
-            user2,
-            last_message_at: now,
-            created_at: now,
-        });
-    } else {
-        // Update last_message_at
-        if let Some(mut conv) = ctx.db.direct_message_conversation().id().find(&conversation_id) {
-            conv.last_message_at = now;
-            ctx.db.direct_message_conversation().id().update(conv);
-        }
-    }
-    
-    // Insert the message
-    ctx.db.direct_message().insert(DirectMessage {
-        id: 0, // auto-increment
-        conversation_id: conversation_id.clone(),
-        sender: from_user,
-        text,
-        timestamp: ctx.timestamp,
-        is_read: false,
-    });
-    
-    log::info!("Direct message sent in conversation {}", conversation_id);
-    Ok(())
-}
-
-/// Mark all messages in a conversation as read (for the current user)
-#[reducer]
-pub fn mark_messages_read(ctx: &ReducerContext, conversation_id: String) -> Result<(), String> {
-    let current_user = ctx.sender();
-    
-    // Verify conversation exists and user is a participant
-    let conversation = ctx.db.direct_message_conversation().id().find(&conversation_id)
-        .ok_or("Conversation not found")?;
-    
-    if conversation.user1 != current_user && conversation.user2 != current_user {
-        return Err("You are not a participant in this conversation".to_string());
-    }
-    
-    // Mark all unread messages from the other user as read
-    let messages_to_update: Vec<_> = ctx.db.direct_message().iter()
-        .filter(|m| m.conversation_id == conversation_id && 
-                    m.sender != current_user && 
-                    !m.is_read)
-        .collect();
-    
-    for message in messages_to_update {
-        let mut updated_message = message.clone();
-        updated_message.is_read = true;
-        ctx.db.direct_message().id().update(updated_message);
-    }
-    
-    log::info!("Marked messages as read in conversation {}", conversation_id);
-    Ok(())
-}
-
-/// Block a user
-#[reducer]
-pub fn block_user(ctx: &ReducerContext, user_id: Identity) -> Result<(), String> {
-    let blocker = ctx.sender();
-    
-    // Can't block yourself
-    if blocker == user_id {
-        return Err("Cannot block yourself".to_string());
-    }
-    
-    // Check if already blocked
-    if is_blocked(ctx, blocker, user_id) {
-        return Err("User is already blocked".to_string());
-    }
-    
-    // Remove any existing friendship
-    let (user1, user2) = get_sorted_identities(blocker, user_id);
-    if let Some(friendship) = ctx.db.friendship().iter()
-        .find(|f| f.user1 == user1 && f.user2 == user2) {
-        ctx.db.friendship().id().delete(friendship.id);
-        log::info!("Removed friendship as part of blocking");
-    }
-    
-    // Cancel any pending friend requests between the users
-    let pending_requests: Vec<_> = ctx.db.friend_request().iter()
-        .filter(|r| r.status == "pending" &&
-            ((r.from_user == blocker && r.to_user == user_id) ||
-             (r.from_user == user_id && r.to_user == blocker)))
-        .collect();
-    
-    for request in pending_requests {
-        ctx.db.friend_request().id().delete(request.id);
-        log::info!("Removed pending friend request {} as part of blocking", request.id);
-    }
-    
-    // Create block record
-    ctx.db.blocked_user().insert(BlockedUser {
-        id: 0, // auto-increment
-        blocker,
-        blocked: user_id,
-        created_at: ctx.timestamp,
-    });
-    
-    log::info!("User {:?} blocked {:?}", blocker, user_id);
-    Ok(())
-}
-
-/// Unblock a user
-#[reducer]
-pub fn unblock_user(ctx: &ReducerContext, user_id: Identity) -> Result<(), String> {
-    let blocker = ctx.sender();
-    
-    // Find the block record
-    let block = ctx.db.blocked_user().iter()
-        .find(|b| b.blocker == blocker && b.blocked == user_id)
-        .ok_or("User is not blocked")?;
-    
-    // Delete the block record
-    ctx.db.blocked_user().id().delete(block.id);
-    
-    log::info!("User {:?} unblocked {:?}", blocker, user_id);
-    Ok(())
-}
 
 // ============================================================================
-// Phase B: Functional Buildings
+// Additional Tables (used by submodule reducers, defined here so accessor
+// traits are in scope everywhere via super::*)
 // ============================================================================
 
-#[reducer]
-pub fn construct_building(
-    ctx: &ReducerContext,
-    room_id: i32,
-    position: Vector2,
-    building_type: String,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
-    if !room.member_ids.contains(&caller_id) {
-        return Err("You are not a member of this room".to_string());
-    }
-
-    let (construction_max, unit_type_str) = match building_type.as_str() {
-        "extraction_wood" | "extraction_mine" | "extraction_quarry"
-        | "extraction_hunter" | "extraction_farm" => (50, "structure"),
-        "refinery_carpenter" | "refinery_forge" | "refinery_mason"
-        | "refinery_weaver" | "refinery_tanner" | "refinery_kitchen"
-        | "refinery_glass_furnace" => (80, "structure"),
-        "manufacturing_armorer" | "manufacturing_weaponsmith"
-        | "manufacturing_toolsmith" | "manufacturing_tailor"
-        | "manufacturing_glass_blower" | "manufacturing_infuser" => (120, "structure"),
-        "housing_dormitory" | "housing_player" => (60, "structure"),
-        "farm_food" => (40, "structure"),
-        "breeding" => (100, "structure"),
-        _ => return Err("Invalid building type".to_string()),
-    };
-
-    let building = ctx.db.unit().insert(Unit {
-        id: 0, room_id,
-        owner_id: caller_id.clone(),
-        unit_type: unit_type_str.to_string(),
-        position,
-        dimensions: Vector2 { x: 50.0, y: 50.0 },
-        fill_style: "#6b4423".to_string(),
-        task_type: None, target_id: None,
-        vote_color: None, vote_guarantee: None,
-        vote_price: None, vote_owner: None, vote_id: None,
-        storage_capacity: Some(200),
-        is_storage: false,
-        building_type: Some(building_type),
-        construction_progress: Some(0),
-        construction_max: Some(construction_max),
-        assigned_unit_id: None,
-        building_recipe: None,
-        tax_rate: Some(0.0),
-        contributors: vec![caller_id],
-    });
-
-    ctx.db.unit_inventory().insert(UnitInventory {
-        unit_id: building.id,
-        wood: 0, stone: 0, metal_ore: 0, coal: 0, gems: 0,
-        fiber: 0, hide: 0, sand: 0, food: 0,
-        wooden_pole: 0, lumber: 0, cut_stone: 0, metal_ingot: 0,
-        cloth: 0, rope: 0, leather: 0, glass: 0,
-        max_capacity: 200,
-    });
-
-    Ok(())
-}
-
-#[reducer]
-pub fn contribute_to_building(
-    ctx: &ReducerContext,
-    building_id: i32,
-    resource_type: String,
-    amount: i32,
-    source_unit_id: i32,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let source_unit = ctx.db.unit().id().find(source_unit_id).ok_or("Source unit not found")?;
-    if source_unit.owner_id != caller_id {
-        return Err("You don't own this unit".to_string());
-    }
-
-    let mut building = ctx.db.unit().id().find(building_id).ok_or("Building not found")?;
-    if building.building_type.is_none() {
-        return Err("Not a building".to_string());
-    }
-    let progress = building.construction_progress.unwrap_or(0);
-    let max_progress = building.construction_max.unwrap_or(100);
-    if progress >= max_progress {
-        return Err("Building already complete".to_string());
-    }
-
-    let mut source_inv = ctx.db.unit_inventory().unit_id().find(source_unit_id)
-        .ok_or("Source inventory not found")?;
-
-    let available = match resource_type.as_str() {
-        "wood" => source_inv.wood, "stone" => source_inv.stone,
-        "metal_ore" => source_inv.metal_ore, _ => return Err("Invalid resource".to_string()),
-    };
-    if available < amount { return Err("Not enough resources".to_string()); }
-
-    match resource_type.as_str() {
-        "wood" => source_inv.wood -= amount,
-        "stone" => source_inv.stone -= amount,
-        "metal_ore" => source_inv.metal_ore -= amount,
-        _ => {}
-    }
-    ctx.db.unit_inventory().unit_id().update(source_inv);
-
-    building.construction_progress = Some((progress + amount).min(max_progress));
-    if !building.contributors.contains(&caller_id) {
-        building.contributors.push(caller_id);
-    }
-    ctx.db.unit().id().update(building);
-
-    Ok(())
-}
-
-#[reducer]
-pub fn assign_unit_to_building(
-    ctx: &ReducerContext,
-    unit_id: i32,
-    building_id: i32,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let unit = ctx.db.unit().id().find(unit_id).ok_or("Unit not found")?;
-    if unit.owner_id != caller_id {
-        return Err("You don't own this unit".to_string());
-    }
-
-    let mut building = ctx.db.unit().id().find(building_id).ok_or("Building not found")?;
-    if building.building_type.is_none() {
-        return Err("Not a building".to_string());
-    }
-    let progress = building.construction_progress.unwrap_or(0);
-    let max_progress = building.construction_max.unwrap_or(100);
-    if progress < max_progress {
-        return Err("Building not yet complete".to_string());
-    }
-
-    building.assigned_unit_id = Some(unit_id);
-    ctx.db.unit().id().update(building);
-
-    let mut updated_unit = unit.clone();
-    updated_unit.task_type = Some("work_building".to_string());
-    updated_unit.target_id = Some(building_id.to_string());
-    ctx.db.unit().id().update(updated_unit);
-
-    Ok(())
-}
-
-#[reducer]
-pub fn set_building_tax(
-    ctx: &ReducerContext,
-    building_id: i32,
-    tax_rate: f32,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let mut building = ctx.db.unit().id().find(building_id).ok_or("Building not found")?;
-    if !building.contributors.contains(&caller_id) {
-        return Err("Only contributors can set tax".to_string());
-    }
-    if tax_rate < 0.0 || tax_rate > 0.5 {
-        return Err("Tax rate must be between 0 and 50%".to_string());
-    }
-    building.tax_rate = Some(tax_rate);
-    ctx.db.unit().id().update(building);
-    Ok(())
-}
-
-// ============================================================================
 // Phase D: Equipment System
-// ============================================================================
-
 #[table(accessor = equipment, public)]
 #[derive(Clone)]
 pub struct Equipment {
     #[primary_key]
     #[auto_inc]
-    id: i32,
-    room_id: i32,
-    owner_id: String,
-    equipped_to_unit_id: Option<i32>,
-    equipment_type: String,  // "helmet" | "body" | "weapon" | "shield" | etc.
-    slot: String,            // "head" | "body" | "hands" | "feet" | "main_hand" | "off_hand" | "ring1" | "ring2" | "amulet" | "belt"
-    item_name: String,
-    tier: i32,               // 1-5
-    material: String,        // "iron" | "steel" | "mithril" etc.
-    enchantment: Option<String>, // "magic" | "unique" | "legendary"
-    quality: String,         // "poor" | "normal" | "good" | "excellent"
-    surface: String,         // "rusted" | "worn" | "polished" | "exalted"
-    attack_bonus: i32,
-    defense_bonus: i32,
-    speed_bonus: i32,
-    health_bonus: i32,
-    durability: i32,
-    max_durability: i32,
+    pub id: i32,
+    pub room_id: i32,
+    pub owner_id: String,
+    pub equipped_to_unit_id: Option<i32>,
+    pub equipment_type: String,
+    pub slot: String,
+    pub item_name: String,
+    pub tier: i32,
+    pub material: String,
+    pub enchantment: Option<String>,
+    pub quality: String,
+    pub surface: String,
+    pub attack_bonus: i32,
+    pub defense_bonus: i32,
+    pub speed_bonus: i32,
+    pub health_bonus: i32,
+    pub durability: i32,
+    pub max_durability: i32,
 }
 
-#[reducer]
-pub fn craft_equipment(
-    ctx: &ReducerContext,
-    room_id: i32,
-    building_id: i32,
-    equipment_type: String,
-    material: String,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let building = ctx.db.unit().id().find(building_id).ok_or("Building not found")?;
-    
-    let btype = building.building_type.as_deref().unwrap_or("");
-    let valid = match equipment_type.as_str() {
-        "weapon" => btype == "manufacturing_weaponsmith",
-        "helmet" | "body" | "shield" => btype == "manufacturing_armorer",
-        "tool" => btype == "manufacturing_toolsmith",
-        "clothes" => btype == "manufacturing_tailor",
-        _ => false,
-    };
-    if !valid { return Err("Wrong building type for this equipment".to_string()); }
-
-    let slot = match equipment_type.as_str() {
-        "weapon" => "main_hand", "shield" => "off_hand",
-        "helmet" => "head", "body" => "body",
-        "tool" => "main_hand", "clothes" => "body",
-        _ => "main_hand",
-    };
-
-    let tier = match material.as_str() {
-        "iron" => 1, "steel" => 2, "mithril" => 3,
-        "adamantite" => 4, "titanite" => 5,
-        _ => 1,
-    };
-
-    // Consume resources from building inventory (tiered costs)
-    let mut bldg_inv = ctx.db.unit_inventory().unit_id().find(building_id)
-        .ok_or("Building inventory not found")?;
-    match tier {
-        1 => { // iron: 5 metal_ingot
-            if bldg_inv.metal_ingot < 5 { return Err("Need 5 metal ingots".to_string()); }
-            bldg_inv.metal_ingot -= 5;
-        }
-        2 => { // steel: 10 metal_ingot + 3 coal
-            if bldg_inv.metal_ingot < 10 || bldg_inv.coal < 3 {
-                return Err("Need 10 metal ingots + 3 coal".to_string());
-            }
-            bldg_inv.metal_ingot -= 10; bldg_inv.coal -= 3;
-        }
-        3 => { // mithril: 15 metal_ingot + 5 gems
-            if bldg_inv.metal_ingot < 15 || bldg_inv.gems < 5 {
-                return Err("Need 15 metal ingots + 5 gems".to_string());
-            }
-            bldg_inv.metal_ingot -= 15; bldg_inv.gems -= 5;
-        }
-        4 => { // adamantite: 20 metal_ingot + 10 gems + 5 cut_stone
-            if bldg_inv.metal_ingot < 20 || bldg_inv.gems < 10 || bldg_inv.cut_stone < 5 {
-                return Err("Need 20 metal ingots + 10 gems + 5 cut stone".to_string());
-            }
-            bldg_inv.metal_ingot -= 20; bldg_inv.gems -= 10; bldg_inv.cut_stone -= 5;
-        }
-        _ => { // titanite (tier 5): 30 metal_ingot + 15 gems + 10 cut_stone
-            if bldg_inv.metal_ingot < 30 || bldg_inv.gems < 15 || bldg_inv.cut_stone < 10 {
-                return Err("Need 30 metal ingots + 15 gems + 10 cut stone".to_string());
-            }
-            bldg_inv.metal_ingot -= 30; bldg_inv.gems -= 15; bldg_inv.cut_stone -= 10;
-        }
-    }
-    ctx.db.unit_inventory().unit_id().update(bldg_inv);
-
-    let stat_base = tier * 3;
-    ctx.db.equipment().insert(Equipment {
-        id: 0, room_id,
-        owner_id: caller_id,
-        equipped_to_unit_id: None,
-        equipment_type: equipment_type.clone(),
-        slot: slot.to_string(),
-        item_name: format!("{} {} {}", material, equipment_type, "Mk I"),
-        tier, material,
-        enchantment: None,
-        quality: "normal".to_string(),
-        surface: "polished".to_string(),
-        attack_bonus: if equipment_type == "weapon" { stat_base * 2 } else { 0 },
-        defense_bonus: if equipment_type == "shield" || equipment_type == "body" || equipment_type == "helmet" { stat_base * 2 } else { 0 },
-        speed_bonus: 0,
-        health_bonus: if equipment_type == "body" { stat_base } else { 0 },
-        durability: 100 + tier * 20,
-        max_durability: 100 + tier * 20,
-    });
-
-    Ok(())
-}
-
-#[reducer]
-pub fn equip_item(
-    ctx: &ReducerContext,
-    equipment_id: i32,
-    unit_id: i32,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let mut item = ctx.db.equipment().id().find(equipment_id).ok_or("Equipment not found")?;
-    if item.owner_id != caller_id { return Err("You don't own this equipment".to_string()); }
-
-    let unit = ctx.db.unit().id().find(unit_id).ok_or("Unit not found")?;
-    if unit.owner_id != caller_id { return Err("You don't own this unit".to_string()); }
-
-    let existing: Vec<Equipment> = ctx.db.equipment().iter()
-        .filter(|e| e.equipped_to_unit_id == Some(unit_id) && e.slot == item.slot)
-        .collect();
-    for mut old in existing {
-        old.equipped_to_unit_id = None;
-        ctx.db.equipment().id().update(old);
-    }
-
-    item.equipped_to_unit_id = Some(unit_id);
-    ctx.db.equipment().id().update(item);
-
-    recalculate_unit_stats(ctx, unit_id);
-    Ok(())
-}
-
-#[reducer]
-pub fn unequip_item(
-    ctx: &ReducerContext,
-    equipment_id: i32,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let mut item = ctx.db.equipment().id().find(equipment_id).ok_or("Equipment not found")?;
-    if item.owner_id != caller_id { return Err("You don't own this equipment".to_string()); }
-    let unit_id = item.equipped_to_unit_id;
-    item.equipped_to_unit_id = None;
-    ctx.db.equipment().id().update(item);
-
-    if let Some(uid) = unit_id {
-        recalculate_unit_stats(ctx, uid);
-    }
-    Ok(())
-}
-
-fn recalculate_unit_stats(ctx: &ReducerContext, unit_id: i32) {
-    let genetics = ctx.db.laborer_genetics().unit_id().find(unit_id);
-    let (base_combat, base_gather, base_craft, base_speed, base_health) = match &genetics {
-        Some(g) => (g.combat_iv, g.gathering_iv, g.crafting_iv, g.speed_iv, g.health_iv),
-        None => (15, 15, 15, 15, 15), // defaults for units without genetics
-    };
-
-    let equipped: Vec<Equipment> = ctx.db.equipment().iter()
-        .filter(|e| e.equipped_to_unit_id == Some(unit_id))
-        .collect();
-    let eq_atk: i32 = equipped.iter().map(|e| e.attack_bonus).sum();
-    let eq_def: i32 = equipped.iter().map(|e| e.defense_bonus).sum();
-    let eq_spd: i32 = equipped.iter().map(|e| e.speed_bonus).sum();
-    let eq_hp: i32 = equipped.iter().map(|e| e.health_bonus).sum();
-
-    if let Some(mut stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
-        stats.max_health = 80 + base_health * 2 + eq_hp;
-        stats.health = stats.health.min(stats.max_health);
-        stats.attack = 5 + base_combat + eq_atk;
-        stats.defense = 3 + base_combat / 2 + eq_def;
-        stats.speed = 2 + base_speed / 4 + eq_spd;
-        stats.gather_rate = 3 + base_gather / 3;
-        stats.craft_rate = 2 + base_craft / 3;
-        ctx.db.unit_stats().unit_id().update(stats);
-    }
-}
-
-// ============================================================================
 // Phase E: Battle Arena
-// ============================================================================
-
 #[table(accessor = battle_arena, public)]
 #[derive(Clone)]
 pub struct BattleArena {
     #[primary_key]
     #[auto_inc]
-    id: i32,
-    room_id: i32,
-    round_number: i32,
-    status: String,           // "pending" | "in_progress" | "completed"
-    turn_number: i32,
-    winner_team: Option<String>, // "red" | "blue"
-    created_at: Timestamp,
+    pub id: i32,
+    pub room_id: i32,
+    pub round_number: i32,
+    pub status: String,
+    pub turn_number: i32,
+    pub winner_team: Option<String>,
+    pub created_at: Timestamp,
 }
 
 #[table(accessor = battle_unit, public)]
@@ -3604,837 +2995,120 @@ pub struct BattleArena {
 pub struct BattleUnit {
     #[primary_key]
     #[auto_inc]
-    id: i32,
-    arena_id: i32,
-    source_unit_id: i32,
-    owner_id: String,
-    team: String,             // "red" | "blue"
-    current_health: i32,
-    max_health: i32,
-    attack: i32,
-    defense: i32,
-    speed: i32,
-    is_alive: bool,
-    position_x: f32,
-    position_y: f32,
+    pub id: i32,
+    pub arena_id: i32,
+    pub source_unit_id: i32,
+    pub owner_id: String,
+    pub team: String,
+    pub current_health: i32,
+    pub max_health: i32,
+    pub attack: i32,
+    pub defense: i32,
+    pub speed: i32,
+    pub is_alive: bool,
+    pub position_x: f32,
+    pub position_y: f32,
 }
 
-#[reducer]
-pub fn create_battle_arena(
-    ctx: &ReducerContext,
-    room_id: i32,
-    red_unit_ids: Vec<i32>,
-    blue_unit_ids: Vec<i32>,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
-    if !room.member_ids.contains(&caller_id) {
-        return Err("You are not in this room".to_string());
-    }
-    if red_unit_ids.is_empty() || blue_unit_ids.is_empty() {
-        return Err("Both teams need at least one unit".to_string());
-    }
-
-    let arena = ctx.db.battle_arena().insert(BattleArena {
-        id: 0,
-        room_id,
-        round_number: room.current_round,
-        status: "in_progress".to_string(),
-        turn_number: 0,
-        winner_team: None,
-        created_at: ctx.timestamp,
-    });
-
-    // Snapshot each unit into BattleUnit with effective stats (base + equipment)
-    for (unit_ids, team) in [(&red_unit_ids, "red"), (&blue_unit_ids, "blue")] {
-        for (i, uid) in unit_ids.iter().enumerate() {
-            let unit = ctx.db.unit().id().find(*uid)
-                .ok_or(format!("Unit {} not found", uid))?;
-            if unit.room_id != room_id {
-                return Err(format!("Unit {} is not in this room", uid));
-            }
-            let stats = ctx.db.unit_stats().unit_id().find(*uid)
-                .ok_or(format!("Stats for unit {} not found", uid))?;
-
-            ctx.db.battle_unit().insert(BattleUnit {
-                id: 0,
-                arena_id: arena.id,
-                source_unit_id: *uid,
-                owner_id: unit.owner_id.clone(),
-                team: team.to_string(),
-                current_health: stats.health,
-                max_health: stats.max_health,
-                attack: stats.attack,
-                defense: stats.defense,
-                speed: stats.speed,
-                is_alive: true,
-                position_x: if team == "red" { 20.0 } else { 80.0 },
-                position_y: 30.0 + (i as f32) * 15.0,
-            });
-        }
-    }
-
-    Ok(())
-}
-
-#[reducer]
-pub fn process_battle_turn(
-    ctx: &ReducerContext,
-    arena_id: i32,
-) -> Result<(), String> {
-    let mut arena = ctx.db.battle_arena().id().find(arena_id)
-        .ok_or("Arena not found")?;
-    if arena.status != "in_progress" {
-        return Err("Battle is not in progress".to_string());
-    }
-
-    let alive_units: Vec<BattleUnit> = ctx.db.battle_unit().iter()
-        .filter(|u| u.arena_id == arena_id && u.is_alive)
-        .collect();
-
-    let red_alive: Vec<&BattleUnit> = alive_units.iter().filter(|u| u.team == "red").collect();
-    let blue_alive: Vec<&BattleUnit> = alive_units.iter().filter(|u| u.team == "blue").collect();
-
-    if red_alive.is_empty() || blue_alive.is_empty() {
-        arena.status = "completed".to_string();
-        arena.winner_team = if red_alive.is_empty() { Some("blue".to_string()) } else { Some("red".to_string()) };
-        ctx.db.battle_arena().id().update(arena);
-        return Ok(());
-    }
-
-    // Sort by speed for initiative order
-    let mut turn_order_ids: Vec<(i32, i32)> = alive_units.iter().map(|u| (u.id, u.speed)).collect();
-    turn_order_ids.sort_by(|a, b| b.1.cmp(&a.1));
-
-    for (attacker_id, _) in &turn_order_ids {
-        // Re-read attacker from DB each iteration to reflect kills from earlier in this turn
-        let attacker = match ctx.db.battle_unit().id().find(*attacker_id) {
-            Some(a) if a.is_alive => a,
-            _ => continue,
-        };
-
-        let enemies: Vec<BattleUnit> = ctx.db.battle_unit().iter()
-            .filter(|u| u.arena_id == arena_id && u.is_alive && u.team != attacker.team)
-            .collect();
-        if enemies.is_empty() { break; }
-
-        let target_idx = ctx.rng().gen::<usize>() % enemies.len();
-        let target = &enemies[target_idx];
-
-        let damage = (attacker.attack as f32 * (1.0 - target.defense as f32 / (target.defense as f32 + 100.0))) as i32;
-        let damage = damage.max(1);
-
-        let mut updated_target = target.clone();
-        updated_target.current_health -= damage;
-
-        // Degrade attacker's weapon durability on every attack
-        let attacker_equip: Vec<Equipment> = ctx.db.equipment().iter()
-            .filter(|e| e.equipped_to_unit_id == Some(attacker.source_unit_id) && e.slot == "main_hand")
-            .collect();
-        for mut eq in attacker_equip {
-            eq.durability = (eq.durability - 1).max(0);
-            ctx.db.equipment().id().update(eq);
-        }
-
-        if updated_target.current_health <= 0 {
-            updated_target.is_alive = false;
-            updated_target.current_health = 0;
-        }
-        ctx.db.battle_unit().id().update(updated_target);
-    }
-
-    arena.turn_number += 1;
-
-    // Check if battle ended
-    let red_remaining = ctx.db.battle_unit().iter()
-        .filter(|u| u.arena_id == arena_id && u.is_alive && u.team == "red").count();
-    let blue_remaining = ctx.db.battle_unit().iter()
-        .filter(|u| u.arena_id == arena_id && u.is_alive && u.team == "blue").count();
-
-    if red_remaining == 0 || blue_remaining == 0 {
-        arena.status = "completed".to_string();
-        arena.winner_team = if red_remaining == 0 { Some("blue".to_string()) } else { Some("red".to_string()) };
-    }
-
-    ctx.db.battle_arena().id().update(arena);
-    Ok(())
-}
-
-// ============================================================================
 // Phase F: Laborer Genetics and Breeding
-// ============================================================================
-
 #[table(accessor = laborer_genetics, public)]
 #[derive(Clone)]
 pub struct LaborerGenetics {
     #[primary_key]
-    unit_id: i32,
-    generation: i32,
-    parent_a_id: Option<i32>,
-    parent_b_id: Option<i32>,
-    combat_iv: i32,     // 0-31
-    gathering_iv: i32,
-    crafting_iv: i32,
-    speed_iv: i32,
-    health_iv: i32,
-    stamina_iv: i32,
+    pub unit_id: i32,
+    pub generation: i32,
+    pub parent_a_id: Option<i32>,
+    pub parent_b_id: Option<i32>,
+    pub combat_iv: i32,
+    pub gathering_iv: i32,
+    pub crafting_iv: i32,
+    pub speed_iv: i32,
+    pub health_iv: i32,
+    pub stamina_iv: i32,
 }
 
-#[reducer]
-pub fn breed_laborers(
-    ctx: &ReducerContext,
-    room_id: i32,
-    parent_a_id: i32,
-    parent_b_id: i32,
-    breeding_building_id: i32,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    if parent_a_id == parent_b_id {
-        return Err("Cannot breed a unit with itself".to_string());
-    }
-    let parent_a = ctx.db.unit().id().find(parent_a_id).ok_or("Parent A not found")?;
-    let parent_b = ctx.db.unit().id().find(parent_b_id).ok_or("Parent B not found")?;
-    if parent_a.owner_id != caller_id || parent_b.owner_id != caller_id {
-        return Err("You must own both parents".to_string());
-    }
-    if parent_a.room_id != room_id || parent_b.room_id != room_id {
-        return Err("Both parents must be in the same room".to_string());
-    }
-
-    let building = ctx.db.unit().id().find(breeding_building_id).ok_or("Building not found")?;
-    if building.building_type.as_deref() != Some("breeding") {
-        return Err("Must use a breeding building".to_string());
-    }
-
-    // Check food cost
-    let mut bldg_inv = ctx.db.unit_inventory().unit_id().find(breeding_building_id)
-        .ok_or("Building inventory not found")?;
-    if bldg_inv.food < 20 {
-        return Err("Breeding requires 20 food".to_string());
-    }
-    bldg_inv.food -= 20;
-    ctx.db.unit_inventory().unit_id().update(bldg_inv);
-
-    let gen_a = ctx.db.laborer_genetics().unit_id().find(parent_a_id);
-    let gen_b = ctx.db.laborer_genetics().unit_id().find(parent_b_id);
-
-    let inherit = |a_val: i32, b_val: i32| -> i32 {
-        let base = if ctx.rng().gen::<bool>() { a_val } else { b_val };
-        let mutation = ctx.rng().gen_range(-2..=2_i32);
-        (base + mutation).clamp(0, 31)
-    };
-
-    let (a_combat, a_gather, a_craft, a_speed, a_health, a_stam) = match &gen_a {
-        Some(g) => (g.combat_iv, g.gathering_iv, g.crafting_iv, g.speed_iv, g.health_iv, g.stamina_iv),
-        None => (15, 15, 15, 15, 15, 15),
-    };
-    let (b_combat, b_gather, b_craft, b_speed, b_health, b_stam) = match &gen_b {
-        Some(g) => (g.combat_iv, g.gathering_iv, g.crafting_iv, g.speed_iv, g.health_iv, g.stamina_iv),
-        None => (15, 15, 15, 15, 15, 15),
-    };
-
-    let gen_a_val = gen_a.as_ref().map(|g| g.generation).unwrap_or(0);
-    let gen_b_val = gen_b.as_ref().map(|g| g.generation).unwrap_or(0);
-
-    // Create the offspring unit (no vote linked -- must be acquired separately)
-    let offspring = ctx.db.unit().insert(Unit {
-        id: 0, room_id,
-        owner_id: caller_id.clone(),
-        unit_type: "minion".to_string(),
-        position: parent_a.position.clone(),
-        dimensions: Vector2 { x: 20.0, y: 20.0 },
-        fill_style: "#ffcc00".to_string(),
-        task_type: None, target_id: None,
-        vote_color: None, vote_guarantee: None,
-        vote_price: None, vote_owner: None, vote_id: None,
-        storage_capacity: None, is_storage: false,
-        building_type: None, construction_progress: None,
-        construction_max: None, assigned_unit_id: None,
-        building_recipe: None, tax_rate: None, contributors: vec![],
-    });
-
-    // Pre-compute all child IVs once to avoid double-roll divergence
-    let child_combat = inherit(a_combat, b_combat);
-    let child_gather = inherit(a_gather, b_gather);
-    let child_craft = inherit(a_craft, b_craft);
-    let child_speed = inherit(a_speed, b_speed);
-    let child_health = inherit(a_health, b_health);
-    let child_stam = inherit(a_stam, b_stam);
-
-    ctx.db.unit_stats().insert(UnitStats {
-        unit_id: offspring.id,
-        health: 80 + child_health * 2,
-        max_health: 80 + child_health * 2,
-        attack: 5 + child_combat,
-        defense: 3 + child_combat / 2,
-        speed: 2 + child_speed / 4,
-        gather_rate: 3 + child_gather / 3,
-        craft_rate: 2 + child_craft / 3,
-    });
-
-    ctx.db.unit_inventory().insert(UnitInventory {
-        unit_id: offspring.id,
-        wood: 0, stone: 0, metal_ore: 0, coal: 0, gems: 0,
-        fiber: 0, hide: 0, sand: 0, food: 0,
-        wooden_pole: 0, lumber: 0, cut_stone: 0, metal_ingot: 0,
-        cloth: 0, rope: 0, leather: 0, glass: 0,
-        max_capacity: 80,
-    });
-
-    ctx.db.laborer_genetics().insert(LaborerGenetics {
-        unit_id: offspring.id,
-        generation: gen_a_val.max(gen_b_val) + 1,
-        parent_a_id: Some(parent_a_id),
-        parent_b_id: Some(parent_b_id),
-        combat_iv: child_combat,
-        gathering_iv: child_gather,
-        crafting_iv: child_craft,
-        speed_iv: child_speed,
-        health_iv: child_health,
-        stamina_iv: child_stam,
-    });
-
-    Ok(())
-}
-
-// ============================================================================
 // Phase G: Vote Mechanics Polish
-// ============================================================================
-
 #[table(accessor = side_bet, public)]
 #[derive(Clone)]
 pub struct SideBet {
     #[primary_key]
     #[auto_inc]
-    id: i32,
-    room_id: i32,
-    round_number: i32,
-    bettor_id: String,
-    bet_type: String,        // "color_wins" | "player_eliminated"
-    bet_target: String,      // "red" | "blue" or player_id
-    amount: f64,
-    payout_multiplier: f64,
-    status: String,          // "pending" | "won" | "lost"
-    created_at: Timestamp,
+    pub id: i32,
+    pub room_id: i32,
+    pub round_number: i32,
+    pub bettor_id: String,
+    pub bet_type: String,
+    pub bet_target: String,
+    pub amount: f64,
+    pub payout_multiplier: f64,
+    pub status: String,
+    pub created_at: Timestamp,
 }
 
-#[reducer]
-pub fn place_side_bet(
-    ctx: &ReducerContext,
-    room_id: i32,
-    bet_type: String,
-    bet_target: String,
-    amount: f64,
-) -> Result<(), String> {
-    let bettor_id = ctx.sender().to_hex().to_string();
-    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
-    
-    // Must be eliminated or spectating
-    if room.member_ids.contains(&bettor_id) && !room.eliminated_players.contains(&bettor_id) {
-        return Err("Only eliminated or spectating players can place side bets".to_string());
-    }
-
-    if amount <= 0.0 { return Err("Bet amount must be positive".to_string()); }
-
-    let mut user = ctx.db.user().identity().find(ctx.sender()).ok_or("User not found")?;
-    if user.wallet_balance < amount { return Err("Insufficient funds".to_string()); }
-    user.wallet_balance -= amount;
-    ctx.db.user().identity().update(user);
-
-    // Bet amount goes into the pot (zero-sum backed economics)
-    if let Some(mut r) = ctx.db.game_room().id().find(room_id) {
-        r.pot_size += amount;
-        ctx.db.game_room().id().update(r);
-    }
-
-    let multiplier = match bet_type.as_str() {
-        "color_wins" => 1.8,
-        "player_eliminated" => 2.5,
-        _ => return Err("Invalid bet type".to_string()),
-    };
-
-    ctx.db.side_bet().insert(SideBet {
-        id: 0, room_id,
-        round_number: room.current_round,
-        bettor_id, bet_type, bet_target,
-        amount, payout_multiplier: multiplier,
-        status: "pending".to_string(),
-        created_at: ctx.timestamp,
-    });
-
-    Ok(())
-}
-
-#[reducer]
-pub fn vote_to_start_round(
-    ctx: &ReducerContext,
-    room_id: i32,
-) -> Result<(), String> {
-    // Same logic as vote_end_round but semantically for starting a round vote
-    vote_end_round(ctx, room_id)
-}
-
-// Spawn a new laborer (acquires a new vote slot)
-#[reducer]
-pub fn spawn_laborer(
-    ctx: &ReducerContext,
-    room_id: i32,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
-    if !room.member_ids.contains(&caller_id) {
-        return Err("You are not in this room".to_string());
-    }
-
-    // Server-determined cost based on buy-in amount (prevents client manipulation)
-    let cost = room.buyin_amount;
-
-    let mut user = ctx.db.user().identity().find(ctx.sender()).ok_or("User not found")?;
-    if user.wallet_balance < cost { return Err("Insufficient funds".to_string()); }
-    user.wallet_balance -= cost;
-    ctx.db.user().identity().update(user);
-
-    let fee = cost * TRANSACTION_FEE_RATE;
-    if let Some(mut r) = ctx.db.game_room().id().find(room_id) {
-        r.pot_size += cost - fee; // net cost goes to pot
-        ctx.db.game_room().id().update(r);
-    }
-
-    let new_vote = ctx.db.vote().insert(Vote {
-        id: 0, room_id,
-        round_number: room.current_round,
-        player_id: caller_id.clone(),
-        original_owner: caller_id.clone(),
-        color: None,
-        is_for_sale: false, sale_price: None,
-        timestamp: ctx.timestamp,
-    });
-
-    let new_unit = ctx.db.unit().insert(Unit {
-        id: 0, room_id,
-        owner_id: caller_id,
-        unit_type: "minion".to_string(),
-        position: Vector2 { x: ctx.rng().gen::<f32>() * 80.0 + 10.0, y: ctx.rng().gen::<f32>() * 80.0 + 10.0 },
-        dimensions: Vector2 { x: 20.0, y: 20.0 },
-        fill_style: "#aaaaaa".to_string(),
-        task_type: None, target_id: None,
-        vote_color: None, vote_guarantee: None,
-        vote_price: None, vote_owner: None,
-        vote_id: Some(new_vote.id),
-        storage_capacity: None, is_storage: false,
-        building_type: None, construction_progress: None,
-        construction_max: None, assigned_unit_id: None,
-        building_recipe: None, tax_rate: None, contributors: vec![],
-    });
-
-    ctx.db.unit_stats().insert(UnitStats {
-        unit_id: new_unit.id,
-        health: 100, max_health: 100,
-        attack: 10, defense: 5, speed: 3,
-        gather_rate: 5, craft_rate: 3,
-    });
-    ctx.db.unit_inventory().insert(UnitInventory {
-        unit_id: new_unit.id,
-        wood: 0, stone: 0, metal_ore: 0, coal: 0, gems: 0,
-        fiber: 0, hide: 0, sand: 0, food: 0,
-        wooden_pole: 0, lumber: 0, cut_stone: 0, metal_ingot: 0,
-        cloth: 0, rope: 0, leather: 0, glass: 0,
-        max_capacity: 100,
-    });
-
-    Ok(())
-}
-
-// ============================================================================
-// Phase H: Multi-Timeframe Server Hierarchy (tables and stubs)
-// ============================================================================
-
+// Phase H: Multi-Timeframe Server Hierarchy
 #[table(accessor = server_node, public)]
 #[derive(Clone)]
 pub struct ServerNode {
     #[primary_key]
     #[auto_inc]
-    id: i32,
-    name: String,
-    server_type: String,         // "eternal" | "city" | "expedition" | "custom"
-    parent_id: Option<i32>,
-    trading_period_seconds: i64, // duration of one trading period
-    status: String,              // "active" | "terminated"
-    linked_room_id: Option<i32>,
-    created_at: Timestamp,
+    pub id: i32,
+    pub name: String,
+    pub server_type: String,
+    pub parent_id: Option<i32>,
+    pub trading_period_seconds: i64,
+    pub status: String,
+    pub linked_room_id: Option<i32>,
+    pub created_at: Timestamp,
 }
 
-#[reducer]
-pub fn create_server_node(
-    ctx: &ReducerContext,
-    name: String,
-    server_type: String,
-    parent_id: Option<i32>,
-    trading_period_seconds: i64,
-) -> Result<(), String> {
-    if let Some(pid) = parent_id {
-        let parent = ctx.db.server_node().id().find(pid).ok_or("Parent server not found")?;
-        if parent.status == "terminated" {
-            return Err("Cannot create child of terminated server".to_string());
-        }
-    }
-
-    ctx.db.server_node().insert(ServerNode {
-        id: 0, name, server_type,
-        parent_id,
-        trading_period_seconds,
-        status: "active".to_string(),
-        linked_room_id: None,
-        created_at: ctx.timestamp,
-    });
-    Ok(())
-}
-
-#[reducer]
-pub fn transfer_laborer_to_parent(
-    ctx: &ReducerContext,
-    unit_id: i32,
-    _parent_server_id: i32,
-) -> Result<(), String> {
-    let caller_id = ctx.sender().to_hex().to_string();
-    let unit = ctx.db.unit().id().find(unit_id).ok_or("Unit not found")?;
-    if unit.owner_id != caller_id {
-        return Err("You don't own this unit".to_string());
-    }
-
-    // Void the vote for this laborer (per design: vote is voided on upward transfer)
-    if let Some(vid) = unit.vote_id {
-        ctx.db.vote().id().delete(vid);
-    }
-
-    // Return equipped items to owner's pool before deletion
-    let unit_equips: Vec<Equipment> = ctx.db.equipment().iter()
-        .filter(|e| e.equipped_to_unit_id == Some(unit_id)).collect();
-    for mut eq in unit_equips { eq.equipped_to_unit_id = None; ctx.db.equipment().id().update(eq); }
-
-    ctx.db.unit_inventory().unit_id().delete(unit_id);
-    ctx.db.unit_stats().unit_id().delete(unit_id);
-    ctx.db.laborer_genetics().unit_id().delete(unit_id);
-    ctx.db.unit().id().delete(unit_id);
-
-    Ok(())
-}
-
-// ============================================================================
 // Phase I: Dual Currency (MT + MBLS)
-// ============================================================================
-
-// Note: wallet_balance on User serves as mt_balance.
-// We add mbls_balance tracking via a separate table to avoid breaking changes.
 #[table(accessor = player_currency, public)]
 #[derive(Clone)]
 pub struct PlayerCurrency {
     #[primary_key]
-    player_id: String,
-    mt_balance: f64,    // mirrors User.wallet_balance for explicitness
-    mbls_balance: f64,  // Essence Marbles -- market-driven value
+    pub player_id: String,
+    pub mt_balance: f64,
+    pub mbls_balance: f64,
 }
 
-#[reducer]
-pub fn convert_mt_to_mbls(
-    ctx: &ReducerContext,
-    amount: f64,
-) -> Result<(), String> {
-    if amount <= 0.0 { return Err("Amount must be positive".to_string()); }
-
-    // Server-determined exchange rate (prevents client manipulation)
-    let exchange_rate: f64 = 100.0; // 1 MBLS = 100 MT
-
-    let caller_id = ctx.sender().to_hex().to_string();
-    let mut user = ctx.db.user().identity().find(ctx.sender()).ok_or("User not found")?;
-    if user.wallet_balance < amount {
-        return Err("Insufficient MT balance".to_string());
-    }
-
-    user.wallet_balance -= amount;
-    ctx.db.user().identity().update(user.clone());
-
-    let mbls_amount = amount / exchange_rate;
-
-    if let Some(mut pc) = ctx.db.player_currency().player_id().find(&caller_id) {
-        pc.mt_balance = user.wallet_balance; // sync with actual balance
-        pc.mbls_balance += mbls_amount;
-        ctx.db.player_currency().player_id().update(pc);
-    } else {
-        ctx.db.player_currency().insert(PlayerCurrency {
-            player_id: caller_id,
-            mt_balance: user.wallet_balance,
-            mbls_balance: mbls_amount,
-        });
-    }
-
-    Ok(())
-}
-
-// ============================================================================
-// Phase J: Platform Features (tables and stubs)
-// ============================================================================
-
+// Phase J: Platform Features
 #[table(accessor = tournament, public)]
 #[derive(Clone)]
 pub struct Tournament {
     #[primary_key]
     #[auto_inc]
-    id: i32,
-    name: String,
-    entry_fee: f64,
-    prize_pool: f64,
-    max_participants: i32,
-    current_round: i32,
-    status: String,          // "registration" | "active" | "completed"
-    bracket_type: String,    // "single_elimination" | "double_elimination" | "round_robin"
-    room_ids: Vec<i32>,
-    participant_ids: Vec<String>,
-    created_at: Timestamp,
+    pub id: i32,
+    pub name: String,
+    pub entry_fee: f64,
+    pub prize_pool: f64,
+    pub max_participants: i32,
+    pub current_round: i32,
+    pub status: String,
+    pub bracket_type: String,
+    pub room_ids: Vec<i32>,
+    pub participant_ids: Vec<String>,
+    pub created_at: Timestamp,
 }
 
-#[reducer]
-pub fn create_tournament(
-    ctx: &ReducerContext,
-    name: String,
-    entry_fee: f64,
-    max_participants: i32,
-    bracket_type: String,
-) -> Result<(), String> {
-    ctx.db.tournament().insert(Tournament {
-        id: 0, name,
-        entry_fee,
-        prize_pool: 0.0,
-        max_participants,
-        current_round: 0,
-        status: "registration".to_string(),
-        bracket_type,
-        room_ids: vec![],
-        participant_ids: vec![],
-        created_at: ctx.timestamp,
-    });
-    Ok(())
-}
-
-#[reducer]
-pub fn join_tournament(
-    ctx: &ReducerContext,
-    tournament_id: i32,
-) -> Result<(), String> {
-    let player_id = ctx.sender().to_hex().to_string();
-    let mut tournament = ctx.db.tournament().id().find(tournament_id)
-        .ok_or("Tournament not found")?;
-    
-    if tournament.status != "registration" {
-        return Err("Tournament registration is closed".to_string());
-    }
-    if tournament.participant_ids.len() >= tournament.max_participants as usize {
-        return Err("Tournament is full".to_string());
-    }
-    if tournament.participant_ids.contains(&player_id) {
-        return Err("Already registered".to_string());
-    }
-
-    let mut user = ctx.db.user().identity().find(ctx.sender()).ok_or("User not found")?;
-    if user.wallet_balance < tournament.entry_fee {
-        return Err("Insufficient funds for entry fee".to_string());
-    }
-    user.wallet_balance -= tournament.entry_fee;
-    ctx.db.user().identity().update(user);
-
-    tournament.prize_pool += tournament.entry_fee;
-    tournament.participant_ids.push(player_id);
-    ctx.db.tournament().id().update(tournament);
-
-    Ok(())
-}
-
-// Spectator tracking
 #[table(accessor = spectator, public)]
 #[derive(Clone)]
 pub struct Spectator {
     #[primary_key]
     #[auto_inc]
-    id: i32,
-    room_id: i32,
-    user_id: String,
-    joined_at: Timestamp,
-}
-
-#[reducer]
-pub fn spectate_room(
-    ctx: &ReducerContext,
-    room_id: i32,
-) -> Result<(), String> {
-    let user_id = ctx.sender().to_hex().to_string();
-    let _room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
-
-    let already = ctx.db.spectator().iter()
-        .any(|s| s.room_id == room_id && s.user_id == user_id);
-    if already { return Err("Already spectating".to_string()); }
-
-    ctx.db.spectator().insert(Spectator {
-        id: 0, room_id, user_id,
-        joined_at: ctx.timestamp,
-    });
-    Ok(())
-}
-
-#[reducer]
-pub fn stop_spectating(
-    ctx: &ReducerContext,
-    room_id: i32,
-) -> Result<(), String> {
-    let user_id = ctx.sender().to_hex().to_string();
-    let spec = ctx.db.spectator().iter()
-        .find(|s| s.room_id == room_id && s.user_id == user_id)
-        .ok_or("Not spectating")?;
-    ctx.db.spectator().id().delete(spec.id);
-    Ok(())
+    pub id: i32,
+    pub room_id: i32,
+    pub user_id: String,
+    pub joined_at: Timestamp,
 }
 
 // ============================================================================
-// TEST UTILITIES - For E2E test isolation
+// Module Declarations
+// Reducers are organized into domain-specific submodules; all table
+// definitions live in this file so accessor traits are always in scope.
 // ============================================================================
 
-/// Reset test data - clears game rooms and ready states for test isolation.
-/// This should only be used in test environments, not production.
-/// 
-/// # Arguments
-/// * `confirmation` - Must be "RESET_TEST_DATA" to prevent accidental calls
-#[reducer]
-pub fn reset_test_data(ctx: &ReducerContext, confirmation: String) -> Result<(), String> {
-    // Safety check to prevent accidental data loss
-    if confirmation != "RESET_TEST_DATA" {
-        return Err("Invalid confirmation string. Pass 'RESET_TEST_DATA' to confirm.".to_string());
-    }
-    
-    log::warn!("🧹 Resetting test data - clearing game rooms and ready states");
-    
-    // Collect all game room IDs first to avoid borrowing issues
-    let room_ids: Vec<i32> = ctx.db.game_room().iter().map(|r| r.id).collect();
-    let room_count = room_ids.len();
-    
-    // Delete all game rooms
-    for room_id in room_ids {
-        ctx.db.game_room().id().delete(room_id);
-    }
-    
-    // Collect all ready state room IDs
-    let ready_state_ids: Vec<String> = ctx.db.ready_state().iter().map(|r| r.room_id.clone()).collect();
-    let ready_count = ready_state_ids.len();
-    
-    // Delete all ready states
-    for room_id in ready_state_ids {
-        ctx.db.ready_state().room_id().delete(room_id);
-    }
-    
-    // Delete game-related chat rooms (those starting with "game_")
-    let game_chat_ids: Vec<String> = ctx.db.chat_room().iter()
-        .filter(|r| r.id.starts_with("game_"))
-        .map(|r| r.id.clone())
-        .collect();
-    let chat_count = game_chat_ids.len();
-    
-    for chat_id in game_chat_ids {
-        ctx.db.chat_room().id().delete(chat_id.clone());
-        
-        // Also delete chat permissions for this room
-        let perm_ids: Vec<i32> = ctx.db.chat_permission().iter()
-            .filter(|p| p.room_id == chat_id)
-            .map(|p| p.id)
-            .collect();
-        for perm_id in perm_ids {
-            ctx.db.chat_permission().id().delete(perm_id);
-        }
-    }
-    
-    // Delete all votes
-    let vote_ids: Vec<i32> = ctx.db.vote().iter().map(|v| v.id).collect();
-    let vote_count = vote_ids.len();
-    for vote_id in vote_ids {
-        ctx.db.vote().id().delete(vote_id);
-    }
-    
-    // Delete all guarantees
-    let guarantee_ids: Vec<i32> = ctx.db.guarantee().iter().map(|g| g.id).collect();
-    for guarantee_id in guarantee_ids {
-        ctx.db.guarantee().id().delete(guarantee_id);
-    }
-    
-    // Delete all trade offers
-    let trade_offer_ids: Vec<i32> = ctx.db.trade_offer().iter().map(|o| o.id).collect();
-    for offer_id in trade_offer_ids {
-        ctx.db.trade_offer().id().delete(offer_id);
-    }
-    
-    // Delete all units
-    let unit_ids: Vec<i32> = ctx.db.unit().iter().map(|u| u.id).collect();
-    for unit_id in unit_ids {
-        ctx.db.unit().id().delete(unit_id);
-    }
-    
-    // Delete all player positions
-    let pos_ids: Vec<i32> = ctx.db.player_position().iter().map(|p| p.id).collect();
-    let pos_count = pos_ids.len();
-    for pos_id in pos_ids {
-        ctx.db.player_position().id().delete(pos_id);
-    }
-
-    // Delete all end-round votes
-    let erv_ids: Vec<i32> = ctx.db.end_round_vote().iter().map(|e| e.id).collect();
-    for erv_id in erv_ids {
-        ctx.db.end_round_vote().id().delete(erv_id);
-    }
-
-    // Clean up new Phase tables
-    let equip_ids: Vec<i32> = ctx.db.equipment().iter().map(|e| e.id).collect();
-    for eid in equip_ids { ctx.db.equipment().id().delete(eid); }
-
-    let arena_ids: Vec<i32> = ctx.db.battle_arena().iter().map(|a| a.id).collect();
-    for aid in arena_ids { ctx.db.battle_arena().id().delete(aid); }
-
-    let bu_ids: Vec<i32> = ctx.db.battle_unit().iter().map(|b| b.id).collect();
-    for bid in bu_ids { ctx.db.battle_unit().id().delete(bid); }
-
-    let gen_ids: Vec<i32> = ctx.db.laborer_genetics().iter().map(|g| g.unit_id).collect();
-    for gid in gen_ids { ctx.db.laborer_genetics().unit_id().delete(gid); }
-
-    let sb_ids: Vec<i32> = ctx.db.side_bet().iter().map(|s| s.id).collect();
-    for sid in sb_ids { ctx.db.side_bet().id().delete(sid); }
-
-    let sn_ids: Vec<i32> = ctx.db.server_node().iter().map(|s| s.id).collect();
-    for sid in sn_ids { ctx.db.server_node().id().delete(sid); }
-
-    let pc_ids: Vec<String> = ctx.db.player_currency().iter().map(|p| p.player_id.clone()).collect();
-    for pid in pc_ids { ctx.db.player_currency().player_id().delete(pid); }
-
-    let t_ids: Vec<i32> = ctx.db.tournament().iter().map(|t| t.id).collect();
-    for tid in t_ids { ctx.db.tournament().id().delete(tid); }
-
-    let spec_ids: Vec<i32> = ctx.db.spectator().iter().map(|s| s.id).collect();
-    for sid in spec_ids { ctx.db.spectator().id().delete(sid); }
-
-    let stats_ids: Vec<i32> = ctx.db.unit_stats().iter().map(|s| s.unit_id).collect();
-    for sid in stats_ids { ctx.db.unit_stats().unit_id().delete(sid); }
-
-    let inv_ids: Vec<i32> = ctx.db.unit_inventory().iter().map(|i| i.unit_id).collect();
-    for iid in inv_ids { ctx.db.unit_inventory().unit_id().delete(iid); }
-
-    let tq_ids: Vec<i32> = ctx.db.unit_task_queue().iter().map(|t| t.id).collect();
-    for tid in tq_ids { ctx.db.unit_task_queue().id().delete(tid); }
-
-    let res_ids: Vec<String> = ctx.db.resource().iter().map(|r| r.id.clone()).collect();
-    for rid in res_ids { ctx.db.resource().id().delete(rid); }
-
-    let tx_ids: Vec<i32> = ctx.db.transaction().iter().map(|t| t.id).collect();
-    for tid in tx_ids { ctx.db.transaction().id().delete(tid); }
-
-    let gp_ids: Vec<i32> = ctx.db.guarantee_purchase().iter().map(|g| g.id).collect();
-    for gid in gp_ids { ctx.db.guarantee_purchase().id().delete(gid); }
-
-    log::info!("✅ Test data reset complete: {} rooms, {} ready states, {} chat rooms, {} votes, {} positions deleted", 
-        room_count, ready_count, chat_count, vote_count, pos_count);
-    
-    Ok(())
-}
+pub mod social;
+pub mod colony_builder;
+pub mod battle_genetics;
+pub mod platform;
+pub mod test_utils;

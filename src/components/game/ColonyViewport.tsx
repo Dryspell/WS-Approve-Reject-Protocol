@@ -3,17 +3,19 @@ import {
   ColonySceneManager,
   type ColonyUnit,
   type ColonyResource,
+  type ColonyBuilding,
   type OtherPlayerAvatar,
   type TeamColor,
   type ActiveTradeOffer,
 } from "~/lib/colony-scene";
 import type { CharacterClass } from "~/lib/asset-loader";
 
-export type { TeamColor, ColonyUnit, ColonyResource, OtherPlayerAvatar, ActiveTradeOffer } from "~/lib/colony-scene";
+export type { TeamColor, ColonyUnit, ColonyResource, ColonyBuilding, OtherPlayerAvatar, ActiveTradeOffer } from "~/lib/colony-scene";
 
 export interface ColonyViewportProps {
   units: ColonyUnit[];
   resources?: ColonyResource[];
+  buildings?: ColonyBuilding[];
   selectedIds: Accessor<number[]>;
   onSelect: (ids: number[]) => void;
   onMoveUnit?: (id: number, x: number, z: number) => void;
@@ -92,6 +94,11 @@ export default function ColonyViewport(props: ColonyViewportProps) {
   createEffect(() => {
     const offers = props.activeOffers;
     if (offers) manager?.updateTradeOffers(offers);
+  });
+
+  createEffect(() => {
+    const buildings = props.buildings;
+    if (buildings) manager?.syncBuildings(buildings);
   });
 
   // IMPORTANT — SolidJS + imperative DOM (Three.js canvas) pitfall:

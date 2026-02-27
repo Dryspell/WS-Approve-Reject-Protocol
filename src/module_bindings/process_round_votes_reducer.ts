@@ -12,5 +12,4 @@ import {
 
 export default {
   roomId: __t.i32(),
-  roundNumber: __t.i32(),
 };

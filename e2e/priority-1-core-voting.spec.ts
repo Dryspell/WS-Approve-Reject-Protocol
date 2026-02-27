@@ -86,10 +86,11 @@ test.describe('1.1 Game Room Creation & Joining', () => {
 
       // Real player readies
       await setup.gamePage.clickReady();
-      // Bots ready
+      // Bots ready — once all 3 players are ready the game auto-starts
       await setup.bots.readyAll(setup.roomName);
 
-      await expect(setup.gamePage.readyButton).toBeVisible({ timeout: 5000 });
+      // Game should have started: ready button disappears, pot becomes visible
+      await expect(setup.gamePage.potAmount).toBeVisible({ timeout: 15000 });
     } finally {
       await hybridCleanup(setup);
     }

@@ -1,4 +1,4 @@
-import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect, untrack } from "solid-js";
+import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -16,7 +16,7 @@ import { AdminPanel } from "~/components/dev/AdminPanel";
 import { ToastHelper } from "~/lib/toast-helpers";
 import { sounds } from "~/lib/sounds";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import ColonyViewport, { type ColonyUnit, type ColonyResource, type TeamColor, type OtherPlayerAvatar } from "../game/ColonyViewport";
+import ColonyViewport, { type ColonyUnit, type ColonyResource, type ColonyBuilding, type TeamColor, type OtherPlayerAvatar } from "../game/ColonyViewport";
 import UnitContextPanel from "../game/UnitContextPanel";
 import BuildingPanel from "../game/BuildingPanel";
 import EquipmentPanel from "../game/EquipmentPanel";
@@ -47,7 +47,6 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [unitInventories, setUnitInventories] = createSignal<UnitInventory[]>([]);
   const [unitTaskQueues, setUnitTaskQueues] = createSignal<UnitTaskQueue[]>([]);
   const [draggedVote, setDraggedVote] = createSignal<Vote | null>(null);
-  const [roundProcessing, setRoundProcessing] = createSignal(false);
   const [showEliminationModal, setShowEliminationModal] = createSignal(false);
   const [lastProcessedRound, setLastProcessedRound] = createSignal(0);
   const [endRoundVotes, setEndRoundVotes] = createSignal<EndRoundVote[]>([]);
@@ -62,56 +61,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [activePanel, setActivePanel] = createSignal<string | null>(null);
   const [battleDismissed, setBattleDismissed] = createSignal(false);
 
-  let roundCheckInterval: ReturnType<typeof setInterval> | null = null;
-
-  // Auto-process rounds when timer expires
-  createEffect(() => {
-    if (!props.room.startTime || props.room.gameStatus !== "active") {
-      if (roundCheckInterval) {
-        clearInterval(roundCheckInterval);
-        roundCheckInterval = null;
-      }
-      return;
-    }
-
-    if (roundCheckInterval) clearInterval(roundCheckInterval);
-
-    roundCheckInterval = setInterval(() => {
-      untrack(() => {
-        const now = Date.now();
-        const roundStart = Number(props.room.startTime);
-        const elapsed = Math.floor((now - roundStart) / 1000);
-        const timeLeft = props.room.roundDuration - elapsed;
-
-        if (timeLeft <= 0 && !roundProcessing()) {
-          setRoundProcessing(true);
-          processRound();
-        }
-      });
-    }, 1000);
-  });
-
-  onCleanup(() => {
-    if (roundCheckInterval) {
-      clearInterval(roundCheckInterval);
-      roundCheckInterval = null;
-    }
-  });
-
-  const processRound = async () => {
-    const connection = conn();
-    if (!connection) return;
-
-    try {
-      console.log("⏰ Round time expired - processing votes...");
-      await connection.reducers.processRoundVotes({ roomId: props.room.id, roundNumber: props.room.currentRound });
-      ToastHelper.info("Round Processing", "Tallying votes and determining results...");
-    } catch (error) {
-      console.error("Failed to process round:", error);
-      ToastHelper.error("Failed to process round");
-      setRoundProcessing(false);
-    }
-  };
+  // Round processing is now server-authoritative via RoundTimerEntry scheduler.
+  // Clients are passive observers — room state changes drive the UI.
 
   onMount(() => {
     const connection = conn();
@@ -152,7 +103,6 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           setShowEliminationModal(true);
         }
         setLastProcessedRound(newRoom.currentRound);
-        setRoundProcessing(false);
       }
     });
 
@@ -464,6 +414,19 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     })),
   );
 
+  const colonyBuildings = createMemo<ColonyBuilding[]>(() =>
+    serverUnits()
+      .filter((u) => u.roomId === props.room.id && u.buildingType)
+      .map((u) => ({
+        id: u.id,
+        buildingType: u.buildingType!,
+        x: u.position.x - 50,
+        z: u.position.y - 50,
+        constructionProgress: u.constructionProgress ?? undefined,
+        constructionMax: u.constructionMax ?? undefined,
+      })),
+  );
+
   const handleViewportSetTeam = (ids: number[], team: TeamColor) => {
     if (team === "unset") return;
     for (const id of ids) {
@@ -725,13 +688,17 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const handleAvatarPositionUpdate = (x: number, z: number, rotY: number, moving: boolean) => {
     const connection = conn();
     if (!connection || !connected()) return;
-    connection.reducers.updatePlayerPosition({
-      roomId: props.room.id,
-      x,
-      z,
-      rotationY: rotY,
-      isMoving: moving,
-    });
+    try {
+      connection.reducers.updatePlayerPosition({
+        roomId: props.room.id,
+        x,
+        z,
+        rotationY: rotY,
+        isMoving: moving,
+      });
+    } catch {
+      // Position updates are fire-and-forget; silently ignore errors
+    }
   };
 
   return (
@@ -742,6 +709,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           <ColonyViewport
             units={colonyUnits()}
             resources={colonyResources().length > 0 ? colonyResources() : undefined}
+            buildings={colonyBuildings().length > 0 ? colonyBuildings() : undefined}
             selectedIds={viewportSelectedIds}
             onSelect={setViewportSelectedIds}
             playerName={props.currentUser.name || "Player"}

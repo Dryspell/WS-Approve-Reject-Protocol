@@ -127,6 +127,9 @@ export async function hybridCreateAndJoinRoom(
   await setup.bots.joinAll(setup.roomName);
   await setup.bots.waitForAllInRoom(setup.roomName);
   if (logStream) log(logStream, `All bots joined room: ${setup.roomName}`);
+
+  // Allow SpacetimeDB subscription updates to propagate to the real browser
+  await setup.page.waitForTimeout(1500);
 }
 
 /**

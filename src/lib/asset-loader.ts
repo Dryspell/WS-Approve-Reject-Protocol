@@ -217,6 +217,38 @@ export const ASSETS = {
     column: "structures/column.gltf",
   },
 
+  // Building type → 3D asset path mapping.
+  // Uses available KayKit structures as visual stand-ins until bespoke models exist.
+  buildings: {
+    // Extraction
+    extraction_wood: "structures/box_large.gltf",
+    extraction_mine: "structures/box_large.gltf",
+    extraction_quarry: "structures/box_large.gltf",
+    extraction_hunter: "structures/box_small.gltf",
+    extraction_farm: "structures/box_large.gltf",
+    // Refinery
+    refinery_carpenter: "structures/barrel_large.gltf",
+    refinery_forge: "structures/barrel_large_decorated.gltf",
+    refinery_mason: "structures/barrel_large.gltf",
+    refinery_weaver: "structures/barrel_small.gltf",
+    refinery_tanner: "structures/barrel_small.gltf",
+    refinery_kitchen: "structures/barrel_small.gltf",
+    refinery_glass_furnace: "structures/barrel_large_decorated.gltf",
+    // Manufacturing
+    manufacturing_armorer: "structures/chest_gold.gltf",
+    manufacturing_weaponsmith: "structures/chest_gold.gltf",
+    manufacturing_toolsmith: "structures/chest.gltf",
+    manufacturing_tailor: "structures/chest.gltf",
+    manufacturing_glass_blower: "structures/chest.gltf",
+    manufacturing_infuser: "structures/chest_gold.gltf",
+    // Housing
+    housing_dormitory: "structures/column.gltf",
+    housing_player: "structures/column.gltf",
+    // Other
+    farm_food: "structures/barrel_small_stack.gltf",
+    breeding: "structures/chest.gltf",
+  },
+
   environment: {
     bush_1a: "environment/nature/Bush_1_A_Color1.gltf",
     bush_2a: "environment/nature/Bush_2_A_Color1.gltf",
@@ -237,6 +269,13 @@ export type CharacterClass = keyof typeof ASSETS.characters;
 export type ResourceAsset = keyof typeof ASSETS.resources;
 export type EquipmentAsset = keyof typeof ASSETS.equipment;
 export type StructureAsset = keyof typeof ASSETS.structures;
+export type BuildingType = keyof typeof ASSETS.buildings;
+
+/** Resolve a server building_type string to a 3D asset path, falling back to a generic crate. */
+export function buildingTypeToAsset(buildingType: string): string {
+  const key = buildingType as BuildingType;
+  return (ASSETS.buildings as Record<string, string>)[key] ?? ASSETS.structures.box_large;
+}
 
 // Resolve a server resource_type to the best matching asset path
 export function resourceTypeToAsset(
