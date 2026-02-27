@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createNoise2D } from "simplex-noise";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   loadModel,
@@ -93,7 +94,7 @@ export interface ColonySceneCallbacks {
 // ── Constants ──────────────────────────────────────────────────────────
 
 const TEAM_COLOR: Record<TeamColor, number> = { red: 0xd93025, blue: 0x1a73e8, unset: 0x80868b };
-const GROUND_SIZE = 80;
+const GROUND_SIZE = 100;
 const CHARACTER_SCALE = 1.4;
 const AVATAR_MOVE_SPEED = 10;
 const AVATAR_CAMERA_OFFSET = new THREE.Vector3(0, 35, 28);
@@ -347,8 +348,9 @@ export class ColonySceneManager {
   private buildScene(w: number, h: number) {
     this.timer = new THREE.Timer();
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1a10);
-    this.scene.fog = new THREE.Fog(0x1a1a10, 60, 120);
+    // Warm dusk sky — matches the directional sun light colour
+    this.scene.background = new THREE.Color(0x3a2e1c);
+    this.scene.fog = new THREE.Fog(0x3a2e1c, 70, 130);
 
     const aspect = w / h;
     this.camera = new THREE.OrthographicCamera(
@@ -380,16 +382,16 @@ export class ColonySceneManager {
   }
 
   private buildStaticGeometry() {
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
 
     const sun = new THREE.DirectionalLight(0xfff5e1, 1.4);
-    sun.position.set(25, 45, 20);
+    sun.position.set(30, 55, 25);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -50;
-    sun.shadow.camera.right = 50;
-    sun.shadow.camera.top = 50;
-    sun.shadow.camera.bottom = -50;
+    sun.shadow.camera.left = -65;
+    sun.shadow.camera.right = 65;
+    sun.shadow.camera.top = 65;
+    sun.shadow.camera.bottom = -65;
     sun.shadow.bias = -0.001;
     this.scene.add(sun);
 
@@ -397,17 +399,60 @@ export class ColonySceneManager {
     fill.position.set(-15, 20, -10);
     this.scene.add(fill);
 
-    const warmLight = new THREE.PointLight(0xffaa44, 0.6, 30);
+    const warmLight = new THREE.PointLight(0xffaa44, 0.6, 35);
     warmLight.position.set(0, 3, 0);
     this.scene.add(warmLight);
 
-    const groundGeo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
+    // ── Terrain with simplex-noise height displacement ───────────────
+    const terrainNoise = createNoise2D();
+    const segments = 56;
+    const groundGeo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE, segments, segments);
+
+    const posAttr = groundGeo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < posAttr.count; i++) {
+      const x = posAttr.getX(i);
+      const y = posAttr.getY(i);
+
+      // Multi-octave noise: broad swells + medium rolls + fine bumps
+      const height =
+        terrainNoise(x * 0.035, y * 0.035) * 2.2 +
+        terrainNoise(x * 0.085, y * 0.085) * 0.9 +
+        terrainNoise(x * 0.18, y * 0.18) * 0.35;
+
+      // Ease: flat within center radius, rising toward edges
+      const distNorm = Math.sqrt(x * x + y * y) / (GROUND_SIZE * 0.5);
+      const edgeFactor = Math.pow(Math.max(0, (distNorm - 0.18) / 0.82), 1.6);
+
+      posAttr.setZ(i, height * edgeFactor * 1.6);
+    }
+    posAttr.needsUpdate = true;
+    groundGeo.computeVertexNormals();
+
     const groundTex = createEarthTexture();
-    const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95, metalness: 0 });
+    const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.92, metalness: 0 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
+
+    // ── Small pond / reflective pool near one edge ───────────────────
+    const pondGeo = new THREE.CircleGeometry(7, 40);
+    const pondMat = new THREE.MeshStandardMaterial({
+      color: 0x2a6fa8,
+      roughness: 0.08,
+      metalness: 0.6,
+      transparent: true,
+      opacity: 0.82,
+    });
+    const pond = new THREE.Mesh(pondGeo, pondMat);
+    pond.rotation.x = -Math.PI / 2;
+    pond.position.set(-34, 0.08, -32);
+    this.scene.add(pond);
+
+    // Soft blue point light above pond to fake reflections on nearby geometry
+    const pondLight = new THREE.PointLight(0x4488cc, 0.4, 18);
+    pondLight.position.set(-34, 2, -32);
+    this.scene.add(pondLight);
   }
 
   private setupControls() {
@@ -762,6 +807,9 @@ export class ColonySceneManager {
       await this.spawnStructures();
       if (this.disposed) return;
 
+      // Scatter environment props (rocks, bushes, grass) — fire and forget
+      this.scatterEnvironment().catch(() => {/* non-fatal */});
+
       // Spawn player avatar
       if (playerName) {
         await this.spawnPlayerAvatar(playerName, playerCharacter || "knight");
@@ -896,6 +944,95 @@ export class ColonySceneManager {
       this.scene.add(blueBanner);
     } catch (e) {
       console.warn("[ColonyScene] Failed to load structure assets:", e);
+    }
+  }
+
+  private async scatterEnvironment() {
+    const envNoise = createNoise2D();
+    const half = GROUND_SIZE / 2 - 1;
+
+    // Each definition: asset path, instance count, scale range [min,max],
+    // distance range [minRadius, maxRadius] from center, and a noiseAffinity
+    // value that gates placement: >0 = prefers high-noise spots (rocky/bushy),
+    // <0 = prefers low-noise spots (open grass), 0 = unconstrained.
+    const defs: Array<{
+      path: string;
+      count: number;
+      scale: [number, number];
+      minR: number;
+      maxR: number;
+      noiseAffinity: number;
+    }> = [
+      // Large rocks — toward edges and mid-distance
+      { path: ASSETS.environment.rock_1a, count: 20, scale: [1.0, 2.4], minR: 14, maxR: half, noiseAffinity: 0.6 },
+      { path: ASSETS.environment.rock_1b, count: 14, scale: [0.7, 1.7], minR: 12, maxR: half, noiseAffinity: 0.4 },
+      // Bushes — clustered at mid-range; prefer noisier areas
+      { path: ASSETS.environment.bush_1a, count: 18, scale: [1.2, 2.6], minR: 13, maxR: half - 1, noiseAffinity: 0.5 },
+      { path: ASSETS.environment.bush_2a, count: 14, scale: [1.0, 2.2], minR: 11, maxR: half - 2, noiseAffinity: 0.3 },
+      // Grass tufts — spread throughout, including closer to center
+      { path: ASSETS.environment.grass_1a, count: 38, scale: [0.8, 1.9], minR: 9, maxR: half, noiseAffinity: -0.2 },
+      { path: ASSETS.environment.grass_1b, count: 30, scale: [0.7, 1.6], minR: 7, maxR: half, noiseAffinity: -0.3 },
+    ];
+
+    for (const def of defs) {
+      try {
+        const { scene: model } = await loadModel(def.path);
+        if (this.disposed) return;
+
+        // Attempt up to count * 2 placements (reject by noise affinity)
+        let placed = 0;
+        for (let attempt = 0; attempt < def.count * 3 && placed < def.count; attempt++) {
+          const angle = Math.random() * Math.PI * 2;
+          const radius = def.minR + Math.random() * (def.maxR - def.minR);
+          const x = Math.cos(angle) * radius;
+          const z = Math.sin(angle) * radius;
+
+          // Sample coarse noise for zone gating
+          const n = envNoise(x * 0.07, z * 0.07);
+          if (def.noiseAffinity > 0 && n < def.noiseAffinity - 0.8) continue;
+          if (def.noiseAffinity < 0 && n > -def.noiseAffinity + 0.8) continue;
+
+          const clone = model.clone();
+          clone.position.set(x, 0, z);
+          clone.rotation.y = Math.random() * Math.PI * 2;
+          const s = def.scale[0] + Math.random() * (def.scale[1] - def.scale[0]);
+          clone.scale.setScalar(s);
+          clone.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          this.scene.add(clone);
+          placed++;
+        }
+      } catch {
+        // asset missing — skip silently
+      }
+    }
+
+    // Perimeter boundary: tight clusters of rocks at compass points to frame the map
+    const perimeterAnchors = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
+    for (const anchor of perimeterAnchors) {
+      for (let j = 0; j < 5; j++) {
+        const spreadAngle = anchor + (Math.random() - 0.5) * 0.55;
+        const dist = half - 1 + Math.random() * 2;
+        const px = Math.cos(spreadAngle) * dist;
+        const pz = Math.sin(spreadAngle) * dist;
+        try {
+          const path = Math.random() > 0.5 ? ASSETS.environment.rock_1a : ASSETS.environment.rock_1b;
+          const { scene: rock } = await loadModel(path);
+          if (this.disposed) return;
+          rock.position.set(px, 0, pz);
+          rock.rotation.y = Math.random() * Math.PI * 2;
+          const s = 1.4 + Math.random() * 1.6;
+          rock.scale.setScalar(s);
+          rock.traverse((c) => {
+            if ((c as THREE.Mesh).isMesh) { c.castShadow = true; c.receiveShadow = true; }
+          });
+          this.scene.add(rock);
+        } catch { /* skip */ }
+      }
     }
   }
 

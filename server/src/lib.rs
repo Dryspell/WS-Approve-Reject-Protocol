@@ -633,21 +633,51 @@ fn create_initial_units(ctx: &ReducerContext, room: &GameRoom) -> Result<(), Str
         }
     }
 
-    // Create initial resources
-    let resource_types = [
-        "wood", "stone", "metal_ore", "coal", "gems", 
-        "fiber", "hide", "sand", "food"
+    // Create initial resources — clustered by biome zone so the map feels
+    // geographically coherent. The world is 100×100 (client offsets by -50).
+    // Zones (center of cluster, jitter radius):
+    //   Forest  NW corner  (~20, ~20)  → wood, fiber, food
+    //   Quarry  NE corner  (~80, ~20)  → stone, sand, coal
+    //   Mine    SW corner  (~20, ~80)  → metal_ore, coal, gems
+    //   Plains  SE corner  (~80, ~80)  → hide, food, fiber
+    //   Center  mid        (~50, ~50)  → mixed sparse deposits
+    struct Zone { cx: f32, cy: f32, jitter: f32 }
+    let resource_zones: &[(&str, Zone, u32)] = &[
+        // Forest NW
+        ("wood",      Zone { cx: 18.0, cy: 18.0, jitter: 14.0 }, 8),
+        ("fiber",     Zone { cx: 22.0, cy: 15.0, jitter: 10.0 }, 5),
+        ("food",      Zone { cx: 15.0, cy: 24.0, jitter: 10.0 }, 5),
+        // Quarry NE
+        ("stone",     Zone { cx: 82.0, cy: 18.0, jitter: 12.0 }, 8),
+        ("sand",      Zone { cx: 88.0, cy: 14.0, jitter: 10.0 }, 5),
+        ("coal",      Zone { cx: 80.0, cy: 26.0, jitter:  9.0 }, 4),
+        // Mine SW
+        ("metal_ore", Zone { cx: 18.0, cy: 82.0, jitter: 12.0 }, 8),
+        ("coal",      Zone { cx: 14.0, cy: 88.0, jitter:  9.0 }, 4),
+        ("gems",      Zone { cx: 24.0, cy: 78.0, jitter:  8.0 }, 3),
+        // Plains SE
+        ("hide",      Zone { cx: 82.0, cy: 82.0, jitter: 12.0 }, 6),
+        ("food",      Zone { cx: 88.0, cy: 76.0, jitter: 10.0 }, 5),
+        ("fiber",     Zone { cx: 76.0, cy: 88.0, jitter:  9.0 }, 4),
+        // Sparse centre deposits (low count, high value)
+        ("gems",      Zone { cx: 50.0, cy: 50.0, jitter: 10.0 }, 2),
+        ("metal_ore", Zone { cx: 50.0, cy: 50.0, jitter: 12.0 }, 2),
+        ("wood",      Zone { cx: 50.0, cy: 50.0, jitter: 12.0 }, 2),
     ];
-    for _ in 0..10 { // Create 10 resources of each type
-        for resource_type in resource_types.iter() {
+
+    for (resource_type, zone, count) in resource_zones.iter() {
+        for _ in 0..*count {
+            // Jitter within zone, clamped to [4, 96] to avoid map edge
+            let jx = (ctx.rng().gen::<f32>() * 2.0 - 1.0) * zone.jitter;
+            let jy = (ctx.rng().gen::<f32>() * 2.0 - 1.0) * zone.jitter;
+            let rx = (zone.cx + jx).clamp(4.0, 96.0);
+            let ry = (zone.cy + jy).clamp(4.0, 96.0);
+
             let resource = Resource {
                 id: format!("resource_{}_{}", resource_type, ctx.rng().gen::<u32>()),
                 room_id: room.id,
                 resource_type: resource_type.to_string(),
-                position: Vector2 {
-                    x: (ctx.rng().gen::<f32>() * 100.0) as f32,
-                    y: (ctx.rng().gen::<f32>() * 100.0) as f32,
-                },
+                position: Vector2 { x: rx, y: ry },
                 amount: 100,
                 max_amount: 100,
                 regeneration_rate: 5,

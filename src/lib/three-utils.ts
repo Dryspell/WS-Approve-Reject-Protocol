@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createNoise2D } from "simplex-noise";
 import {
   loadModel,
   preloadModels,
@@ -421,56 +422,101 @@ export function createGrassTexture(): THREE.CanvasTexture {
 }
 
 export function createEarthTexture(): THREE.CanvasTexture {
-  const size = 1024;
+  const size = 512;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.fillStyle = "#3a3020";
-  ctx.fillRect(0, 0, size, size);
+  // Build a noise-driven terrain zone map at pixel level
+  const noise2D = createNoise2D();
+  const imgData = ctx.createImageData(size, size);
+  const d = imgData.data;
 
-  const layers: Array<{ colors: string[]; count: number; maxR: number; alphaRange: [number, number] }> = [
-    { colors: ["#4a3a28", "#3e3018", "#50422e", "#362a16", "#443826"], count: 4000, maxR: 2, alphaRange: [0.15, 0.35] },
-    { colors: ["#4e3e2a", "#352818", "#5a4a34", "#2e2210", "#44362a"], count: 2000, maxR: 6, alphaRange: [0.08, 0.20] },
-    { colors: ["#3a2e1a", "#4a3c28", "#302414", "#4e4030"],           count: 800,  maxR: 18, alphaRange: [0.04, 0.10] },
-  ];
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      const nx = (px / size) * 5.5;
+      const ny = (py / size) * 5.5;
 
-  for (const { colors, count, maxR, alphaRange } of layers) {
-    for (let i = 0; i < count; i++) {
-      ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
-      ctx.globalAlpha = alphaRange[0] + Math.random() * (alphaRange[1] - alphaRange[0]);
-      const r = 1 + Math.random() * maxR;
-      ctx.beginPath();
-      ctx.arc(Math.random() * size, Math.random() * size, r, 0, Math.PI * 2);
-      ctx.fill();
+      // Multi-octave noise for smooth biome zones
+      const zone =
+        noise2D(nx * 1.0, ny * 1.0) * 0.55 +
+        noise2D(nx * 2.3, ny * 2.3) * 0.28 +
+        noise2D(nx * 5.1, ny * 5.1) * 0.12 +
+        noise2D(nx * 11, ny * 11) * 0.05;
+
+      // Fine pixel-level noise for micro-detail (simulates texture grain)
+      const grain = (Math.random() - 0.5) * 18;
+
+      let r: number, g: number, b: number;
+      if (zone < -0.28) {
+        // Lush grass — saturated mid-greens
+        r = 46 + grain * 0.6;  g = 78 + grain * 0.4;  b = 34 + grain * 0.3;
+      } else if (zone < -0.04) {
+        // Earthy grass — olive/dry greens blending into dirt
+        const t = (zone + 0.28) / 0.24;
+        r = 46 + t * 28 + grain * 0.6;  g = 78 - t * 16 + grain * 0.4;  b = 34 - t * 4 + grain * 0.3;
+      } else if (zone < 0.22) {
+        // Packed dirt / earth
+        r = 82 + grain * 0.7;  g = 64 + grain * 0.6;  b = 42 + grain * 0.5;
+      } else if (zone < 0.42) {
+        // Sandy / pale dust
+        r = 112 + grain * 0.6;  g = 96 + grain * 0.5;  b = 68 + grain * 0.4;
+      } else {
+        // Rocky / stone — cool grey
+        r = 105 + grain * 0.5;  g = 100 + grain * 0.5;  b = 90 + grain * 0.5;
+      }
+
+      const i = (py * size + px) * 4;
+      d[i]     = Math.max(0, Math.min(255, Math.round(r)));
+      d[i + 1] = Math.max(0, Math.min(255, Math.round(g)));
+      d[i + 2] = Math.max(0, Math.min(255, Math.round(b)));
+      d[i + 3] = 255;
     }
   }
+  ctx.putImageData(imgData, 0, 0);
 
-  // Scattered dark spots
-  ctx.globalAlpha = 1;
-  for (let i = 0; i < 600; i++) {
-    ctx.fillStyle = Math.random() > 0.5 ? "#1e1a10" : "#2a2218";
-    ctx.globalAlpha = 0.2 + Math.random() * 0.25;
-    const r = 1 + Math.random() * 3;
+  // Scatter fine surface pebble dots for depth
+  ctx.globalCompositeOperation = "multiply";
+  for (let i = 0; i < 1400; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 1 + Math.random() * 3.5;
+    ctx.globalAlpha = 0.05 + Math.random() * 0.09;
+    ctx.fillStyle = Math.random() > 0.6 ? "#1a150a" : "#3a3020";
     ctx.beginPath();
-    ctx.arc(Math.random() * size, Math.random() * size, r, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Subtle grid
+  // Worn dirt paths from center toward corners and edges
+  const drawPath = (x1: number, y1: number, x2: number, y2: number, w: number) => {
+    ctx.strokeStyle = "rgba(70, 52, 28, 0.22)";
+    ctx.lineWidth = w;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    const cx = (x1 + x2) / 2 + (Math.random() - 0.5) * 60;
+    const cy = (y1 + y2) / 2 + (Math.random() - 0.5) * 60;
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(cx, cy, x2, y2);
+    ctx.stroke();
+  };
+  const c = size / 2;
+  drawPath(c, c, 0, 0, 22);
+  drawPath(c, c, size, 0, 20);
+  drawPath(c, c, 0, size, 20);
+  drawPath(c, c, size, size, 22);
+  drawPath(c, c, c, 0, 16);
+  drawPath(c, c, c, size, 16);
+  drawPath(c, c, 0, c, 14);
+  drawPath(c, c, size, c, 14);
+
   ctx.globalAlpha = 1;
-  ctx.strokeStyle = "rgba(255,255,255,0.03)";
-  ctx.lineWidth = 1;
-  const step = size / 16;
-  for (let i = 0; i <= 16; i++) {
-    ctx.beginPath(); ctx.moveTo(i * step, 0); ctx.lineTo(i * step, size); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, i * step); ctx.lineTo(size, i * step); ctx.stroke();
-  }
+  ctx.globalCompositeOperation = "source-over";
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(4, 4);
+  tex.repeat.set(3, 3);
   return tex;
 }

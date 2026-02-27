@@ -76,6 +76,9 @@ const CHAT_MESSAGES = [
   'May the best bot win!',
   'I calculated 14,000,605 outcomes.',
   'Elementary, my dear Watson.',
+  'My laborers are hard at work.',
+  'Resources incoming!',
+  'The harvest is plentiful.',
 ];
 
 const SUBSCRIBE_QUERIES = [
@@ -85,7 +88,24 @@ const SUBSCRIBE_QUERIES = [
   'SELECT * FROM user',
   'SELECT * FROM end_round_vote',
   'SELECT * FROM chat_message',
+  // New: needed for minion management and resource harvesting
+  'SELECT * FROM unit',
+  'SELECT * FROM resource',
+  'SELECT * FROM unit_stats',
 ];
+
+// Gather range must be < the server's 30-unit threshold
+const GATHER_RANGE = 28;
+// Wander speed: units moved per tick toward wander target
+const WANDER_STEP = 1.5;
+// How often to pick a new wander target (in ticks)
+const WANDER_RETARGET_TICKS = 20;
+// How often to push a position update (every N ticks)
+const POS_UPDATE_EVERY = 5;
+// Ticks to wait between laborer spawn attempts
+const SPAWN_COOLDOWN_TICKS = 10;
+// Ticks to wait between market actions
+const MARKET_COOLDOWN_TICKS = 15;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -101,6 +121,14 @@ function pick<T>(arr: T[]): T {
 
 function randomStrategy(): Exclude<Strategy, 'mixed'> {
   return pick(['contrarian', 'follower', 'random', 'splitter'] as const);
+}
+
+function rand(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function dist2d(ax: number, ay: number, bx: number, by: number): number {
+  return Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +151,25 @@ export class Bot {
   private hasVotedEndRound = false;
   private votedEndRoundForRound = -1;
   private lastChatTick = 0;
+
+  // ---- Avatar position (wandering) ----------------------------------------
+  private posX = rand(10, 90);
+  private posZ = rand(10, 90);
+  private wanderTargetX = rand(10, 90);
+  private wanderTargetZ = rand(10, 90);
+  private wanderTick = 0;
+  private posUpdateTick = 0;
+
+  // ---- Laborer management --------------------------------------------------
+  /** Maps unitId → resourceId that this laborer is heading toward */
+  private laborerResourceTargets = new Map<number, string>();
+  /** Ticks remaining before next spawn attempt */
+  private spawnCooldown = 0;
+
+  // ---- Market + side bets (one-shot per game) ------------------------------
+  private hasPlacedSideBet = false;
+  private hasListedVoteForSale = false;
+  private marketCooldown = 0;
 
   constructor(index: number, strategy: Strategy, config?: Partial<BotConfig>) {
     this.index = index;
@@ -216,10 +263,11 @@ export class Bot {
     this.hasVotedEndRound = true;
   }
 
-  findRoom(name: string) {
+  findRoom(name?: string) {
     if (!this.conn) return null;
+    const target = name ?? this.cfg.room;
     for (const room of this.conn.db.game_room.iter()) {
-      if (room.name === name) return room;
+      if (room.name === target) return room;
     }
     return null;
   }
@@ -251,7 +299,7 @@ export class Bot {
 
   private tick() {
     if (!this.conn || !this.identity) return;
-    const room = this.findRoom(this.cfg.room);
+    const room = this.findRoom();
 
     switch (this.state) {
       case 'IDLE':
@@ -259,9 +307,14 @@ export class Bot {
         break;
       case 'LOBBY':
         this.tickLobby(room);
+        this.tickPosition(room);
         break;
       case 'IN_GAME':
         this.tickInGame(room);
+        this.tickPosition(room);
+        this.tickLaborers(room);
+        this.tickMarket(room);
+        this.tickSideBet(room);
         break;
     }
 
@@ -296,6 +349,7 @@ export class Bot {
         maxPlayers: 10,
         allowRebuy: true,
         allowMidgameJoin: true,
+        combatEnabled: true, // fixed: was missing after schema update
       });
     } else {
       this.debug('Waiting for room to be created...');
@@ -413,6 +467,248 @@ export class Bot {
     }
   }
 
+  // ---- Avatar position wandering ------------------------------------------
+
+  private tickPosition(room: ReturnType<Bot['findRoom']>) {
+    if (!this.conn || !room) return;
+
+    this.wanderTick++;
+    this.posUpdateTick++;
+
+    // Pick a new wander target periodically
+    if (this.wanderTick >= WANDER_RETARGET_TICKS) {
+      this.wanderTargetX = rand(10, 90);
+      this.wanderTargetZ = rand(10, 90);
+      this.wanderTick = 0;
+      this.debug(`New wander target: (${this.wanderTargetX.toFixed(1)}, ${this.wanderTargetZ.toFixed(1)})`);
+    }
+
+    // Move toward wander target
+    const dx = this.wanderTargetX - this.posX;
+    const dz = this.wanderTargetZ - this.posZ;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d > WANDER_STEP) {
+      this.posX += (dx / d) * WANDER_STEP;
+      this.posZ += (dz / d) * WANDER_STEP;
+    } else {
+      this.posX = this.wanderTargetX;
+      this.posZ = this.wanderTargetZ;
+    }
+
+    // Push position update every N ticks to avoid flooding
+    if (this.posUpdateTick >= POS_UPDATE_EVERY) {
+      this.posUpdateTick = 0;
+      const rotationY = Math.atan2(dx, dz);
+      const isMoving = d > 0.5;
+      try {
+        this.conn.reducers.updatePlayerPosition({
+          roomId: room.id,
+          x: this.posX,
+          z: this.posZ,
+          rotationY,
+          isMoving,
+        });
+      } catch { /* non-fatal */ }
+    }
+  }
+
+  // ---- Laborer spawning + resource harvesting -----------------------------
+
+  private tickLaborers(room: ReturnType<Bot['findRoom']>) {
+    if (!this.conn || !this.identity || !room) return;
+    if (room.gameStatus !== 'in_progress') return;
+
+    const identityHex = this.identity.toHexString();
+
+    // Decrement spawn cooldown each tick
+    if (this.spawnCooldown > 0) this.spawnCooldown--;
+
+    // Collect my minions in this room
+    const myMinions = [...this.conn.db.unit.iter()].filter(
+      (u) => u.unitType === 'minion' && u.ownerId === identityHex && u.roomId === room.id
+    );
+
+    // Spawn more laborers if under the votesPerPlayer cap
+    if (myMinions.length < room.votesPerPlayer && this.spawnCooldown <= 0) {
+      this.debug(`Spawning laborer (${myMinions.length}/${room.votesPerPlayer})`);
+      try {
+        this.conn.reducers.spawnLaborer({ roomId: room.id });
+        this.spawnCooldown = SPAWN_COOLDOWN_TICKS;
+      } catch (err) {
+        const msg = String(err);
+        if (msg.toLowerCase().includes('insufficient')) {
+          this.debug('Insufficient funds to spawn laborer');
+          this.spawnCooldown = SPAWN_COOLDOWN_TICKS * 3; // back off longer if broke
+        }
+      }
+    }
+
+    // Collect all resources in this room that still have supply
+    const roomResources = [...this.conn.db.resource.iter()].filter(
+      (r) => r.roomId === room.id && r.amount > 0
+    );
+
+    if (roomResources.length === 0) {
+      this.laborerResourceTargets.clear();
+      return;
+    }
+
+    // For each laborer, ensure it's moving toward and harvesting a resource
+    for (const unit of myMinions) {
+      // Clean up stale targets (resource depleted or gone)
+      const targetId = this.laborerResourceTargets.get(unit.id);
+      if (targetId) {
+        const target = roomResources.find((r) => r.id === targetId);
+        if (!target) {
+          this.laborerResourceTargets.delete(unit.id);
+        }
+      }
+
+      // Assign a resource target if none
+      if (!this.laborerResourceTargets.has(unit.id)) {
+        // Pick the nearest resource
+        let nearest = roomResources[0];
+        let nearestDist = Infinity;
+        for (const res of roomResources) {
+          const d = dist2d(unit.position.x, unit.position.y, res.position.x, res.position.y);
+          if (d < nearestDist) {
+            nearestDist = d;
+            nearest = res;
+          }
+        }
+        this.laborerResourceTargets.set(unit.id, nearest.id);
+        this.debug(`Laborer ${unit.id} targeting resource ${nearest.id} (${nearest.resourceType}) at dist ${nearestDist.toFixed(1)}`);
+      }
+
+      const resourceId = this.laborerResourceTargets.get(unit.id)!;
+      const resource = roomResources.find((r) => r.id === resourceId);
+      if (!resource) continue;
+
+      const d = dist2d(unit.position.x, unit.position.y, resource.position.x, resource.position.y);
+
+      if (d <= GATHER_RANGE) {
+        // In range — harvest
+        try {
+          this.conn.reducers.gatherResource({ unitId: unit.id, resourceId });
+          this.debug(`Laborer ${unit.id} gathered ${resource.resourceType} (dist ${d.toFixed(1)})`);
+        } catch { /* non-fatal */ }
+      } else {
+        // Not in range — move toward resource
+        try {
+          this.conn.reducers.moveUnit({
+            unitId: unit.id,
+            targetPosition: { x: resource.position.x, y: resource.position.y },
+          });
+          this.debug(`Laborer ${unit.id} moving toward resource (dist ${d.toFixed(1)})`);
+        } catch { /* non-fatal */ }
+      }
+    }
+  }
+
+  // ---- Market activity ----------------------------------------------------
+
+  private tickMarket(room: ReturnType<Bot['findRoom']>) {
+    if (!this.conn || !this.identity || !room) return;
+    if (room.gameStatus !== 'in_progress') return;
+
+    if (this.marketCooldown > 0) {
+      this.marketCooldown--;
+      return;
+    }
+
+    // Only act ~15% of ticks to avoid spamming
+    if (Math.random() > 0.15) return;
+
+    const identityHex = this.identity.toHexString();
+
+    // List one uncolored vote for sale (once per game, at a slight markup)
+    if (!this.hasListedVoteForSale) {
+      const uncoloredVote = [...this.conn.db.vote.iter()].find(
+        (v) =>
+          v.roomId === room.id &&
+          v.playerId === identityHex &&
+          (v.color === null || v.color === undefined) &&
+          !v.isForSale
+      );
+      if (uncoloredVote) {
+        const price = room.buyinAmount * 1.3;
+        try {
+          this.conn.reducers.setVoteForSale({ voteId: uncoloredVote.id, price });
+          this.hasListedVoteForSale = true;
+          this.marketCooldown = MARKET_COOLDOWN_TICKS;
+          this.debug(`Listed vote ${uncoloredVote.id} for sale at ${price.toFixed(2)}`);
+          return;
+        } catch { /* non-fatal */ }
+      }
+    }
+
+    // Buy a cheap vote from another player
+    const cheapVote = [...this.conn.db.vote.iter()].find(
+      (v) =>
+        v.roomId === room.id &&
+        v.isForSale &&
+        v.salePrice != null &&
+        v.salePrice < room.buyinAmount * 0.9 &&
+        v.playerId !== identityHex
+    );
+    if (cheapVote && cheapVote.salePrice != null) {
+      try {
+        this.conn.reducers.createTradeOffer({
+          roomId: room.id,
+          roundNumber: room.currentRound,
+          offerType: 'buy',
+          voteId: cheapVote.id,
+          price: cheapVote.salePrice,
+        });
+        this.marketCooldown = MARKET_COOLDOWN_TICKS;
+        this.debug(`Bought vote ${cheapVote.id} for ${cheapVote.salePrice.toFixed(2)}`);
+      } catch { /* non-fatal */ }
+    }
+  }
+
+  // ---- Side bets (when eliminated) ----------------------------------------
+
+  private tickSideBet(room: ReturnType<Bot['findRoom']>) {
+    if (!this.conn || !this.identity || !room) return;
+    if (this.hasPlacedSideBet) return;
+    if (room.gameStatus !== 'in_progress') return;
+
+    const identityHex = this.identity.toHexString();
+    if (!room.eliminatedPlayers.includes(identityHex)) return;
+
+    // Determine majority color from current votes
+    const roomVotes = [...this.conn.db.vote.iter()].filter(
+      (v) => v.roomId === room.id && v.roundNumber === room.currentRound
+    );
+    const reds = roomVotes.filter((v) => v.color === 'red').length;
+    const blues = roomVotes.filter((v) => v.color === 'blue').length;
+    const majorityColor = reds >= blues ? 'red' : 'blue';
+
+    // Bet 10% of wallet on the majority color
+    const userRow = [...this.conn.db.user.iter()].find(
+      (u) => u.identity.toHexString() === identityHex
+    );
+    const walletBalance = (userRow as any)?.walletBalance ?? 0;
+    const betAmount = walletBalance * 0.1;
+
+    if (betAmount < 1) {
+      this.debug('Not enough wallet balance for a side bet');
+      this.hasPlacedSideBet = true; // mark done so we stop checking
+      return;
+    }
+
+    try {
+      this.conn.reducers.placeSideBet({
+        roomId: room.id,
+        betType: 'color_wins',
+        betTarget: majorityColor,
+        amount: betAmount,
+      });
+      this.hasPlacedSideBet = true;
+      this.log(`Placed side bet $${betAmount.toFixed(2)} on ${majorityColor} (eliminated)`);
+    } catch { /* non-fatal */ }
+  }
+
   // ---- Strategies ---------------------------------------------------------
 
   private decideColors(
@@ -487,6 +783,18 @@ export class Bot {
     } else {
       this.state = 'IDLE';
     }
+
+    // Reset per-game state whenever we change game state
+    this.resetGameState();
+  }
+
+  /** Clears all per-game state so it resets cleanly for the next round/game */
+  private resetGameState() {
+    this.laborerResourceTargets.clear();
+    this.hasPlacedSideBet = false;
+    this.hasListedVoteForSale = false;
+    this.spawnCooldown = 0;
+    this.marketCooldown = 0;
   }
 }
 
