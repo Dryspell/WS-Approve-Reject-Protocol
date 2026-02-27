@@ -1,5 +1,5 @@
-import { Component, createMemo, Show, For } from "solid-js";
-import type { Unit, UnitStats, UnitInventory, UnitTaskQueue } from "~/module_bindings/types";
+import { Component, createMemo, Show, For, createSignal } from "solid-js";
+import type { Unit, UnitStats, UnitInventory, UnitTaskQueue, Resource } from "~/module_bindings/types";
 import type { TeamColor } from "./ColonyViewport";
 
 interface UnitContextPanelProps {
@@ -7,6 +7,7 @@ interface UnitContextPanelProps {
   stats?: UnitStats;
   inventory?: UnitInventory;
   tasks?: UnitTaskQueue[];
+  resources?: Resource[];
   onClose: () => void;
   onSetVoteColor?: (color: string) => void;
   onQueueTask?: (taskType: string, targetId: string) => void;
@@ -53,8 +54,21 @@ const TASK_LABELS: Record<string, string> = {
   failed: "Failed",
 };
 
+const RESOURCE_ICONS: Record<string, string> = {
+  wood: "🪵",
+  stone: "🪨",
+  metal_ore: "⛏️",
+  coal: "🖤",
+  gems: "💎",
+  fiber: "🌿",
+  hide: "🦌",
+  sand: "🏖️",
+  food: "🍎",
+};
+
 const UnitContextPanel: Component<UnitContextPanelProps> = (props) => {
   const teamColor = () => (props.unit.voteColor || "unset") as TeamColor;
+  const [harvestExpanded, setHarvestExpanded] = createSignal(false);
 
   const healthRatio = createMemo(() => {
     if (!props.stats) return 1;
@@ -208,6 +222,50 @@ const UnitContextPanel: Component<UnitContextPanelProps> = (props) => {
                     <span class="text-[11px] text-white/50">{item.amount}</span>
                     <span class="text-[10px] text-white/30">{item.label}</span>
                   </div>
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
+      </Show>
+
+      {/* Harvest assignment (minions only) */}
+      <Show when={props.unit.unitType === "minion" && props.resources && props.resources.length > 0}>
+        <div class="border-t border-white/5 px-4 py-3">
+          <button
+            class="mb-2 flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-white/30 hover:text-white/50 transition-colors"
+            onClick={() => setHarvestExpanded((v) => !v)}
+          >
+            <span>Assign to Harvest</span>
+            <span>{harvestExpanded() ? "▲" : "▼"}</span>
+          </button>
+          <Show when={harvestExpanded()}>
+            {/* Current task indicator */}
+            <Show when={props.unit.taskType === "gather" && props.unit.targetId}>
+              <div class="mb-2 flex items-center justify-between rounded bg-amber-500/10 border border-amber-500/20 px-2 py-1.5">
+                <span class="text-[11px] text-amber-400">Currently harvesting</span>
+                <button
+                  class="text-[10px] text-white/30 hover:text-red-400 transition-colors"
+                  onClick={() => props.onQueueTask?.("", "")}
+                  title="Stop harvesting"
+                >
+                  Stop ✕
+                </button>
+              </div>
+            </Show>
+            <div class="space-y-1 max-h-40 overflow-y-auto">
+              <For each={props.resources!.filter((r) => r.amount > 0)}>
+                {(resource) => (
+                  <button
+                    class="flex w-full items-center justify-between rounded bg-white/[0.03] px-2 py-1.5 text-left hover:bg-emerald-500/10 hover:border-emerald-500/20 border border-transparent transition-all"
+                    onClick={() => props.onQueueTask?.("gather", resource.id)}
+                  >
+                    <span class="flex items-center gap-1.5">
+                      <span>{RESOURCE_ICONS[resource.resourceType] ?? "📦"}</span>
+                      <span class="text-[11px] text-white/60 capitalize">{resource.resourceType.replace("_", " ")}</span>
+                    </span>
+                    <span class="text-[10px] text-white/30">{resource.amount}/{resource.maxAmount}</span>
+                  </button>
                 )}
               </For>
             </div>

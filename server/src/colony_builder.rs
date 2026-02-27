@@ -241,6 +241,11 @@ pub fn craft_equipment(
     }
     ctx.db.unit_inventory().unit_id().update(bldg_inv);
 
+    // Award crafting XP to the unit assigned to this building, if any
+    if let Some(assigned_id) = building.assigned_unit_id {
+        award_skill_xp(ctx, assigned_id, "crafting", tier * 10);
+    }
+
     let stat_base = tier * 3;
     ctx.db.equipment().insert(Equipment {
         id: 0, room_id,

@@ -75,6 +75,7 @@ const VoteBox: Component = () => {
   const [votesPerPlayer, setVotesPerPlayer] = createSignal<number>(5);
   const [allowRebuy, setAllowRebuy] = createSignal(true);
   const [allowMidgameJoin, setAllowMidgameJoin] = createSignal(false);
+  const [combatEnabled, setCombatEnabled] = createSignal(true);
   const [showCreateRoom, setShowCreateRoom] = createSignal(false);
   const [subscriptionsSet, setSubscriptionsSet] = createSignal(false);
   const [currentUser, setCurrentUser] = createSignal<any>(null);
@@ -286,6 +287,7 @@ const VoteBox: Component = () => {
         maxPlayers: 0,
         allowRebuy: allowRebuy(),
         allowMidgameJoin: allowMidgameJoin(),
+        combatEnabled: combatEnabled(),
       });
       
       setNewRoomName("");
@@ -438,7 +440,7 @@ const VoteBox: Component = () => {
                 </div>
               </div>
               <div class="flex items-center justify-between">
-                <div class="flex gap-4">
+                <div class="flex gap-4 flex-wrap">
                   <label class="flex items-center gap-1.5 text-xs text-white/60 cursor-pointer">
                     <input type="checkbox" checked={allowRebuy()} onChange={e => setAllowRebuy(e.currentTarget.checked)} data-testid={TID.allowRebuyCheckbox} class="rounded" />
                     Allow Re-buy
@@ -446,6 +448,10 @@ const VoteBox: Component = () => {
                   <label class="flex items-center gap-1.5 text-xs text-white/60 cursor-pointer">
                     <input type="checkbox" checked={allowMidgameJoin()} onChange={e => setAllowMidgameJoin(e.currentTarget.checked)} data-testid={TID.allowMidgameJoinCheckbox} class="rounded" />
                     Mid-game Join
+                  </label>
+                  <label class="flex items-center gap-1.5 text-xs cursor-pointer" classList={{ "text-emerald-400": combatEnabled(), "text-white/40": !combatEnabled() }}>
+                    <input type="checkbox" checked={combatEnabled()} onChange={e => setCombatEnabled(e.currentTarget.checked)} class="rounded" />
+                    ⚔️ Combat
                   </label>
                 </div>
                 <div class="flex gap-2">

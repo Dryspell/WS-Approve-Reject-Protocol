@@ -19,4 +19,12 @@ export default __t.row({
   speed: __t.i32(),
   gatherRate: __t.i32().name("gather_rate"),
   craftRate: __t.i32().name("craft_rate"),
+  woodcuttingXp: __t.i32().name("woodcutting_xp"),
+  woodcuttingLevel: __t.i32().name("woodcutting_level"),
+  miningXp: __t.i32().name("mining_xp"),
+  miningLevel: __t.i32().name("mining_level"),
+  foragingXp: __t.i32().name("foraging_xp"),
+  foragingLevel: __t.i32().name("foraging_level"),
+  craftingXp: __t.i32().name("crafting_xp"),
+  craftingLevel: __t.i32().name("crafting_level"),
 });

@@ -20,4 +20,5 @@ export default {
   maxPlayers: __t.i32(),
   allowRebuy: __t.bool(),
   allowMidgameJoin: __t.bool(),
+  combatEnabled: __t.bool(),
 };

@@ -108,6 +108,22 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           setShowEliminationModal(true);
         }
         setLastProcessedRound(newRoom.currentRound);
+
+        // Auto-trigger combat when a new round starts, if combat is enabled for this room
+        if (newRoom.combatEnabled && newRoom.gameStatus === "in_progress") {
+          const roomUnits = serverUnits().filter(
+            (u) => u.roomId === props.room.id && u.unitType === "minion"
+          );
+          const redIds = roomUnits.filter((u) => u.voteColor === "red").map((u) => u.id);
+          const blueIds = roomUnits.filter((u) => u.voteColor === "blue").map((u) => u.id);
+          if (redIds.length > 0 && blueIds.length > 0) {
+            try {
+              connection.reducers.createBattleArena({ roomId: props.room.id, redUnitIds: redIds, blueUnitIds: blueIds });
+            } catch (e) {
+              console.warn("Auto-battle trigger failed:", e);
+            }
+          }
+        }
       }
     });
 
@@ -775,6 +791,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               stats={selectedUnitStats()}
               inventory={selectedUnitInventory()}
               tasks={selectedUnitTasks()}
+              resources={roomResources()}
               onClose={() => setViewportSelectedIds([])}
               onSetVoteColor={handleSetUnitVoteColor}
               onQueueTask={handleQueueTask}

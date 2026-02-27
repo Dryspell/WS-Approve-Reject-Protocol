@@ -167,6 +167,7 @@ export const GameRoom = __t.object("GameRoom", {
   maxPlayers: __t.option(__t.i32()),
   allowRebuy: __t.bool(),
   allowMidgameJoin: __t.bool(),
+  combatEnabled: __t.bool(),
 });
 export type GameRoom = __Infer<typeof GameRoom>;
 
@@ -406,6 +407,14 @@ export const UnitStats = __t.object("UnitStats", {
   speed: __t.i32(),
   gatherRate: __t.i32(),
   craftRate: __t.i32(),
+  woodcuttingXp: __t.i32(),
+  woodcuttingLevel: __t.i32(),
+  miningXp: __t.i32(),
+  miningLevel: __t.i32(),
+  foragingXp: __t.i32(),
+  foragingLevel: __t.i32(),
+  craftingXp: __t.i32(),
+  craftingLevel: __t.i32(),
 });
 export type UnitStats = __Infer<typeof UnitStats>;
 

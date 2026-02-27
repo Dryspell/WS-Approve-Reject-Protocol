@@ -28,4 +28,5 @@ export default __t.row({
   maxPlayers: __t.option(__t.i32()).name("max_players"),
   allowRebuy: __t.bool().name("allow_rebuy"),
   allowMidgameJoin: __t.bool().name("allow_midgame_join"),
+  combatEnabled: __t.bool().name("combat_enabled"),
 });

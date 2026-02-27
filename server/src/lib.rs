@@ -153,6 +153,7 @@ pub struct GameRoom {
     max_players: Option<i32>,
     allow_rebuy: bool,
     allow_midgame_join: bool,
+    combat_enabled: bool,
 }
 
 #[table(accessor = unit, public)]
@@ -261,6 +262,15 @@ pub struct UnitStats {
     speed: i32,
     gather_rate: i32,
     craft_rate: i32,
+    // Per-skill XP and level (max level 5 for each)
+    woodcutting_xp: i32,
+    woodcutting_level: i32,
+    mining_xp: i32,
+    mining_level: i32,
+    foraging_xp: i32,
+    foraging_level: i32,
+    crafting_xp: i32,
+    crafting_level: i32,
 }
 
 #[table(accessor = unit_inventory, public)]
@@ -329,6 +339,7 @@ pub fn create_room(
     max_players: i32,
     allow_rebuy: bool,
     allow_midgame_join: bool,
+    combat_enabled: bool,
 ) -> Result<(), String> {
     let effective_votes = if votes_per_player > 0 { votes_per_player } else { STARTING_VOTES_PER_PLAYER as i32 };
     let effective_min = if min_players > 0 { min_players } else { MIN_PLAYERS_TO_START as i32 };
@@ -352,6 +363,7 @@ pub fn create_room(
         max_players: effective_max,
         allow_rebuy,
         allow_midgame_join,
+        combat_enabled,
     };
     
     // Insert returns the row with the auto-generated ID
@@ -591,6 +603,10 @@ fn create_initial_units(ctx: &ReducerContext, room: &GameRoom) -> Result<(), Str
                 speed: 3,
                 gather_rate: 5,
                 craft_rate: 3,
+                woodcutting_xp: 0, woodcutting_level: 1,
+                mining_xp: 0, mining_level: 1,
+                foraging_xp: 0, foraging_level: 1,
+                crafting_xp: 0, crafting_level: 1,
             });
 
             ctx.db.unit_inventory().insert(UnitInventory {
@@ -770,6 +786,71 @@ pub fn create_game_event(
     Ok(())
 }
 
+// Award XP for a specific skill to a unit, triggering level-up at thresholds (max level 5).
+// Stat bonuses per level-up: woodcutting→gather_rate, mining→attack, foraging→speed, crafting→craft_rate
+fn award_skill_xp(ctx: &ReducerContext, unit_id: i32, skill: &str, xp_amount: i32) {
+    let Some(mut stats) = ctx.db.unit_stats().unit_id().find(unit_id) else { return };
+    let thresholds = [100, 300, 700, 1500]; // XP needed to reach levels 2-5
+    let max_level = 5;
+
+    let (xp_field, level_field) = match skill {
+        "woodcutting" => (stats.woodcutting_xp, stats.woodcutting_level),
+        "mining"      => (stats.mining_xp,      stats.mining_level),
+        "foraging"    => (stats.foraging_xp,     stats.foraging_level),
+        "crafting"    => (stats.crafting_xp,     stats.crafting_level),
+        _ => return,
+    };
+
+    if level_field >= max_level { return; } // already maxed
+
+    let new_xp = xp_field + xp_amount;
+    let threshold = thresholds.get((level_field - 1) as usize).copied().unwrap_or(i32::MAX);
+
+    let leveled_up = new_xp >= threshold && level_field < max_level;
+    let new_level = if leveled_up { (level_field + 1).min(max_level) } else { level_field };
+
+    match skill {
+        "woodcutting" => {
+            stats.woodcutting_xp = new_xp;
+            stats.woodcutting_level = new_level;
+            if leveled_up { stats.gather_rate += 2; }
+        }
+        "mining" => {
+            stats.mining_xp = new_xp;
+            stats.mining_level = new_level;
+            if leveled_up { stats.attack += 2; }
+        }
+        "foraging" => {
+            stats.foraging_xp = new_xp;
+            stats.foraging_level = new_level;
+            if leveled_up { stats.speed += 2; }
+        }
+        "crafting" => {
+            stats.crafting_xp = new_xp;
+            stats.crafting_level = new_level;
+            if leveled_up { stats.craft_rate += 2; }
+        }
+        _ => {}
+    }
+
+    let room_id_str = ctx.db.unit().id().find(unit_id)
+        .map(|u| u.room_id.to_string())
+        .unwrap_or_default();
+
+    ctx.db.unit_stats().unit_id().update(stats);
+
+    if leveled_up {
+        let _ = create_game_event(
+            ctx,
+            room_id_str,
+            "level_up".to_string(),
+            unit_id.to_string(),
+            skill.to_string(),
+            new_level,
+        );
+    }
+}
+
 #[reducer]
 pub fn gather_resource(
     ctx: &ReducerContext,
@@ -791,18 +872,18 @@ pub fn gather_resource(
                     
                     if distance <= 30.0 { // Gathering range
                         let gather_amount = stats.gather_rate.min(resource.amount);
-                        match resource.resource_type.as_str() {
-                            "wood" => inventory.wood += gather_amount,
-                            "stone" => inventory.stone += gather_amount,
-                            "metal_ore" => inventory.metal_ore += gather_amount,
-                            "coal" => inventory.coal += gather_amount,
-                            "gems" => inventory.gems += gather_amount,
-                            "fiber" => inventory.fiber += gather_amount,
-                            "hide" => inventory.hide += gather_amount,
-                            "sand" => inventory.sand += gather_amount,
-                            "food" => inventory.food += gather_amount,
+                        let skill = match resource.resource_type.as_str() {
+                            "wood" => { inventory.wood += gather_amount; "woodcutting" }
+                            "stone" => { inventory.stone += gather_amount; "mining" }
+                            "metal_ore" => { inventory.metal_ore += gather_amount; "mining" }
+                            "coal" => { inventory.coal += gather_amount; "mining" }
+                            "gems" => { inventory.gems += gather_amount; "mining" }
+                            "sand" => { inventory.sand += gather_amount; "mining" }
+                            "fiber" => { inventory.fiber += gather_amount; "foraging" }
+                            "hide" => { inventory.hide += gather_amount; "foraging" }
+                            "food" => { inventory.food += gather_amount; "foraging" }
                             _ => return Err("Invalid resource type".to_string()),
-                        }
+                        };
                         
                         // Update resource amount
                         let mut updated_resource = resource.clone();
@@ -816,6 +897,9 @@ pub fn gather_resource(
                         // Update inventory
                         ctx.db.unit_inventory().unit_id().update(inventory);
                         
+                        // Award per-skill XP for this gather action
+                        award_skill_xp(ctx, unit_id, skill, gather_amount);
+
                         // Create resource gathering event
                         create_game_event(
                             ctx,
@@ -2095,6 +2179,10 @@ pub fn rebuy_into_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String>
                 unit_id: rebuy_unit.id,
                 health: 100, max_health: 100, attack: 10, defense: 5,
                 speed: 3, gather_rate: 5, craft_rate: 3,
+                woodcutting_xp: 0, woodcutting_level: 1,
+                mining_xp: 0, mining_level: 1,
+                foraging_xp: 0, foraging_level: 1,
+                crafting_xp: 0, crafting_level: 1,
             });
             ctx.db.unit_inventory().insert(UnitInventory {
                 unit_id: rebuy_unit.id,

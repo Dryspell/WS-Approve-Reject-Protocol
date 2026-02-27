@@ -17,6 +17,9 @@ pub fn create_battle_arena(
     if !room.member_ids.contains(&caller_id) {
         return Err("You are not in this room".to_string());
     }
+    if !room.combat_enabled {
+        return Err("Combat is disabled for this room".to_string());
+    }
     if red_unit_ids.is_empty() || blue_unit_ids.is_empty() {
         return Err("Both teams need at least one unit".to_string());
     }
@@ -240,6 +243,10 @@ pub fn breed_laborers(
         speed: 2 + child_speed / 4,
         gather_rate: 3 + child_gather / 3,
         craft_rate: 2 + child_craft / 3,
+        woodcutting_xp: 0, woodcutting_level: 1,
+        mining_xp: 0, mining_level: 1,
+        foraging_xp: 0, foraging_level: 1,
+        crafting_xp: 0, crafting_level: 1,
     });
 
     ctx.db.unit_inventory().insert(UnitInventory {

@@ -1,4 +1,4 @@
-import { createSignal, For, Show, onMount, onCleanup } from "solid-js";
+import { createSignal, For, Show, onMount, onCleanup, createEffect } from "solid-js";
 import { Button } from "~/components/ui/button";
 import type { BattleArena, BattleUnit } from "~/module_bindings/types";
 
@@ -24,8 +24,12 @@ const TEAM_COLORS = {
   },
 } as const;
 
+const AUTO_TURN_INTERVAL_MS = 1200; // 1.2 s between turns for visibility
+
 export default function BattleArenaViewport(props: BattleArenaViewportProps) {
-  const [lastCombatResult, setLastCombatResult] = createSignal<string | null>(null);
+  const [combatLog, setCombatLog] = createSignal<string[]>([]);
+  const [autoRunning, setAutoRunning] = createSignal(false);
+  let autoIntervalRef: ReturnType<typeof setInterval> | undefined;
 
   const redUnits = () =>
     props.battleUnits.filter((u) => u.team === "red" && u.isAlive);
@@ -34,19 +38,49 @@ export default function BattleArenaViewport(props: BattleArenaViewportProps) {
 
   const isBattleActive = () =>
     props.arena.status === "in_progress" && !props.arena.winnerTeam;
-  const canProcessTurn = () =>
-    isBattleActive() && redUnits().length > 0 && blueUnits().length > 0;
 
-  const handleProcessTurn = () => {
-    props.onProcessTurn(props.arena.id);
-    setLastCombatResult(`Turn ${props.arena.turnNumber + 1} processing...`);
+  const stopAutoLoop = () => {
+    if (autoIntervalRef !== undefined) {
+      clearInterval(autoIntervalRef);
+      autoIntervalRef = undefined;
+    }
+    setAutoRunning(false);
   };
+
+  const startAutoLoop = () => {
+    if (autoIntervalRef !== undefined) return; // already running
+    setAutoRunning(true);
+    autoIntervalRef = setInterval(() => {
+      if (!isBattleActive()) {
+        stopAutoLoop();
+        return;
+      }
+      props.onProcessTurn(props.arena.id);
+      setCombatLog((prev) => {
+        const entry = `Turn ${props.arena.turnNumber + 1}: ⚔️ Red ${redUnits().length} vs Blue ${blueUnits().length}`;
+        return [entry, ...prev].slice(0, 8);
+      });
+    }, AUTO_TURN_INTERVAL_MS);
+  };
+
+  // Auto-stop when battle completes
+  createEffect(() => {
+    if (!isBattleActive() && autoRunning()) {
+      stopAutoLoop();
+      if (props.arena.winnerTeam) {
+        setCombatLog((prev) => [`🏆 ${props.arena.winnerTeam!.toUpperCase()} wins!`, ...prev].slice(0, 8));
+      }
+    }
+  });
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") props.onClose();
   };
   onMount(() => document.addEventListener("keydown", handleKeyDown));
-  onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+  onCleanup(() => {
+    document.removeEventListener("keydown", handleKeyDown);
+    stopAutoLoop();
+  });
 
   const unitPosition = (index: number, team: "red" | "blue") => {
     const teamUnits = team === "red" ? redUnits().length : blueUnits().length;
@@ -142,31 +176,51 @@ export default function BattleArenaViewport(props: BattleArenaViewportProps) {
           </For>
         </div>
 
-        {/* Combat log / result strip */}
-        <div class="shrink-0 border-t border-white/10 px-6 py-3">
-          <Show when={lastCombatResult()}>
-            <p class="text-center text-sm text-white/70">{lastCombatResult()}</p>
+        {/* Combat log */}
+        <div class="shrink-0 border-t border-white/10 px-6 py-3 max-h-28 overflow-y-auto space-y-0.5">
+          <Show
+            when={combatLog().length > 0}
+            fallback={<p class="text-center text-xs text-white/30">Press Start Battle to begin auto-chess combat</p>}
+          >
+            <For each={combatLog()}>
+              {(line) => <p class="text-xs text-white/60">{line}</p>}
+            </For>
           </Show>
         </div>
 
         {/* Footer controls */}
         <div class="flex shrink-0 items-center justify-between gap-4 border-t border-white/10 bg-white/5 px-6 py-4">
           <div class="flex gap-4 text-sm">
-            <span class={TEAM_COLORS.red.text}>
-              Red: {redUnits().length} alive
-            </span>
-            <span class={TEAM_COLORS.blue.text}>
-              Blue: {blueUnits().length} alive
-            </span>
+            <span class={TEAM_COLORS.red.text}>Red: {redUnits().length} alive</span>
+            <span class={TEAM_COLORS.blue.text}>Blue: {blueUnits().length} alive</span>
+            <span class="text-white/30 text-xs">Turn {props.arena.turnNumber}</span>
           </div>
           <div class="flex gap-3">
             <Show when={isBattleActive()}>
-              <Button
-                onClick={handleProcessTurn}
-                disabled={!canProcessTurn()}
-                class="bg-emerald-600/90 hover:bg-emerald-500 text-white"
+              <Show
+                when={autoRunning()}
+                fallback={
+                  <Button
+                    onClick={startAutoLoop}
+                    class="bg-emerald-600/90 hover:bg-emerald-500 text-white"
+                  >
+                    ▶ Start Battle
+                  </Button>
+                }
               >
-                Process Turn
+                <Button
+                  onClick={stopAutoLoop}
+                  class="bg-amber-600/90 hover:bg-amber-500 text-white"
+                >
+                  ⏸ Pause
+                </Button>
+              </Show>
+              <Button
+                onClick={() => props.onProcessTurn(props.arena.id)}
+                variant="ghost"
+                class="text-white/50 hover:text-white text-xs"
+              >
+                Step
               </Button>
             </Show>
             <Show when={props.arena.winnerTeam}>
@@ -178,7 +232,7 @@ export default function BattleArenaViewport(props: BattleArenaViewportProps) {
                 }`}
               >
                 <span class="font-semibold text-white">
-                  Winner: {props.arena.winnerTeam}
+                  🏆 {props.arena.winnerTeam?.toUpperCase()} wins!
                 </span>
               </div>
             </Show>

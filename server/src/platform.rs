@@ -119,6 +119,10 @@ pub fn spawn_laborer(
         health: 100, max_health: 100,
         attack: 10, defense: 5, speed: 3,
         gather_rate: 5, craft_rate: 3,
+        woodcutting_xp: 0, woodcutting_level: 1,
+        mining_xp: 0, mining_level: 1,
+        foraging_xp: 0, foraging_level: 1,
+        crafting_xp: 0, crafting_level: 1,
     });
     ctx.db.unit_inventory().insert(UnitInventory {
         unit_id: new_unit.id,
@@ -172,6 +176,12 @@ pub fn transfer_laborer_to_parent(
     let unit = ctx.db.unit().id().find(unit_id).ok_or("Unit not found")?;
     if unit.owner_id != caller_id {
         return Err("You don't own this unit".to_string());
+    }
+    if unit.vote_color.is_some() {
+        return Err("Cannot send home: minion has already cast a vote this round".to_string());
+    }
+    if unit.vote_guarantee.is_some() {
+        return Err("Cannot send home: minion is promised as a guarantee".to_string());
     }
 
     // Void the vote for this laborer (per design: vote is voided on upward transfer)
