@@ -1,4 +1,4 @@
-import { Component, createSignal, createMemo, createEffect, For, Show } from "solid-js";
+import { Component, createSignal, createMemo, createEffect, For, Show, onMount, onCleanup } from "solid-js";
 import { clientOnly } from "@solidjs/start";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { resolvePlayerName } from "~/lib/game-utils";
@@ -49,6 +49,13 @@ const ChatOverlayInner: Component = () => {
   const scrollToBottom = () => {
     messagesEndRef?.scrollIntoView({ behavior: "smooth" });
   };
+
+  // Listen for Tavern open-chat-overlay event
+  onMount(() => {
+    const handler = () => setView("contacts");
+    window.addEventListener("open-chat-overlay", handler);
+    onCleanup(() => window.removeEventListener("open-chat-overlay", handler));
+  });
 
   // Subscribe to data
   createEffect(() => {

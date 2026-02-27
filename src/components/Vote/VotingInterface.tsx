@@ -60,6 +60,8 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [tournaments, setTournaments] = createSignal<Tournament[]>([]);
   const [activePanel, setActivePanel] = createSignal<string | null>(null);
   const [battleDismissed, setBattleDismissed] = createSignal(false);
+  const [gameOverDismissed, setGameOverDismissed] = createSignal(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = createSignal(false);
 
   // Round processing is now server-authoritative via RoundTimerEntry scheduler.
   // Clients are passive observers — room state changes drive the UI.
@@ -522,7 +524,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   };
 
   const [playersOpen, setPlayersOpen] = createSignal(true);
-  const [marketOpen, setMarketOpen] = createSignal(false);
+  const [marketOpen, setMarketOpen] = createSignal(true);
 
   const activeOffers = createMemo(() => {
     const offers: { unitId: number; offerId: number; type: "sell" | "buy" | "guarantee"; price: number; color?: "red" | "blue" | null }[] = [];
@@ -685,7 +687,17 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     props.room.eliminatedPlayers.includes(props.currentUser.identity.toHexString())
   );
 
+  let _lastPosUpdate = 0;
+  let _lastPosX = 0;
+  let _lastPosZ = 0;
+
   const handleAvatarPositionUpdate = (x: number, z: number, rotY: number, moving: boolean) => {
+    const now = Date.now();
+    if (now - _lastPosUpdate < 100) return;
+    if (Math.abs(x - _lastPosX) < 0.1 && Math.abs(z - _lastPosZ) < 0.1 && !moving) return;
+    _lastPosX = x;
+    _lastPosZ = z;
+    _lastPosUpdate = now;
     const connection = conn();
     if (!connection || !connected()) return;
     try {
@@ -741,10 +753,12 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </div>
         </Show>
 
-        {/* Dev tools */}
-        <div class="absolute right-2 top-14 z-40 flex gap-1">
-          <AdminPanel />
-        </div>
+        {/* Dev tools — only visible on localhost */}
+        <Show when={typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")}>
+          <div class="absolute right-2 top-14 z-40 flex gap-1">
+            <AdminPanel />
+          </div>
+        </Show>
         <DebugPanel
           room={props.room}
           user={props.currentUser}
@@ -829,18 +843,53 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             </span>
           </div>
 
+          <div class="flex items-center gap-0.5 border-l border-white/10 pl-2">
+            <a href="/leaderboard" title="Leaderboard" class="flex items-center justify-center rounded p-1.5 text-white/40 hover:bg-white/10 hover:text-white/70 transition-colors">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </a>
+            <a href="/profile" title="Profile" class="flex items-center justify-center rounded p-1.5 text-white/40 hover:bg-white/10 hover:text-white/70 transition-colors">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </a>
+          </div>
+
           <SoundToggle />
 
-          <Button
-            size="sm"
-            variant="ghost"
-            class="text-red-400/80 hover:bg-red-500/20 hover:text-red-300"
-            onClick={handleLeaveRoom}
-            title="Leave Room"
-            data-testid={TID.leaveRoomBtn}
+          <Show
+            when={!showLeaveConfirm()}
+            fallback={
+              <div class="flex items-center gap-1.5 rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1">
+                <span class="text-[11px] text-red-300">Forfeit buy-in?</span>
+                <button
+                  class="rounded bg-red-600/80 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-red-500"
+                  onClick={handleLeaveRoom}
+                  data-testid={TID.leaveRoomBtn}
+                >
+                  Leave
+                </button>
+                <button
+                  class="rounded bg-white/10 px-2 py-0.5 text-[10px] text-white/60 hover:bg-white/20"
+                  onClick={() => setShowLeaveConfirm(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            }
           >
-            Leave
-          </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              class="text-red-400/80 hover:bg-red-500/20 hover:text-red-300"
+              onClick={() => setShowLeaveConfirm(true)}
+              title="Leave Room"
+              data-testid={TID.leaveRoomBtn}
+            >
+              Leave
+            </Button>
+          </Show>
         </div>
 
         {/* ── LEFT: Players Panel ── */}
@@ -958,37 +1007,26 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         {/* Floating panel buttons along top-right of viewport */}
         <div class="absolute right-[calc(theme(spacing.3)+theme(spacing.8)+0.25rem)] top-14 z-20 flex flex-col gap-1">
           {[
-            { key: "buildings", label: "B", title: "Buildings" },
-            { key: "equipment", label: "E", title: "Equipment" },
-            { key: "genetics", label: "G", title: "Genetics" },
-            { key: "ev", label: "EV", title: "Strategy Helper" },
-            { key: "tournament", label: "T", title: "Tournaments" },
+            { key: "buildings", label: "Build", icon: "🏗️" },
+            { key: "equipment", label: "Equip", icon: "⚔️" },
+            { key: "genetics", label: "Gene", icon: "🧬" },
+            { key: "ev", label: "EV", icon: "📊" },
+            { key: "tournament", label: "Tour.", icon: "🏆" },
+            { key: "sidebets", label: "Bet", icon: "💰" },
           ].map(btn => (
             <button
-              class="w-8 h-8 rounded-lg text-[10px] font-bold transition-all border"
+              class="w-12 rounded-lg text-[9px] font-bold transition-all border flex flex-col items-center py-1.5 px-1 gap-0.5"
               classList={{
                 "bg-amber-500/30 border-amber-400/50 text-amber-200": activePanel() === btn.key,
                 "bg-black/40 backdrop-blur border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70": activePanel() !== btn.key,
               }}
               onClick={() => setActivePanel(activePanel() === btn.key ? null : btn.key)}
-              title={btn.title}
+              title={btn.label}
             >
-              {btn.label}
+              <span class="text-sm leading-none">{btn.icon}</span>
+              <span class="leading-none">{btn.label}</span>
             </button>
           ))}
-          <Show when={isEliminated()}>
-            <button
-              class="w-8 h-8 rounded-lg text-[10px] font-bold transition-all border"
-              classList={{
-                "bg-amber-500/30 border-amber-400/50 text-amber-200": activePanel() === "sidebets",
-                "bg-black/40 backdrop-blur border-white/10 text-white/50 hover:bg-white/10": activePanel() !== "sidebets",
-              }}
-              onClick={() => setActivePanel(activePanel() === "sidebets" ? null : "sidebets")}
-              title="Side Bets"
-            >
-              $
-            </button>
-          </Show>
         </div>
 
         {/* Slide-out feature panels */}
@@ -1137,49 +1175,62 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               </For>
             </div>
 
-            {/* Drop zones — large, prominent */}
-            <div class="grid grid-cols-2 gap-2">
-              <div
-                data-testid={TID.voteRed}
-                role="button"
-                tabindex="0"
-                onDragOver={handleDragOver}
-                onDrop={() => handleDrop("red")}
-                onClick={() => {
-                  handleDropZoneClick("red");
-                  setVoteFlashColor("red");
-                  setTimeout(() => setVoteFlashColor(null), 400);
-                }}
-                class="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-red-500/40 bg-red-500/10 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/25 hover:border-red-400/60 transition-all active:scale-95"
-                classList={{
-                  "border-red-400 bg-red-500/30": draggedVote() !== null,
-                  "animate-vote-flash-red": voteFlashColor() === "red",
-                }}
-              >
-                <div class="h-3 w-3 rounded-full bg-red-500" />
-                Red
-              </div>
-              <div
-                data-testid={TID.voteBlue}
-                role="button"
-                tabindex="0"
-                onDragOver={handleDragOver}
-                onDrop={() => handleDrop("blue")}
-                onClick={() => {
-                  handleDropZoneClick("blue");
-                  setVoteFlashColor("blue");
-                  setTimeout(() => setVoteFlashColor(null), 400);
-                }}
-                class="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-blue-500/40 bg-blue-500/10 py-2 text-sm font-semibold text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 transition-all active:scale-95"
-                classList={{
-                  "border-blue-400 bg-blue-500/30": draggedVote() !== null,
-                  "animate-vote-flash-blue": voteFlashColor() === "blue",
-                }}
-              >
-                <div class="h-3 w-3 rounded-full bg-blue-500" />
-                Blue
-              </div>
-            </div>
+            {/* Drop zones — large, prominent, with live tally */}
+            {(() => {
+              const roomVotes = () => votes().filter(v => v.roomId === props.room.id);
+              const totalRed = () => roomVotes().filter(v => v.color === "red").length;
+              const totalBlue = () => roomVotes().filter(v => v.color === "blue").length;
+              return (
+                <div class="grid grid-cols-2 gap-2">
+                  <div
+                    data-testid={TID.voteRed}
+                    role="button"
+                    tabindex="0"
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop("red")}
+                    onClick={() => {
+                      handleDropZoneClick("red");
+                      setVoteFlashColor("red");
+                      setTimeout(() => setVoteFlashColor(null), 400);
+                    }}
+                    class="flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-red-500/40 bg-red-500/10 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/25 hover:border-red-400/60 transition-all active:scale-95"
+                    classList={{
+                      "border-red-400 bg-red-500/30": draggedVote() !== null,
+                      "animate-vote-flash-red": voteFlashColor() === "red",
+                    }}
+                  >
+                    <div class="flex items-center gap-1.5">
+                      <div class="h-3 w-3 rounded-full bg-red-500" />
+                      Red
+                    </div>
+                    <span class="text-[10px] font-normal text-red-400/60">{totalRed()} total</span>
+                  </div>
+                  <div
+                    data-testid={TID.voteBlue}
+                    role="button"
+                    tabindex="0"
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop("blue")}
+                    onClick={() => {
+                      handleDropZoneClick("blue");
+                      setVoteFlashColor("blue");
+                      setTimeout(() => setVoteFlashColor(null), 400);
+                    }}
+                    class="flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-blue-500/40 bg-blue-500/10 py-2 text-sm font-semibold text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 transition-all active:scale-95"
+                    classList={{
+                      "border-blue-400 bg-blue-500/30": draggedVote() !== null,
+                      "animate-vote-flash-blue": voteFlashColor() === "blue",
+                    }}
+                  >
+                    <div class="flex items-center gap-1.5">
+                      <div class="h-3 w-3 rounded-full bg-blue-500" />
+                      Blue
+                    </div>
+                    <span class="text-[10px] font-normal text-blue-400/60">{totalBlue()} total</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Unit action toolbar (when units selected) */}
             <Show when={viewportSelectedIds().length > 0}>
@@ -1394,6 +1445,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             eliminatedPlayers={eliminatedPlayers().map(p => p.identity.toHexString())}
             survivingPlayers={remainingPlayers().map(p => p.identity.toHexString())}
             minorityColor={(getVoteTotals().minority === "tie" ? "red" : getVoteTotals().minority) as "red" | "blue"}
+            tiebreaker={getVoteTotals().minority === "tie"}
             redVotes={getVoteTotals().red}
             blueVotes={getVoteTotals().blue}
             room={props.room}
@@ -1403,9 +1455,9 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </div>
         </Show>
 
-        {/* Game Over Modal */}
-        <Show when={props.room.gameStatus === "completed"}>
-          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+        {/* Game Over Modal — z-[70] so it sits above ChatOverlay z-[60] */}
+        <Show when={props.room.gameStatus === "completed" && !gameOverDismissed()}>
+          <div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
             <div class="w-96 rounded-xl border border-white/20 bg-slate-900/90 p-6 shadow-2xl backdrop-blur-xl animate-scale-in">
               <h2 class="mb-4 text-center text-2xl font-bold text-white">Game Over!</h2>
               <div class="space-y-4">
@@ -1414,16 +1466,20 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                   <For each={remainingPlayers()}>
                     {(player) => (
                       <p class="text-xl font-bold text-emerald-400">
-                        {player.name || "Anonymous"} - $
+                        {resolvePlayerName(player.identity.toHexString(), conn())} - $
                         {(props.room.potSize / Math.max(remainingPlayers().length, 1)).toFixed(2)}
                       </p>
                     )}
                   </For>
+                  <Show when={remainingPlayers().length === 0}>
+                    <p class="text-sm text-white/40 mt-2">No survivors — pot returned</p>
+                  </Show>
                 </div>
                 <div class="flex gap-2">
                   <button
                     class="flex-1 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-all hover:from-purple-500 hover:to-blue-500"
                     onClick={() => {
+                      setGameOverDismissed(true);
                       try {
                         const connection = conn();
                         if (connection) {
@@ -1437,7 +1493,10 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                   </button>
                   <button
                     class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/70 transition-all hover:bg-white/10"
-                    onClick={() => navigate("/")}
+                    onClick={() => {
+                      setGameOverDismissed(true);
+                      navigate("/");
+                    }}
                   >
                     Home
                   </button>

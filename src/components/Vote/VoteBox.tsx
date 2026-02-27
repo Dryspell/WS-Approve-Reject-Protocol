@@ -1,4 +1,4 @@
-import { Component, createSignal, For, createEffect, Show, Accessor, Setter, batch } from "solid-js";
+import { Component, createSignal, For, createEffect, Show, Accessor, Setter, batch, onMount, onCleanup } from "solid-js";
 import { createLocalStorageSignal } from "~/hooks/createLocalStorageSignal";
 import { randAnimal } from "@ngneat/falso";
 import { createId } from "@paralleldrive/cuid2";
@@ -14,6 +14,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { resolvePlayerName } from "~/lib/game-utils";
 import { TID } from "~/lib/test-ids";
+import GuestNamePrompt from "~/components/GuestNamePrompt";
 
 /**
  * Check if multiuser mode is enabled via URL parameter.
@@ -80,7 +81,29 @@ const VoteBox: Component = () => {
   const [user, setUser] = createUserSignal();
 
   // Initialize SpacetimeDB connection
-  const { conn, connected, identity, subscribed } = useSpacetimeDB();
+  const { conn, connected, identity, subscribed, connectionError } = useSpacetimeDB();
+
+  // Syncing timeout warning — shown if still syncing after 8s
+  const [syncingTooLong, setSyncingTooLong] = createSignal(false);
+  const [showNamePrompt, setShowNamePrompt] = createSignal(false);
+
+  createEffect(() => {
+    if (connected() && !subscribed()) {
+      const timer = setTimeout(() => setSyncingTooLong(true), 8000);
+      onCleanup(() => { clearTimeout(timer); setSyncingTooLong(false); });
+    } else {
+      setSyncingTooLong(false);
+    }
+  });
+
+  // Show name prompt when connected but user has no name
+  createEffect(() => {
+    if (!subscribed() || !currentUser()) return;
+    const user = currentUser();
+    if (user && (!user.name || !user.name.trim())) {
+      setShowNamePrompt(true);
+    }
+  });
 
   // Auto-select the first room tab when rooms arrive and nothing is selected
   createEffect(() => {
@@ -334,8 +357,9 @@ const VoteBox: Component = () => {
                     </Badge>
                   }
                 >
-                  <Badge variant="secondary" data-testid={TID.connectionStatus} class="text-xs">
-                    Syncing...
+                  <Badge variant="secondary" data-testid={TID.connectionStatus} class="text-xs flex items-center gap-1">
+                    <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    Connecting…
                   </Badge>
                 </Show>
               }
@@ -426,6 +450,32 @@ const VoteBox: Component = () => {
           </div>
         </Show>
 
+        {/* Schema mismatch / connection error banner */}
+        <Show when={connectionError() === "schema-mismatch"}>
+          <div class="mx-4 mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold text-amber-300">Server updated — please refresh</p>
+                <p class="text-xs text-amber-400/70">The game client is out of sync with the server.</p>
+              </div>
+              <button
+                class="rounded-md bg-amber-500/80 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-400"
+                onClick={() => window.location.reload()}
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+        </Show>
+
+        {/* Slow sync warning */}
+        <Show when={syncingTooLong() && !connectionError()}>
+          <div class="mx-4 mt-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-2.5 text-xs text-yellow-300">
+            Taking longer than usual — check that SpacetimeDB is running at{" "}
+            <span class="font-mono">{import.meta.env.VITE_SPACETIME_HOST || "http://127.0.0.1:3000"}</span>
+          </div>
+        </Show>
+
         <Show when={!connected()}>
           <div class="m-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
             <h2 class="mb-1 text-sm font-semibold text-red-300">Not Connected</h2>
@@ -433,6 +483,14 @@ const VoteBox: Component = () => {
               Ensure SpacetimeDB is running at {import.meta.env.VITE_SPACETIME_HOST || "ws://localhost:3000"}
             </p>
           </div>
+        </Show>
+
+        {/* Guest name prompt for users without a name */}
+        <Show when={showNamePrompt()}>
+          <GuestNamePrompt
+            onComplete={() => setShowNamePrompt(false)}
+            onCancel={() => setShowNamePrompt(false)}
+          />
         </Show>
 
         {/* Room Tabs + Content */}

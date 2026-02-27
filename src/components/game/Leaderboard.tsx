@@ -1,4 +1,4 @@
-import { Component, createSignal, For, Show, onMount, createEffect } from "solid-js";
+import { Component, createSignal, For, Show, createEffect } from "solid-js";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -23,12 +23,11 @@ export const Leaderboard: Component = () => {
   const [players, setPlayers] = createSignal<PlayerStats[]>([]);
   const [transactions, setTransactions] = createSignal<Transaction[]>([]);
   const [timeframe, setTimeframe] = createSignal<'all-time' | 'season' | 'weekly'>('all-time');
+  const [loading, setLoading] = createSignal(false);
 
-  onMount(() => {
-    loadLeaderboardData();
-  });
-
+  // Load once connected, and re-load when timeframe changes
   createEffect(() => {
+    if (!connected() || !conn()) return;
     timeframe();
     loadLeaderboardData();
   });
@@ -50,6 +49,7 @@ export const Leaderboard: Component = () => {
     const connection = conn();
     if (!connection) return;
 
+    setLoading(true);
     const allUsers = Array.from(connection.db.user.iter());
     const allTransactions = Array.from(connection.db.transaction.iter());
     setTransactions(allTransactions);
@@ -66,13 +66,22 @@ export const Leaderboard: Component = () => {
     const playerStats = allUsers.map((user) => {
       const userId = user.identity.toHexString();
 
+      // Games won = unique rooms where this user received a pot_distribution
       const wins = filteredTransactions.filter(
         (t) => t.transactionType === 'pot_distribution' && t.toPlayer === userId
       );
 
+      // Games played = unique rooms where this user paid a buy-in
+      const buyInRooms = new Set(
+        filteredTransactions
+          .filter((t) => t.transactionType === 'buy_in' && t.fromPlayer === userId)
+          .map((t) => t.roomId)
+      );
+      const gamesPlayed = Math.max(buyInRooms.size, wins.length);
+
       const potWinnings = wins.reduce((sum, t) => sum + t.amount, 0);
       const buyIns = filteredTransactions.filter(
-        (t) => (t.transactionType === 'rebuy' || t.transactionType === 'pot_distribution') && t.fromPlayer === userId
+        (t) => (t.transactionType === 'rebuy' || t.transactionType === 'buy_in') && t.fromPlayer === userId
       );
       const totalSpent = buyIns.reduce((sum, t) => sum + t.amount, 0);
 
@@ -80,7 +89,6 @@ export const Leaderboard: Component = () => {
         ? user.totalProfitLoss
         : potWinnings - totalSpent;
 
-      const gamesPlayed = Math.max(1, Math.floor(Math.abs(profit) / 10) + wins.length);
       const gamesWon = wins.length;
       const winRate = gamesPlayed > 0 ? (gamesWon / gamesPlayed) * 100 : 0;
 
@@ -90,7 +98,7 @@ export const Leaderboard: Component = () => {
         gamesWon,
         winRate,
         totalProfit: profit,
-        averageProfit: profit / gamesPlayed,
+        averageProfit: gamesPlayed > 0 ? profit / gamesPlayed : 0,
         rank: 0,
       };
     });
@@ -103,6 +111,7 @@ export const Leaderboard: Component = () => {
       }));
 
     setPlayers(sorted);
+    setLoading(false);
   };
 
   const getRankEmoji = (rank: number) => {
@@ -116,135 +125,150 @@ export const Leaderboard: Component = () => {
 
   const getRankColor = (rank: number) => {
     switch (rank) {
-      case 1: return 'text-yellow-600 font-bold';
-      case 2: return 'text-gray-400 font-bold';
-      case 3: return 'text-orange-600 font-bold';
-      default: return 'text-gray-600';
+      case 1: return 'text-yellow-400 font-bold';
+      case 2: return 'text-slate-300 font-bold';
+      case 3: return 'text-orange-400 font-bold';
+      default: return 'text-white/40';
     }
   };
 
   return (
-    <Card class="w-full">
+    <Card class="w-full border-white/10 bg-slate-900/80">
       <CardHeader>
         <div class="flex items-center justify-between">
-          <CardTitle class="flex items-center gap-2">
+          <CardTitle class="flex items-center gap-2 text-white">
             🏆 Leaderboard
           </CardTitle>
-          <Button size="sm" variant="outline" onClick={loadLeaderboardData}>
+          <Button size="sm" variant="outline" class="border-white/20 text-white/70 hover:bg-white/10" onClick={loadLeaderboardData}>
             🔄 Refresh
           </Button>
         </div>
       </CardHeader>
 
       <CardContent>
-        <Tabs value={timeframe()} onChange={setTimeframe}>
-          <TabsList class="grid w-full grid-cols-3">
-            <TabsTrigger value="all-time">All Time</TabsTrigger>
-            <TabsTrigger value="season">This Season</TabsTrigger>
-            <TabsTrigger value="weekly">This Week</TabsTrigger>
-          </TabsList>
+        <Show when={!connected()} fallback={null}>
+          <div class="py-8 text-center text-sm text-white/40">
+            Not connected — waiting for SpacetimeDB…
+          </div>
+        </Show>
 
-          <TabsContent value={timeframe()}>
-            <ScrollArea class="h-[600px]">
-              <div class="space-y-2 pr-2">
-                <For each={players()} fallback={
-                  <div class="py-8 text-center text-sm text-gray-500">
-                    No players yet. Start playing to appear on the leaderboard!
-                  </div>
-                }>
-                  {(player) => (
-                    <Card class={player.rank <= 3 ? 'border-2' : ''} classList={{
-                      'border-yellow-400': player.rank === 1,
-                      'border-gray-400': player.rank === 2,
-                      'border-orange-400': player.rank === 3,
-                    }}>
-                      <CardContent class="p-4">
-                        <div class="flex items-center gap-4">
-                          {/* Rank */}
-                          <div class={`text-3xl ${getRankColor(player.rank)}`}>
-                            {getRankEmoji(player.rank)}
+        <Show when={connected()}>
+          <Tabs value={timeframe()} onChange={setTimeframe}>
+            <TabsList class="grid w-full grid-cols-3 bg-white/5">
+              <TabsTrigger value="all-time">All Time</TabsTrigger>
+              <TabsTrigger value="season">This Season</TabsTrigger>
+              <TabsTrigger value="weekly">This Week</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value={timeframe()}>
+              <ScrollArea class="h-[600px]">
+                <Show when={loading()}>
+                  <div class="py-8 text-center text-sm text-white/40 animate-pulse">Loading…</div>
+                </Show>
+                <div class="space-y-2 pr-2">
+                  <For each={players()} fallback={
+                    <div class="py-8 text-center text-sm text-white/40">
+                      No players yet. Start playing to appear on the leaderboard!
+                    </div>
+                  }>
+                    {(player) => (
+                      <Card
+                        class="border bg-white/5 transition-colors hover:bg-white/10"
+                        classList={{
+                          'border-yellow-400/60': player.rank === 1,
+                          'border-slate-400/40': player.rank === 2,
+                          'border-orange-400/40': player.rank === 3,
+                          'border-white/10': player.rank > 3,
+                        }}
+                      >
+                        <CardContent class="p-4">
+                          <div class="flex items-center gap-4">
+                            {/* Rank */}
+                            <div class={`text-3xl ${getRankColor(player.rank)}`}>
+                              {getRankEmoji(player.rank)}
+                            </div>
+
+                            {/* Player Info */}
+                            <div class="flex-1">
+                              <div class="flex items-center gap-2">
+                                <span class="font-semibold text-white">
+                                  {player.user.name || 'Anonymous'}
+                                </span>
+                                {player.user.online && (
+                                  <Badge variant="default" class="text-xs">
+                                    🟢 Online
+                                  </Badge>
+                                )}
+                              </div>
+                              <div class="text-xs text-white/40">
+                                {resolvePlayerName(player.user.identity.toHexString(), conn())}
+                              </div>
+                            </div>
+
+                            {/* Stats */}
+                            <div class="text-right">
+                              <div class="text-lg font-bold" classList={{
+                                'text-emerald-400': player.totalProfit > 0,
+                                'text-red-400': player.totalProfit < 0,
+                                'text-white/40': player.totalProfit === 0,
+                              }}>
+                                {player.totalProfit >= 0 ? '+' : ''}
+                                ${player.totalProfit.toFixed(2)}
+                              </div>
+                              <div class="text-xs text-white/40">
+                                {player.gamesWon}W / {Math.max(0, player.gamesPlayed - player.gamesWon)}L
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Player Info */}
-                          <div class="flex-1">
-                            <div class="flex items-center gap-2">
-                              <span class="font-semibold">
-                                {player.user.name || 'Anonymous'}
-                              </span>
-                              {player.user.online && (
-                                <Badge variant="default" class="text-xs">
-                                  🟢 Online
-                                </Badge>
-                              )}
+                          {/* Expanded Stats */}
+                          <div class="mt-3 grid grid-cols-3 gap-2 border-t border-white/10 pt-3 text-xs">
+                            <div>
+                              <div class="text-white/40">Win Rate</div>
+                              <div class="font-semibold text-white">
+                                {player.winRate.toFixed(1)}%
+                              </div>
                             </div>
-                            <div class="text-xs text-gray-500">
-                              {resolvePlayerName(player.user.identity.toHexString(), conn())}
+                            <div>
+                              <div class="text-white/40">Games</div>
+                              <div class="font-semibold text-white">
+                                {player.gamesPlayed}
+                              </div>
+                            </div>
+                            <div>
+                              <div class="text-white/40">Avg P/L</div>
+                              <div class="font-semibold" classList={{
+                                'text-emerald-400': player.averageProfit > 0,
+                                'text-red-400': player.averageProfit < 0,
+                                'text-white/40': player.averageProfit === 0,
+                              }}>
+                                ${player.averageProfit.toFixed(2)}
+                              </div>
                             </div>
                           </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </For>
+                </div>
+              </ScrollArea>
+            </TabsContent>
+          </Tabs>
 
-                          {/* Stats */}
-                          <div class="text-right">
-                            <div class="text-lg font-bold" classList={{
-                              'text-green-600': player.totalProfit > 0,
-                              'text-red-600': player.totalProfit < 0,
-                              'text-gray-600': player.totalProfit === 0,
-                            }}>
-                              {player.totalProfit >= 0 ? '+' : ''}
-                              ${player.totalProfit.toFixed(2)}
-                            </div>
-                            <div class="text-xs text-gray-500">
-                              {player.gamesWon}W / {player.gamesPlayed - player.gamesWon}L
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Expanded Stats */}
-                        <div class="mt-3 grid grid-cols-3 gap-2 border-t pt-3 text-xs">
-                          <div>
-                            <div class="text-gray-500">Win Rate</div>
-                            <div class="font-semibold">
-                              {player.winRate.toFixed(1)}%
-                            </div>
-                          </div>
-                          <div>
-                            <div class="text-gray-500">Games</div>
-                            <div class="font-semibold">
-                              {player.gamesPlayed}
-                            </div>
-                          </div>
-                          <div>
-                            <div class="text-gray-500">Avg P/L</div>
-                            <div class="font-semibold" classList={{
-                              'text-green-600': player.averageProfit > 0,
-                              'text-red-600': player.averageProfit < 0,
-                            }}>
-                              ${player.averageProfit.toFixed(2)}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </For>
-              </div>
-            </ScrollArea>
-          </TabsContent>
-        </Tabs>
-
-        {/* Legend */}
-        <div class="mt-4 rounded border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
-          <p class="font-semibold">📊 Stats Explained:</p>
-          <ul class="ml-4 mt-1 list-disc space-y-1">
-            <li><strong>Total P/L:</strong> Lifetime profit/loss across all games</li>
-            <li><strong>Win Rate:</strong> Percentage of games won</li>
-            <li><strong>Avg P/L:</strong> Average profit/loss per game</li>
-            <li><strong>Rankings:</strong> Based on total profit/loss</li>
-          </ul>
-        </div>
+          {/* Legend */}
+          <div class="mt-4 rounded border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-blue-300">
+            <p class="font-semibold">📊 Stats Explained:</p>
+            <ul class="ml-4 mt-1 list-disc space-y-1 text-blue-300/80">
+              <li><strong>Total P/L:</strong> Lifetime profit/loss across all games</li>
+              <li><strong>Win Rate:</strong> Percentage of games won (derived from transactions)</li>
+              <li><strong>Avg P/L:</strong> Average profit/loss per game played</li>
+              <li><strong>Rankings:</strong> Based on total profit/loss</li>
+            </ul>
+          </div>
+        </Show>
       </CardContent>
     </Card>
   );
 };
 
 export default Leaderboard;
-

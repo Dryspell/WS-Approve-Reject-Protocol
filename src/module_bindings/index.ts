@@ -46,6 +46,7 @@ import ConstructBuildingReducer from "./construct_building_reducer";
 import ContributeToBuildingReducer from "./contribute_to_building_reducer";
 import ConvertMtToMblsReducer from "./convert_mt_to_mbls_reducer";
 import CraftEquipmentReducer from "./craft_equipment_reducer";
+import CreateBattleArenaReducer from "./create_battle_arena_reducer";
 import CreateChatRoomReducer from "./create_chat_room_reducer";
 import CreateGameEventReducer from "./create_game_event_reducer";
 import CreateGuaranteeReducer from "./create_guarantee_reducer";
@@ -528,6 +529,7 @@ const reducersSchema = __reducers(
   __reducerSchema("contribute_to_building", ContributeToBuildingReducer),
   __reducerSchema("convert_mt_to_mbls", ConvertMtToMblsReducer),
   __reducerSchema("craft_equipment", CraftEquipmentReducer),
+  __reducerSchema("create_battle_arena", CreateBattleArenaReducer),
   __reducerSchema("create_chat_room", CreateChatRoomReducer),
   __reducerSchema("create_game_event", CreateGameEventReducer),
   __reducerSchema("create_guarantee", CreateGuaranteeReducer),

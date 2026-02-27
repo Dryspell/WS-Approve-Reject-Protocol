@@ -26,10 +26,13 @@ function AppShell(props: { children: any }) {
 				<Show when={showNav()}>
 					<Nav />
 				</Show>
-				<Suspense>
-					<main class={showNav() ? "flex-1" : "flex-1 h-screen"}>{props.children}</main>
-				</Suspense>
+			<Suspense>
+				<main class={showNav() ? "flex-1" : "flex-1 h-screen"}>{props.children}</main>
+			</Suspense>
+			{/* Suppress global ChatOverlay during gameplay; the in-game ChatPanel handles chat */}
+			<Show when={!isGame()}>
 				<ChatOverlay />
+			</Show>
 			</div>
 		</SpacetimeDBProvider>
 	);

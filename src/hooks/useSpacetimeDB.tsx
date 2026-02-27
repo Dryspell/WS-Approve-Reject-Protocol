@@ -10,6 +10,7 @@ type SpacetimeDBContextType = {
   identity: () => Identity | null;
   connected: () => boolean;
   subscribed: () => boolean;
+  connectionError: () => string | null;
 };
 
 const SpacetimeDBContext = createContext<SpacetimeDBContextType>();
@@ -19,6 +20,7 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
   const [identity, setIdentity] = createSignal<Identity | null>(null);
   const [connected, setConnected] = createSignal(false);
   const [subscribed, setSubscribed] = createSignal(false);
+  const [connectionError, setConnectionError] = createSignal<string | null>(null);
 
   onMount(async () => {
     // Skip connection on server-side rendering
@@ -45,15 +47,26 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
       
       console.log('Connected to SpacetimeDB with identity:', clientIdentity.toHexString());
 
+      // Catch DataView decode errors from schema/binding mismatch
+      const origOnError = window.onerror;
+      window.addEventListener("unhandledrejection", (e) => {
+        if (e.reason instanceof RangeError && e.reason.message.includes("DataView")) {
+          setConnectionError("schema-mismatch");
+          setSubscribed(false);
+        }
+      });
+
       // Subscribe to all tables
       connection
         .subscriptionBuilder()
         .onApplied(() => {
           console.log('SpacetimeDB client cache initialized.');
+          setConnectionError(null);
           setSubscribed(true);
         })
         .onError((ctx: any) => {
           console.error('SpacetimeDB subscription error:', ctx);
+          setConnectionError("subscription-error");
         })
         .subscribe([
           // Core tables
@@ -94,6 +107,7 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
     const onConnectError = (ctx: any, error: Error) => {
       console.error("Failed to connect to SpacetimeDB:", error);
       setConnected(false);
+      setConnectionError("connect-error");
     };
     
     console.log(`Connecting to SpacetimeDB at ${host} with module ${moduleName}`);
@@ -137,6 +151,7 @@ export const SpacetimeDBProvider: ParentComponent = (props) => {
     identity,
     connected,
     subscribed,
+    connectionError,
   };
 
   return (

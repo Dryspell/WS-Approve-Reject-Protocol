@@ -12,6 +12,7 @@ interface EliminationModalProps {
   eliminatedPlayers: string[];
   survivingPlayers: string[];
   minorityColor: "red" | "blue";
+  tiebreaker?: boolean;
   redVotes: number;
   blueVotes: number;
   room: GameRoom;
@@ -137,15 +138,25 @@ const EliminationModal: Component<EliminationModalProps> = (props) => {
             </div>
           </Show>
 
-          {/* Tie Message */}
+          {/* Tie / Tiebreaker Message */}
           <Show when={isTie()}>
             <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-center">
-              <div class="text-lg font-semibold text-yellow-900">
-                Perfect Split!
-              </div>
-              <div class="mt-2 text-sm text-yellow-800">
-                Both teams had equal votes. The game continues with all players!
-              </div>
+              <Show
+                when={props.tiebreaker}
+                fallback={
+                  <>
+                    <div class="text-lg font-semibold text-yellow-900">Perfect Split!</div>
+                    <div class="mt-2 text-sm text-yellow-800">
+                      Both teams had equal votes. The game continues with all players!
+                    </div>
+                  </>
+                }
+              >
+                <div class="text-lg font-semibold text-yellow-900">Tie — Tiebreaker Applied</div>
+                <div class="mt-2 text-sm text-yellow-800">
+                  Both teams tied. Red is eliminated by tiebreaker rule.
+                </div>
+              </Show>
             </div>
           </Show>
 

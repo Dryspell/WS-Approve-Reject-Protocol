@@ -68,6 +68,7 @@ export const ChatRoom = __t.object("ChatRoom", {
   id: __t.string(),
   name: __t.string(),
   createdAt: __t.i64(),
+  creatorId: __t.string(),
 });
 export type ChatRoom = __Infer<typeof ChatRoom>;
 
@@ -258,6 +259,13 @@ export const Resource = __t.object("Resource", {
   depletionThreshold: __t.i32(),
 });
 export type Resource = __Infer<typeof Resource>;
+
+export const RoundTimerEntry = __t.object("RoundTimerEntry", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  roomId: __t.i32(),
+});
+export type RoundTimerEntry = __Infer<typeof RoundTimerEntry>;
 
 export const ServerNode = __t.object("ServerNode", {
   id: __t.i32(),
