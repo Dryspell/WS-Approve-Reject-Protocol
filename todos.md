@@ -1,6 +1,6 @@
 # Project TODOs
 
-> **Current Focus**: All 11 phases of the Complete Feature Roadmap + Phase L Integration Gap Fixes are complete.
+> **Current Focus**: Documentation review and alignment with implemented features through Sprint 15.
 >
 > See [docs/development-history.md](./docs/development-history.md) for completed sprint summaries.
 > See [docs/STATUS.md](./docs/STATUS.md) for vision-vs-implementation mapping.
@@ -73,7 +73,7 @@
 
 ## Phase 6: Stretch Goals (Mostly Complete)
 
-- [x] **Colony Builder integration with Vote Exchange** -- laborers as voters (vote_id on Unit)
+- [x] **Colony Builder integration with Vote Exchange Protocol** -- laborers as voters (vote_id on Unit)
 - [x] **Tournament mode** -- Tournament table, TournamentPanel
 - [x] **Spectator mode** -- Spectator table
 - [x] **Dual currency (MT + MBLS)** -- PlayerCurrency table
@@ -82,7 +82,6 @@
 - [ ] Counter-offer / negotiation system (VG-025 in QA outline)
 - [ ] Per-round partial pot distribution option
 - [ ] Vote-on-voting trigger (alternative to timer-based rounds)
-- [ ] Bot players for solo practice
 - [ ] Clan/guild system
 
 ---
@@ -117,18 +116,104 @@
 
 ---
 
+## Phase M: UI/UX Fix Pass (Complete)
+
+24 issues resolved across P0 critical bugs, P1 UX improvements, and P3 polish:
+
+**P0 — Critical Bugs**
+- [x] **Game Over "Anonymous" winners** -- replaced stale snapshot lookup with live `resolvePlayerName()` from connection
+- [x] **"Return to Lobby" did not dismiss modal** -- added `gameOverDismissed` signal; modal hides on navigate
+- [x] **ChatOverlay z-index covered Game Over modal** -- raised Game Over modal to `z-[70]`
+- [x] **Schema mismatch caused silent "Syncing..."** -- wrapped subscription callback in try/catch; surfaces refresh banner on `RangeError`
+- [x] **`GamePreStartInteractions` room not reactive** -- `room` is now a reactive accessor; all references use `room()?.X`
+
+**P1 — UX Issues**
+- [x] **Cryptic single-letter panel buttons** -- expanded to icon + label (Build, Equip, Gene, EV, Tourney, Bet)
+- [x] **Side Bets only accessible to eliminated players** -- removed `isEliminated()` gate; Bet button available to all
+- [x] **Market panel hidden by default** -- `marketOpen` signal now initialises to `true`
+- [x] **Leave button had no confirmation** -- inline confirmation card (not modal) with forfeit warning
+- [x] **Tavern was a dead placeholder** -- dispatches `open-chat-overlay` custom event handled by ChatOverlay
+- [x] **Room Presets did not apply settings** -- repurposed as "Change Rules" feature or hidden if reducer absent
+- [x] **Leaderboard broken theming** -- all light-mode classes replaced with dark equivalents
+- [x] **Leaderboard didn't load data** -- replaced `onMount` with `createEffect` gated on `connected() && conn()`
+- [x] **Profile "ID:" showed empty** -- truncated hex identity with copy-to-clipboard button
+- [x] **gamesPlayed heuristic was inaccurate** -- replaced fabricated formula with `wins.length`; note added
+- [x] **No navigation while in-game** -- Ranks, Profile, Home icon links added to top bar
+- [x] **"Syncing..." had no progress indication** -- pulsing dot + 8-second timeout warning banner
+- [x] **AdminPanel visible to all users** -- gated behind `isDev()` helper
+- [x] **No name-setting flow on direct /vote navigation** -- `GuestNamePrompt` modal shown when name is empty after subscription
+- [x] **Position updates were not rate-limited** -- 100ms throttle + 0.1-unit dead zone on avatar position reducers
+- [x] **Dual chat systems were confusing** -- global `ChatOverlay` suppressed on `/vote` routes; in-game ChatPanel is sole interface
+- [x] **Tie vote defaulted silently to eliminating Red** -- EliminationModal now shows "Tie — Red eliminated by tiebreaker" message
+
+**P3 — Minor Polish**
+- [x] **No game-start countdown** -- 3-second client-side countdown overlay when all players ready
+- [x] **Vote drop zones showed no running tally** -- live per-color vote count rendered below each drop zone
+
+---
+
+## Phase N: Match History & Chat Bubbles (Complete)
+
+- [x] **In-game event feed** -- scrollable activity log panel in HUD showing all player actions (trades, harvests, purchases, eliminations, votes) in real time during gameplay
+- [x] **Post-game match history** -- accessible from Game Over modal and player profile; shows full chronological event log for the completed game
+- [x] **Chat bubbles on 3D avatars** -- speech bubble mesh rendered above unit when player/bot sends a chat message; fades after 4 seconds
+- [x] **Bot chat rendering** -- bot messages sent via `send_chat` reducer now appear as speech bubbles in the 3D viewport
+
+---
+
+## Phase O: Bot Full Simulation Expansion (Complete)
+
+- [x] **Fix `createRoom` `combatEnabled` field** -- `combatEnabled: true` now passed in bot `createRoom` call
+- [x] **Add unit/resource/unit_stats subscriptions** -- bots subscribe to live unit and resource tables
+- [x] **Avatar wandering** -- bots pick random wander targets every 20 ticks and call `updatePlayerPosition` every 5 ticks; visible as moving avatars in colony viewport
+- [x] **Laborer spawning** -- bots call `spawnLaborer` when laborer count is below `votesPerPlayer`; rate-limited by 10-tick cooldown
+- [x] **Resource harvesting** -- bots assign each laborer to the nearest resource node, call `moveUnit` each tick, and call `gatherResource` when within range; rotate targets when depleted
+- [x] **Market activity** -- 15% per-tick chance to list a vote for sale or buy underpriced votes; `marketCooldown` prevents spam
+- [x] **Side bet placement** -- eliminated bots place a side bet on the majority color (10% of wallet balance)
+- [x] **State reset on new game** -- all laborer targets, flags, and cooldowns cleared on game transition
+
+---
+
+## Phase P: Minion Resource & Combat Mechanics (Complete)
+
+- [x] **Minion harvesting assignment** -- UI allows player to assign any minion to a resource node; minion pathfinds and harvests automatically
+- [x] **Per-skill XP system** -- each harvesting action awards XP to the matching skill (Woodcutting, Mining, Quarrying, Hunting, Farming); crafting actions award Crafting XP; combat awards Combat XP; each skill caps at level 5
+- [x] **Minion evacuation** -- unvoted, un-promised minions can be sent out of the game before voting closes to save them from potential combat death; evacuated minions return with their inventory
+- [x] **Auto-chess combat** -- majority-voting laborers are teleported to BattleArena; teams fight in automated turn-based rounds using unit stats + equipment; results reported back to room event log
+- [x] **`combat_enabled` room flag** -- room creation UI includes a "Combat" toggle; when disabled, majority laborers are eliminated without entering the Battle Arena (development/testing mode)
+- [x] **Crafting from harvested resources** -- crafting UI allows players to convert harvested raw resources into equipment for minions using building inventories
+
+---
+
+## Phase Q: Terrain Procedural Generation (Complete)
+
+- [x] **Simplex-noise height displacement** -- `PlaneGeometry` vertices displaced by multi-octave noise; center area kept flat for gameplay; edges rise to rolling hills (max ~3 units)
+- [x] **Multi-zone biome texturing** -- `createEarthTexture()` rewritten with noise-based biome zones (lush grass, earthy grass, packed dirt, sandy dust, rocky stone); fine grain, pebble dots, and worn dirt paths overlaid
+- [x] **Water feature** -- small semi-transparent reflective pond near NW edge with point light for faked reflections
+- [x] **Environment prop scattering** -- `scatterEnvironment()` places rocks, bushes, and grass tufts with noise affinity gating; perimeter boundary rocks at compass points define map edges
+- [x] **Server-side resource clustering** -- initial resources spawned in geographic biome zones (Forest NW, Quarry NE, Mine SW, Plains SE, sparse Center) matching client coordinate space
+- [x] **Ground size alignment** -- `GROUND_SIZE` updated to 100 to match server coordinate space (0–100)
+
+---
+
 ## Future Work
 
+- [ ] **Configurable starting wallet limit** -- wallet cap per room or globally
 - [ ] **Visual polish on 3D models for buildings** -- richer assets, improved building representations
 - [ ] **Full multi-server SpacetimeDB architecture** -- ServerNode/transfers exist; production hierarchy deployment
 - [ ] **Payment processor integration for real currency** -- cash-out, real-money transactions
 - [ ] **Mobile responsive layout** -- responsive design across breakpoints
+- [ ] **Per-round partial pot distribution option** -- distribute fraction of pot each round
+- [ ] **Vote-on-voting trigger** -- super-majority triggers vote instead of timer
+- [ ] **Clan/guild system** -- persistent social groups
+- [ ] **Counter-offer / negotiation system** -- back-and-forth price negotiation in trade offers
+- [ ] **Deeper E2E coverage** -- fix 4 known failing tests; add colony builder integration tests
 
 ---
 
 ## Known E2E Test Failures
 
-The following 4 priority-1 tests are currently failing (12 of 16 pass). Likely root cause: race conditions in SpacetimeDB room state synchronization or DOM overlay elements intercepting pointer events (similar to the `GamePreStartInteractions` fixed/absolute positioning bug).
+The following 4 priority-1 tests are currently failing (12 of 16 pass). Likely root cause: race conditions in SpacetimeDB room state synchronization or DOM overlay elements intercepting pointer events.
 
 - [ ] **VG-003**: "Join existing room" -- room tab not visible to second player within timeout; timing/sync issue
 - [ ] **VG-004**: "Multiple players join - pot calculation" -- 5-player room sync; pot display timing
@@ -139,13 +224,12 @@ The following 4 priority-1 tests are currently failing (12 of 16 pass). Likely r
 
 ## Technical Debt
 
-- [ ] Split monolithic `lib.rs` (~2,200 lines) into separate modules for Vote Exchange vs Colony Builder
+- [ ] Split monolithic `lib.rs` (~2,200+ lines) into separate modules for Vote Exchange Protocol vs Colony Builder
 - [ ] Move round processing to server-side scheduled timer (every client currently calls `processRoundVotes` when timer expires — race condition risk)
 - [ ] Guard against division-by-zero in pot distribution (fixed in VotingInterface but server should also validate)
 - [ ] Server should derive `round_number` from room state instead of accepting it as client parameter
-- [ ] Remove dead code: `server/src/auth.rs` (unreferenced)
 - [ ] Wrap all client-side reducer calls in try-catch
-- [ ] Add rate limiting on reducers
+- [ ] Add rate limiting on reducers (server-side)
 - [ ] Add input validation on all reducers
 
 ---
@@ -154,12 +238,19 @@ The following 4 priority-1 tests are currently failing (12 of 16 pass). Likely r
 
 - Sprint 1: UI Modernization (Colony Builder components)
 - Sprint 2: Visual Polish (VoteMarketPanel, RoundTimer, particles, toasts)
-- Sprint 3: Core Vote Exchange Server (tables, reducers, game logic)
+- Sprint 3: Core Vote Exchange Protocol Server (tables, reducers, game logic)
 - Sprint 4: Game Flow Automation (auto-round, EliminationModal, unit tests)
 - Sprint 5: Polish & Developer Tools (sounds, animations, debug/admin panels)
 - Sprint 6: Social & Engagement Features (leaderboard, replay, chat UI, profiles, presets)
 - Sprint 7: Feature Completion (chat backend, bank transfers, re-buy)
 - Sprint 8: Friends & Private Messaging (friend system, DMs, blocking)
+- Sprint 9: 3D Viewport & Rendering Evaluation (Three.js spike, ColonyViewport)
+- Sprint 10: Full-Screen HUD & DRY Testing (glassmorphism layout, test-ids, page objects)
+- Sprint 11: UI/UX Fix Pass (24 issues — P0 bugs, P1 UX, P3 polish)
+- Sprint 12: Match History & Chat Bubbles (event feed, post-game log, 3D speech bubbles)
+- Sprint 13: Bot Full Simulation Expansion (wandering, laborer harvesting, market activity, side bets)
+- Sprint 14: Minion Resource & Combat Mechanics (per-skill XP, evacuation, auto-chess, combat toggle)
+- Sprint 15: Terrain Procedural Generation (height displacement, biome texturing, environment scattering)
 
 ---
 

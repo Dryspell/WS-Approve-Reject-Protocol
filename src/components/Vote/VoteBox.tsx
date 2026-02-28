@@ -361,7 +361,7 @@ const VoteBox: Component = () => {
         {/* Top Bar */}
         <div class="flex items-center justify-between border-b border-white/10 bg-black/40 backdrop-blur-md px-4 py-2">
           <div class="flex items-center gap-3">
-            <h1 class="text-lg font-bold text-white">Vote Exchange</h1>
+            <h1 class="text-lg font-bold text-white">Nashfall</h1>
             <Show
               when={connected() && subscribed()}
               fallback={

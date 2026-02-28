@@ -1,11 +1,11 @@
-# The Vote Exchange
+# Nashfall — The Vote Exchange Protocol
 
 ## Table of Contents
-- [The Vote Exchange](#the-vote-exchange)
+- [Nashfall — The Vote Exchange Protocol](#the-vote-exchange)
   - [Table of Contents](#table-of-contents)
-  - [The Vote Exchange: In Context](#the-vote-exchange-in-context)
-  - [The Vote Exchange: Inspiration and References](#the-vote-exchange-inspiration-and-references)
-  - [The Vote Exchange: Gameplay](#the-vote-exchange-gameplay)
+  - [The Vote Exchange Protocol: In Context](#the-vote-exchange-in-context)
+  - [The Vote Exchange Protocol: Inspiration and References](#the-vote-exchange-inspiration-and-references)
+  - [The Vote Exchange Protocol: Gameplay](#the-vote-exchange-gameplay)
     - [Players](#players)
     - [Outline of Gameplay](#outline-of-gameplay)
     - [Examples of Gameplay](#examples-of-gameplay)
@@ -14,27 +14,27 @@
       - [Game 3](#game-3)
       - [Game 4](#game-4)
       - [Game 5](#game-5)
-  - [The Vote Exchange: Side Notes](#the-vote-exchange-side-notes)
+  - [The Vote Exchange Protocol: Side Notes](#the-vote-exchange-side-notes)
     - [Big Players vs Little Players](#big-players-vs-little-players)
-  - [The Vote Exchange: Continued Context](#the-vote-exchange-continued-context)
-  - [The Vote Exchange: Modifiable Settings](#the-vote-exchange-modifiable-settings)
+  - [The Vote Exchange Protocol: Continued Context](#the-vote-exchange-continued-context)
+  - [The Vote Exchange Protocol: Modifiable Settings](#the-vote-exchange-modifiable-settings)
     - [General Settings](#general-settings)
     - [Money Flows](#money-flows)
-  - [The Vote Exchange: Collaboration](#the-vote-exchange-collaboration)
+  - [The Vote Exchange Protocol: Collaboration](#the-vote-exchange-collaboration)
 
 For detailed mathematical analysis, see [mathematical-analysis.md](./mathematical-analysis.md)
 For monetization and SaaS details, see [monetization.md](./monetization.md)
 For legal considerations, see [legal-considerations.md](./legal-considerations.md)
 
-## The Vote Exchange: In Context
+## The Vote Exchange Protocol: In Context
 
-The Vote Exchange is a market based game in which players trade votes that are submitted at the end of a time frame. When referring to just the voting aspect of the game, one could call it The Minority Game which has been researched to some degree in the fields of mathematical game theory. We may use The Minority Game and The Vote Exchange two interchangeably in this document, so reader beware that Minority Game refers to absence of trade.
+Nashfall is a market based game in which players trade votes that are submitted at the end of a time frame — its core voting mechanic is called The Vote Exchange Protocol. When referring to just the voting aspect of the game, one could call it The Minority Game which has been researched to some degree in the fields of mathematical game theory. We may use The Minority Game and The Vote Exchange Protocol two interchangeably in this document, so reader beware that Minority Game refers to absence of trade.
 
-In context with THE GRAND SCHEME, in order to participate in ANY market in the game (for labor or resources as well as votes), players must participate in some instance of The Vote Exchange at that moment (instances are currently thought to be tiered by length of time-frames). In essence, the market that enables players to trade resources is parallel yet connected to the market in which players trade votes and the market for RESOURCES only exists as long as the market for VOTES does. When the gameplay for one instance of The Vote Exchange terminates, its local resource market closes and all local resources must either be destroyed or relocated.
+In context with THE GRAND SCHEME, in order to participate in ANY market in the game (for labor or resources as well as votes), players must participate in some instance of The Vote Exchange Protocol at that moment (instances are currently thought to be tiered by length of time-frames). In essence, the market that enables players to trade resources is parallel yet connected to the market in which players trade votes and the market for RESOURCES only exists as long as the market for VOTES does. When the gameplay for one instance of The Vote Exchange Protocol terminates, its local resource market closes and all local resources must either be destroyed or relocated.
 
-## The Vote Exchange: Inspiration and References
+## The Vote Exchange Protocol: Inspiration and References
 
-## The Vote Exchange: Gameplay
+## The Vote Exchange Protocol: Gameplay
 
 For this section, we only discuss the trading of VOTES on the market and not RESOURCES. One must imagine that RESOURCES can also be traded on this market simultaneously.
 
@@ -154,7 +154,7 @@ One-hundred players buy in for $20.00 each making a $2000 pot. At the start of t
 
 I don't know what else to write for game 5. It's too complicated. You can imagine what happens next. More and more trades.
 
-## The Vote Exchange: Side Notes
+## The Vote Exchange Protocol: Side Notes
 
 Players can set votes in advance and those colors will only be revealed at the end of the time frame. This should be obvious but needs to be written somewhere.
 
@@ -162,20 +162,20 @@ Throughout the games above, the reader should take note that the players were us
 
 ### Big Players vs Little Players
 
-## The Vote Exchange: Continued Context
+## The Vote Exchange Protocol: Continued Context
 
-As a whole, this is an outline of the essence of the Vote Exchange. There is potential for much much more, however, this is the core of the project and working with polish and thoughts of modular expansion is essential. We are very interested in implementing cryptocurrency technology into this exchange and are open to exploring any ideas. Please contact the authors for any thoughts or ideas as always.
+As a whole, this is an outline of the essence of the Vote Exchange Protocol. There is potential for much much more, however, this is the core of the project and working with polish and thoughts of modular expansion is essential. We are very interested in implementing cryptocurrency technology into this exchange and are open to exploring any ideas. Please contact the authors for any thoughts or ideas as always.
 
-As a stand-alone, the Vote Exchange itself is a viable product given that:
+As a stand-alone, the Vote Exchange Protocol itself is a viable product given that:
 
 1. Buy-ins are done with real-world currency and
 2. that it is possible to cash out.
 
-Without these two stipulations, we are uncertain if the product can gain traction in the flooded marketplace without the additional MMO/Colony-Builder and/or GACHA-style mechanics that we have explored (we lean towards MMO/Colony-Builder ethically and pragmatically). That being said, we believe that it can be possible for the Vote Exchange to be a product that sits alongside the MMO/Colony-Builder aspects of the game so that more serious betting players can focus on The Vote Exchange while others can enjoy both. The additional benefit of the MMO/Colony-Builder is the natural market structure that arises from these resource gathering style games. For more, please refer to further sections below which describe the MMO/Colony-Builder gameplay.
+Without these two stipulations, we are uncertain if the product can gain traction in the flooded marketplace without the additional MMO/Colony-Builder and/or GACHA-style mechanics that we have explored (we lean towards MMO/Colony-Builder ethically and pragmatically). That being said, we believe that it can be possible for the Vote Exchange Protocol to be a product that sits alongside the MMO/Colony-Builder aspects of the game so that more serious betting players can focus on The Vote Exchange Protocol while others can enjoy both. The additional benefit of the MMO/Colony-Builder is the natural market structure that arises from these resource gathering style games. For more, please refer to further sections below which describe the MMO/Colony-Builder gameplay.
 
-While the core gameplay loop of The Vote Exchange is fresh in the reader's mind, we wish to speak of the "variables" that can be modified for an individual game of The Vote Exchange.
+While the core gameplay loop of The Vote Exchange Protocol is fresh in the reader's mind, we wish to speak of the "variables" that can be modified for an individual game of The Vote Exchange Protocol.
 
-## The Vote Exchange: Modifiable Settings
+## The Vote Exchange Protocol: Modifiable Settings
 
 ### General Settings
 
@@ -195,4 +195,4 @@ The minority game allows for a wide variety of options for distributions of mone
 - **Side-bets** on voting outcomes and distributions. There is no reason not to implement this.
 - Distribution of the pot may occur to only finalists or may be done at the end of each round. For example, at the end of a round, half the pot may be distributed to the remaining players while the other half remains in the pot. A setup like this allows options for "continuous" games in which the game never terminates but a portion of the pot is distributed each round to remaining players and eliminated players or new players may buy into a game in progress. In this case, a re-buyin may not have to be as substantial.
 
-## The Vote Exchange: Collaboration
+## The Vote Exchange Protocol: Collaboration

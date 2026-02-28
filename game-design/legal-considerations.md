@@ -1,6 +1,8 @@
-# The Vote Exchange: Legal Considerations
+# Nashfall: Legal Considerations
 
-This section covers the legal aspects of The Vote Exchange, including gambling and securities trading considerations. For the core gameplay rules and examples, see [rules.md](./rules.md).
+This section covers the legal aspects of The Vote Exchange Protocol, including gambling and securities trading considerations. For the core gameplay rules and examples, see [rules.md](./rules.md).
+
+> **Current Risk Posture (February 2026)**: The game currently operates with **play-money only** (no real USD buy-ins, no cash-out, no real-world value). This significantly reduces legal exposure on both the gambling and securities fronts. The analysis below applies primarily to future real-money or cryptocurrency implementations. No legal action is required in the current play-money state beyond standard terms-of-service and age-appropriate content disclosures.
 
 ## Gambling Considerations
 
@@ -15,7 +17,7 @@ According to Investopedia, "The term 'security' refers to a fungible, negotiable
 This is hard to say, I'm not a lawyer. As a plain reading, votes are indeed expected to be fungible and negotiable financial instruments holding some monetary value. Indeed they have some similar function to an option:
 
 - They are associated with an outside time-frame (the date/time of the vote)
-- They carry monetary value based on some independent financial action (vote and distribution of pot vs options as derivatives of underlying stock) and independent free market (there is an options market just like there is The Vote Exchange)
+- They carry monetary value based on some independent financial action (vote and distribution of pot vs options as derivatives of underlying stock) and independent free market (there is an options market just like there is The Vote Exchange Protocol)
 - Like options, a vote may "expire worthless" in the sense that the voter voted in the majority
 
 Our stance throughout development is this thus far:

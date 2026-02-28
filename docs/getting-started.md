@@ -1,6 +1,6 @@
-# Getting Started with SocketSignal
+# Getting Started with Nashfall
 
-SocketSignal is **The Vote Exchange** - a multiplayer game where players trade votes in a minority-wins elimination system.
+Nashfall is a multiplayer game where players trade votes in a minority-wins elimination system — built around **The Vote Exchange Protocol**.
 
 ## Prerequisites
 

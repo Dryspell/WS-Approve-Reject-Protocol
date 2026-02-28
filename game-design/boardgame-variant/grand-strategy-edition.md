@@ -1,8 +1,8 @@
-# The Vote Exchange: Grand Strategy Edition
+# Nashfall: Grand Strategy Edition
 
 ## Overview
 
-A complex strategy board game that combines the minority voting mechanics of The Vote Exchange with colony-building, resource management, and laborer control. This edition brings the full depth of the digital game to the tabletop, ideal for dedicated gaming groups.
+A complex strategy board game that combines the minority voting mechanics of The Vote Exchange Protocol with colony-building, resource management, and laborer control. This edition brings the full depth of the digital game to the tabletop, ideal for dedicated gaming groups.
 
 **Players:** 3-6
 **Play Time:** 2-4 hours
@@ -12,7 +12,7 @@ A complex strategy board game that combines the minority voting mechanics of The
 
 ## Table of Contents
 
-- [The Vote Exchange: Grand Strategy Edition](#the-vote-exchange-grand-strategy-edition)
+- [Nashfall: Grand Strategy Edition](#nashfall-grand-strategy-edition)
   - [Overview](#overview)
   - [Table of Contents](#table-of-contents)
   - [Design Philosophy](#design-philosophy)
@@ -92,12 +92,30 @@ This edition prioritizes:
 4. **Deterministic Combat**: Using card-based combat for quick resolution
 5. **Modular Scaling**: Rules that work from 3 players to 6
 
+---
+
+## Digital vs. Tabletop Adaptations
+
+The Grand Strategy Edition intentionally diverges from the digital implementation in several areas. These are deliberate design choices, not oversights.
+
+| System | Digital Implementation | Tabletop Adaptation | Why Different |
+|--------|----------------------|---------------------|---------------|
+| **Combat** | Auto-chess: automated turn-by-turn resolution, initiative order, equipment stat bonuses | Clockwise attack: majority laborers attack player to the left; compare Attack vs Defense totals | Physical play cannot support a simulation combat engine; clockwise attack preserves tension while being fast |
+| **Per-Skill XP** | 7 distinct skills (Woodcutting, Mining, Quarrying, Hunting, Farming, Crafting, Combat), each leveling 1–5 | Generic laborer improvement — equipment cards stand in for skill bonuses | Tracking 7 skills per laborer across 30+ figurines is impractical at a table |
+| **Chat / Communication** | Real-time chat with speech bubbles in 3D viewport | Sticky note system; whisper corner | Physical negotiation is more immersive at a table and avoids phone dependency |
+| **Position / Movement** | Avatars walk the procedural terrain in 3D | Laborers placed on resource zone tiles | No physical equivalent for 3D navigation |
+| **Event Feed** | In-game activity log of all player actions | Declared actions during open trading — no hidden log | Face-to-face play makes most actions visible; partial information comes from screens |
+| **Match History** | Post-game event log accessible from profile | Players take notes; no formal log | Tabletop relies on memory and table-talk |
+
+---
+
 **Key Differences from Digital:**
 - Fixed round structure (no real-time)
 - Simplified resource tiers
-- Card-based combat instead of simulation
+- Clockwise attack combat instead of auto-chess simulation
 - Sticky note communication instead of digital chat
 - Combined trading phase (resources + votes simultaneous)
+- Generic laborer stats instead of per-skill XP
 
 ---
 
@@ -695,6 +713,20 @@ Players who have lost all their laborers (or sold all their votes) can remain en
 
 ## Variant Rules
 
+### Laborer Evacuation (Recommended)
+
+Ported from the digital implementation's minion evacuation mechanic:
+
+**Before the Voting Phase:**
+- Any laborer that has **not** been assigned a vote color AND has **not** been promised as a guarantee may be evacuated
+- To evacuate: Announce "Evacuating [laborer]" during the final 60 seconds of the Action Phase and place the figurine behind your screen
+- Evacuated laborers do not participate in voting or combat this round and produce nothing
+- They return to active status next round with all equipment intact
+
+**Strategic purpose**: Lets players protect their highest-value laborers (best equipment, rarest stats) when they expect majority-side casualties. Creates an interesting tension — evacuating reduces your vote count but saves your best fighters.
+
+---
+
 ### Quick Play (30-45 minutes)
 
 - Start with **3 laborers** each
@@ -826,6 +858,6 @@ Play against an automated "Shadow Syndicate":
 
 ---
 
-*This Grand Strategy Edition represents the full tabletop experience of The Vote Exchange with Colony-Builder mechanics. For quicker games, see the Parlor Edition. For the complete digital experience, see the main game documentation.*
+*This Grand Strategy Edition represents the full tabletop experience of The Vote Exchange Protocol with Colony-Builder mechanics. For quicker games, see the Parlor Edition. For the complete digital experience, see the main game documentation.*
 
 *For prototyping tasks and progress, see [todos.md](./todos.md).*

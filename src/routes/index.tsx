@@ -302,7 +302,7 @@ export default function Home() {
             <svg class="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            Socket Signals
+            Nashfall
           </div>
           <div class="flex gap-6">
             <a href="/leaderboard" class="hover:text-white/60 transition-colors">Leaderboard</a>

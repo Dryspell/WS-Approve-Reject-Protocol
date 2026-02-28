@@ -1,6 +1,15 @@
 # Board Game Variant TODOs
 
-> Tracking prototyping, playtesting, and development of physical Vote Exchange board games.
+> Tracking prototyping, playtesting, and development of physical Vote Exchange Protocol board games.
+
+> **Digital Implementation Note** (February 2026): The digital game has progressed significantly since the board game docs were last updated. Key digital mechanics that inform the physical design:
+> - **Per-skill XP** (Woodcutting, Mining, etc., level cap 5) — intentionally simplified to generic equipment cards for tabletop
+> - **Auto-chess combat** (automated BattleArena) — intentionally replaced with clockwise attack for tabletop speed
+> - **Minion evacuation** — added as a variant rule in the Grand Strategy Edition
+> - **Bot simulation** — digital bots play out full market/harvest/vote loops; useful reference for designing AI opponent rules in Solo Mode
+> - **Match history / event feed** — not directly applicable to tabletop; replaced by player memory and table-talk
+>
+> The tabletop adaptations are intentional divergences, not gaps. See `grand-strategy-edition.md` for the full divergence table.
 
 ---
 
@@ -214,4 +223,4 @@
 
 ---
 
-**Last Updated**: January 11, 2026
+**Last Updated**: February 26, 2026

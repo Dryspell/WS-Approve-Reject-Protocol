@@ -1,4 +1,4 @@
-# QA Testing Outline - The Vote Exchange
+# QA Testing Outline - The Vote Exchange Protocol
 
 > **Priority Order**: Core Voting Gameplay → Chat Functionality → Social Features → Other Features
 > 

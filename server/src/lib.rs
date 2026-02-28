@@ -116,7 +116,7 @@ pub struct User {
     identity: Identity,
     name: Option<String>,
     online: bool,
-    // Vote Exchange: Wallet system
+    // The Vote Exchange Protocol: Wallet system
     wallet_balance: f64,      // Money available for trading
     bank_account: f64,        // Saved currency (long-term)
     total_profit_loss: f64,   // Lifetime profit/loss tracking
@@ -141,7 +141,7 @@ pub struct GameRoom {
     offer_ids: Vec<String>,
     start_time: Option<i64>,
     current_round: i32,
-    // Vote Exchange: Game settings
+    // The Vote Exchange Protocol: Game settings
     buyin_amount: f64,
     pot_size: f64,
     round_duration: i32,
@@ -490,7 +490,7 @@ pub fn start_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
     if let Some(mut room) = ctx.db.game_room().id().find(room_id) {
         let room_clone = room.clone();
         
-        // Vote Exchange: Collect buy-ins and create pot
+        // The Vote Exchange Protocol: Collect buy-ins and create pot
         let mut pot = 0.0;
         for member_id in &room.member_ids {
             if let Some(user) = ctx.db.user().iter().find(|u| u.identity.to_hex().to_string() == *member_id) {
@@ -1172,7 +1172,7 @@ pub fn set_chat_permission(
     }
 }
 
-// Vote Exchange: Vote tracking with ownership
+// The Vote Exchange Protocol: Vote tracking with ownership
 #[table(accessor = vote, public)]
 #[derive(Clone)]
 pub struct Vote {
@@ -1189,7 +1189,7 @@ pub struct Vote {
     timestamp: Timestamp,
 }
 
-// Vote Exchange: Transaction tracking
+// The Vote Exchange Protocol: Transaction tracking
 #[table(accessor = transaction, public)]
 pub struct Transaction {
     #[primary_key]
@@ -1205,7 +1205,7 @@ pub struct Transaction {
     timestamp: Timestamp,
 }
 
-// Vote Exchange: Guarantee system (per-vote, server-enforced)
+// The Vote Exchange Protocol: Guarantee system (per-vote, server-enforced)
 #[table(accessor = guarantee, public)]
 pub struct Guarantee {
     #[primary_key]
@@ -1222,7 +1222,7 @@ pub struct Guarantee {
     created_at: Timestamp,
 }
 
-// Vote Exchange: Guarantee purchases
+// The Vote Exchange Protocol: Guarantee purchases
 #[table(accessor = guarantee_purchase, public)]
 pub struct GuaranteePurchase {
     #[primary_key]
@@ -1322,7 +1322,7 @@ pub fn trade_unit_vote(
     Ok(())
 }
 
-// Vote Exchange: Transfer vote ownership (buy/sell votes)
+// The Vote Exchange Protocol: Transfer vote ownership (buy/sell votes)
 #[reducer]
 pub fn transfer_vote_ownership(
     ctx: &ReducerContext,
@@ -1418,7 +1418,7 @@ pub fn transfer_vote_ownership(
     }
 }
 
-// Vote Exchange: Set a vote for sale
+// The Vote Exchange Protocol: Set a vote for sale
 #[reducer]
 pub fn set_vote_for_sale(
     ctx: &ReducerContext,
@@ -1466,7 +1466,7 @@ pub fn set_vote_for_sale(
     }
 }
 
-// Vote Exchange: Remove a vote from sale
+// The Vote Exchange Protocol: Remove a vote from sale
 #[reducer]
 pub fn remove_vote_from_sale(
     ctx: &ReducerContext,
@@ -1494,7 +1494,7 @@ pub fn remove_vote_from_sale(
     }
 }
 
-// Vote Exchange: Create a guarantee
+// The Vote Exchange Protocol: Create a guarantee
 #[reducer]
 pub fn create_guarantee(
     ctx: &ReducerContext,
@@ -1552,7 +1552,7 @@ pub fn create_guarantee(
     Ok(())
 }
 
-// Vote Exchange: Purchase a guarantee
+// The Vote Exchange Protocol: Purchase a guarantee
 #[reducer]
 pub fn purchase_guarantee(
     ctx: &ReducerContext,
@@ -1648,7 +1648,7 @@ pub fn purchase_guarantee(
     }
 }
 
-// Vote Exchange: Set your vote color
+// The Vote Exchange Protocol: Set your vote color
 #[reducer]
 pub fn set_vote_color(
     ctx: &ReducerContext,
@@ -1694,7 +1694,7 @@ pub fn set_vote_color(
     }
 }
 
-// Vote Exchange: Public reducer â€” thin wrapper with idempotency guard.
+// The Vote Exchange Protocol: Public reducer â€” thin wrapper with idempotency guard.
 // Clients may call this but server-side scheduling (process_round_scheduled) is the primary trigger.
 #[reducer]
 pub fn process_round_votes(
@@ -1708,7 +1708,7 @@ pub fn process_round_votes(
     do_process_round(ctx, room_id)
 }
 
-// Vote Exchange: Server-side round processing â€” called by RoundTimerEntry scheduler.
+// The Vote Exchange Protocol: Server-side round processing â€” called by RoundTimerEntry scheduler.
 fn do_process_round(
     ctx: &ReducerContext,
     room_id: i32,
@@ -2092,7 +2092,7 @@ pub fn cancel_unit_task(
     Ok(())
 }
 
-// Vote Exchange: Bank account management
+// The Vote Exchange Protocol: Bank account management
 #[reducer]
 pub fn transfer_to_bank(ctx: &ReducerContext, amount: f64) -> Result<(), String> {
     if let Some(mut user) = ctx.db.user().identity().find(ctx.sender()) {
@@ -2135,7 +2135,7 @@ pub fn withdraw_from_bank(ctx: &ReducerContext, amount: f64) -> Result<(), Strin
     }
 }
 
-// Vote Exchange: Post-elimination re-buy
+// The Vote Exchange Protocol: Post-elimination re-buy
 #[reducer]
 pub fn rebuy_into_game(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
     let player_id = ctx.sender().to_hex().to_string();
@@ -2370,7 +2370,7 @@ pub fn leave_room(ctx: &ReducerContext, room_id: i32) -> Result<(), String> {
     }
 }
 
-// Vote Exchange: Trade offer system
+// The Vote Exchange Protocol: Trade offer system
 #[table(accessor = trade_offer, public)]
 #[derive(Clone)]
 pub struct TradeOffer {

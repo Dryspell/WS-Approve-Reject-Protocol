@@ -1,8 +1,8 @@
-# The Vote Exchange: MMO/Colony-Builder
+# Nashfall — The Vote Exchange Protocol: MMO/Colony-Builder
 
 ## Table of Contents
 
-- [The Vote Exchange: MMO/Colony-Builder](#the-vote-exchange-mmocolony-builder)
+- [The Vote Exchange Protocol: MMO/Colony-Builder](#the-vote-exchange-mmocolony-builder)
   - [Table of Contents](#table-of-contents)
   - [Introduction](#introduction)
   - [Inspiration and References](#inspiration-and-references)
@@ -20,7 +20,7 @@
       - [Cons to Removing Main Player Character](#cons-to-removing-main-player-character)
   - [Gameplay](#gameplay)
     - [Core Mechanics](#core-mechanics)
-  - [Integration with The Vote Exchange](#integration-with-the-vote-exchange)
+  - [Integration with The Vote Exchange Protocol](#integration-with-the-vote-exchange)
     - [Simple Approach](#simple-approach)
     - [Complex Approach](#complex-approach)
   - [Resource Market](#resource-market)
@@ -77,11 +77,11 @@
     - [Player Automation](#player-automation)
 
 For shared systems including currencies, markets, and multi-timeframe mechanics, see [shared-systems.md](./shared-systems.md)
-For core Vote Exchange mechanics, see [rules.md](./rules.md)
+For core Vote Exchange Protocol mechanics, see [rules.md](./rules.md)
 
 ## Introduction
 
-The MMO/Colony-Builder is an extension of The Vote Exchange that adds resource management, colony building, and laborer management mechanics. This document focuses on these additional features while maintaining integration with the core Vote Exchange mechanics.
+The MMO/Colony-Builder is an extension of The Vote Exchange Protocol that adds resource management, colony building, and laborer management mechanics. This document focuses on these additional features while maintaining integration with the core Vote Exchange Protocol mechanics.
 
 ## Inspiration and References
 
@@ -177,9 +177,9 @@ As it stands, the idea of the MMO/Colony-Builder gameplay is to have the player 
 - Combat is separated into PvE and PvP categories
 - Laborers and players may gain experience and level up for efficiency rewards
 
-## Integration with The Vote Exchange
+## Integration with The Vote Exchange Protocol
 
-As mentioned in "The Vote Exchange: In Context", in order to participate in any market, even resource and labour markets, the player must participate in The Vote Exchange. The way we currently consider this connection is the idea that the laborers themselves are the voters as assigned by their Player Lord. If a player has 10 laborers, then the player has 10 votes. They can color their laborers with red or blue clothing (skin) according to their designated vote. Those laborers that vote in the majority must be either eliminated or pseudo eliminated.
+As mentioned in "The Vote Exchange Protocol: In Context", in order to participate in any market, even resource and labour markets, the player must participate in The Vote Exchange Protocol. The way we currently consider this connection is the idea that the laborers themselves are the voters as assigned by their Player Lord. If a player has 10 laborers, then the player has 10 votes. They can color their laborers with red or blue clothing (skin) according to their designated vote. Those laborers that vote in the majority must be either eliminated or pseudo eliminated.
 
 ### Simple Approach
 
@@ -187,7 +187,7 @@ If a laborer votes in the majority, the laborer is eliminated. All resources on 
 
 ### Complex Approach
 
-Instead of immediate elimination, we turn the vote from The Vote Exchange into an entry into an automated team death-match. For every laborer an individual player has that votes in the majority, those laborers join together as a team in a death-match against other such teams from the opposing players. Last team standing can return to the game as laborers for their Player Lord and work and vote again.
+Instead of immediate elimination, we turn the vote from The Vote Exchange Protocol into an entry into an automated team death-match. For every laborer an individual player has that votes in the majority, those laborers join together as a team in a death-match against other such teams from the opposing players. Last team standing can return to the game as laborers for their Player Lord and work and vote again.
 
 ## Resource Market
 
@@ -197,7 +197,7 @@ It is currently our intention for all trades to be paired against one of our two
 
 ### Game Server Tree
 
-The game servers are arranged in a tiered tree structure based on trading period lengths. Each time-frame represents a game server in which the length of the trading period for one cycle of the instance of The Vote Exchange on that server is equal to that node's name.
+The game servers are arranged in a tiered tree structure based on trading period lengths. Each time-frame represents a game server in which the length of the trading period for one cycle of the instance of The Vote Exchange Protocol on that server is equal to that node's name.
 
 ### Moving Down the Tree
 
@@ -218,7 +218,7 @@ New players start in longer time-frame servers (e.g., "City" with 1-month tradin
 
 ### Bottom-Up Approach
 
-Aggressive players can start in faster-paced servers (e.g., "Expedition" with 1-minute trading period) and focus on The Vote Exchange mechanics.
+Aggressive players can start in faster-paced servers (e.g., "Expedition" with 1-minute trading period) and focus on The Vote Exchange Protocol mechanics.
 
 ## Game Termination
 
@@ -285,15 +285,53 @@ Time Shadows have overwhelmed reality. Humanity survives in Time Shards maintain
 
 ### Resource Gathering
 
-- Primary resources
-- Secondary resources
-- Tertiary products
+Laborers gather primary resources from nodes scattered across the map. Each resource type is tied to a specific skill:
+
+| Resource | Skill | Biome Zone (server default spawn) |
+|----------|-------|-----------------------------------|
+| Wood | Woodcutting | Forest (NW corner) |
+| Fiber | Farming | Forest (NW corner) |
+| Food | Hunting / Farming | Forest NW, Plains SE |
+| Stone | Quarrying | Quarry (NE corner) |
+| Sand | Quarrying | Quarry (NE corner) |
+| Coal | Mining | Quarry NE, Mine SW |
+| Metal Ore | Mining | Mine (SW corner) |
+| Gems | Quarrying | Mine (SW corner), sparse Center |
+| Hide | Hunting | Plains (SE corner) |
+
+Resource nodes have an `amount` value that depletes on harvest and regenerates over time (`regeneration_rate`, `regeneration_timer`). Laborers assigned to a depleted node will automatically seek the next nearest available node of the same type.
+
+Secondary and tertiary resources are produced through the building refinement pipeline (see **Buildings and Workshops**).
 
 ### Player Level Up & Experience
 
-- Skill progression
-- Efficiency improvements
-- New abilities
+Experience and leveling are tracked **per skill**, not as a single total level. Each skill levels independently from 1 to 5. Higher skill levels increase the speed, yield, or effectiveness of the corresponding action.
+
+#### Skill Definitions
+
+| Skill | Triggered By | Primary Effect |
+|-------|-------------|----------------|
+| Woodcutting | Harvesting wood nodes | Faster chop speed, higher yield per gather |
+| Mining | Harvesting metal ore nodes | Faster mine speed, higher yield per gather |
+| Quarrying | Harvesting stone and gem nodes | Faster quarry speed, higher yield per gather |
+| Hunting | Harvesting hide and food nodes | Faster hunt speed, higher yield per gather |
+| Farming | Harvesting fiber and food (farm) nodes | Faster farming speed, higher yield per gather |
+| Crafting | Crafting equipment and refined materials | Reduced material cost per tier, faster craft time |
+| Combat | Participating in Battle Arena rounds | Increased base attack/defense in future battles |
+
+#### Level Thresholds
+
+Each skill has 5 levels. XP is awarded per successful gather or craft action. Approximate thresholds:
+
+| Level | XP Required (cumulative) |
+|-------|--------------------------|
+| 1 | 0 (starting) |
+| 2 | 100 |
+| 3 | 300 |
+| 4 | 700 |
+| 5 | 1500 (max) |
+
+XP is not transferable between skills. Laborers retain their skill levels across rounds within the same game.
 
 ### Stats
 
@@ -470,47 +508,109 @@ Three tiers of enchantment:
 
 ### Battle Arena
 
-- Separate location on local map
-- Majority-voting laborers teleported here
-- Team-based combat
-- Automated fighting
-- Deterministic outcomes
+The Battle Arena is a separate combat zone on the local map. When a voting round resolves, all laborers who voted in the **majority** are teleported to the Battle Arena to fight for their survival.
+
+- **Entry**: Majority-voting laborers are automatically transferred at vote resolution; minority laborers remain safe
+- **Teams**: Laborers from different players are grouped into opposing teams based on their original vote color
+- **Automated (Auto-Chess)**: All combat is fully automated — no player input during the battle
+- **Turn-based resolution**: Each turn, units attack based on Initiative order; stats (Attack, Defense, HP) and equipped items determine outcomes
+- **Deterministic**: Given the same stats and equipment, the same team wins every time (no hidden RNG)
+- **Survivors return**: Laborers who survive the Battle Arena return to their player lord and can vote again in subsequent rounds
+- **Losers are eliminated**: Laborers who fall in the Arena are permanently removed from the game; their inventory is dropped
+
+### `combat_enabled` Room Flag
+
+Room creation includes a **Combat** toggle. When disabled:
+
+- Majority-voting laborers are **eliminated immediately** without entering the Battle Arena
+- This is the default development and early-playtesting mode
+- It allows testing of the voting and economy loop without the complexity of combat outcomes
+
+When enabled (production gameplay):
+- The full Battle Arena flow runs as described above
+
+### Minion Evacuation
+
+Before the voting window closes, players may choose to **evacuate** a laborer from the game:
+
+- A laborer can be evacuated if it has **not** been assigned as a vote and has **not** been promised as a guarantee to another player
+- The evacuate action is available from the Unit Context Panel
+- Evacuated laborers leave the battlefield with their full inventory intact
+- This allows a player to save their highest-skill or best-equipped laborers from potential death in a round where the outcome looks unfavorable
+- Reducer: `evacuate_unit`
 
 ### Combat Mechanics
 
-- Equipment durability
-- Body part targeting
-- Support, Tank, DPS roles
-- Team coordination
+- **Initiative**: Determines attack order each turn; derived from Agility + equipment bonuses
+- **Attack resolution**: Attacker rolls against Defender's Defense; net damage applied to HP
+- **Equipment durability**: Items take durability damage during combat; destroyed items are lost
+- **Roles (emergent)**: High-Defense units act as tanks; high-Attack units as DPS; no explicit role assignment
+- **Team coordination**: All friendly units on a team share the same target selection logic (focus weakest enemy)
 
 ## Laborer System
 
 ### Genetics and Lineage
 
-- Individual Values (IVs)
-- Stat inheritance
-- Breeding mechanics
-- Market value based on stats
+Each laborer is born with a set of **Individual Values (IVs)** that determine their base stat potential:
+
+- **6 IVs**: One per primary stat (Strength, Agility, Defense, Intelligence, Stamina, Footing)
+- **Stat inheritance**: Offspring inherit a weighted blend of parent IVs with a small random mutation
+- **Breeding**: Requires a Laborer Breeding Building; consumes rations; offspring start at level 1 in all skills
+- **Market value**: High-IV laborers command premium prices in the resource and labor markets
+
+### Evacuation
+
+Before the voting window closes, any laborer that has **not** been designated as a vote and has **not** been sold or promised as a guarantee can be evacuated from the current game:
+
+- Use the **Withdraw** action in the Unit Context Panel
+- Evacuated laborers leave with their full equipment and inventory
+- They return to the player's roster and are available in the next game instance
+- Strategic use: Save your highest-skill laborers from rounds where a majority loss looks likely
 
 ### Stats
 
-- Combat effectiveness
-- Resource gathering efficiency
-- Crafting proficiency
-- Movement speed
+| Stat | Combat Use | Gathering Use | Crafting Use |
+|------|-----------|---------------|--------------|
+| Strength | Base attack damage | Carry weight, yield bonus | Tool speed |
+| Agility | Initiative, dodge chance | Movement speed | Craft speed |
+| Defense | Damage reduction | N/A | N/A |
+| Intelligence | Spell power (future) | N/A | Recipe discovery |
+| Stamina | Max HP | Endurance (less fatigue) | Work duration |
+| Footing | Stability, knockback resist | Terrain penalty reduction | N/A |
+
+Stats are affected by equipped items (recalculated on equip/unequip via `recalculate_unit_stats`) and by per-skill level (applied as a multiplier at the point of action).
 
 ## Automation
 
 ### Bots
 
-- Player-controlled bots
-- Autonomous laborer control
-- Market participation
-- Combat assistance
+The game ships with a TypeScript bot simulation runner (`scripts/bot-runner.ts`) that creates fully autonomous AI players. Bots are designed to mirror what a competent human player would do across all game systems.
+
+#### Bot Behaviors
+
+| Behavior | Description |
+|----------|-------------|
+| **Wandering** | Bots move their avatar around the colony map, picking new random targets every 20 ticks and calling `updatePlayerPosition` every 5 ticks |
+| **Ready-up** | Bots set their ready status when enough players are present |
+| **Voting** | Bots assign vote colors based on simple majority analysis |
+| **Laborer spawning** | Bots call `spawnLaborer` when their laborer count is below `votesPerPlayer`; rate-limited to avoid wallet exhaustion |
+| **Resource harvesting** | Each laborer is assigned to the nearest available resource node; bots call `moveUnit` each tick and `gatherResource` when within range; targets rotate when depleted |
+| **Market activity** | ~15% chance per tick to list a vote for sale or buy an underpriced vote from the market; `marketCooldown` prevents spam |
+| **Side bets** | Eliminated bots place a side bet on the predicted majority color (10% of wallet balance); one bet per game |
+| **Chat** | Bots send occasional chat messages; these render as speech bubbles above their 3D avatars in the viewport |
+
+#### Starting a Bot Simulation
+
+```bash
+pnpm bots
+```
+
+This starts multiple bot instances, each connecting as a separate player identity. Bots reset all state (laborer assignments, market flags, cooldowns) at the start of each new game.
 
 ### Player Automation
 
-- Resource extraction
-- Market trading
-- Building management
-- Combat strategy
+Players can configure automation for their own laborers without being fully absent:
+
+- **Harvesting assignment**: Assign a laborer to a resource node from the Unit Context Panel; the laborer will pathfind and gather autonomously until the node is depleted or the assignment is cancelled
+- **Task queue**: Laborers accept queued tasks (move, gather) processed by `game_tick`; craft and upgrade tasks are planned but not yet tick-processed
+- **Evacuation**: Players can manually trigger evacuation for unvoted, un-promised laborers before vote resolution

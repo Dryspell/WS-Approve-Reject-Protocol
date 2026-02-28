@@ -1,5 +1,5 @@
 {
-  "name": "Socket Signals",
+  "name": "nashfall",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n db,web -c blue,green --kill-others-on-fail false \"spacetime start || echo [db] SpacetimeDB already running\" \"vinxi dev --port 3001\"",

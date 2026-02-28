@@ -1,8 +1,8 @@
-# The Vote Exchange: Mathematical Analysis
+# Nashfall: Mathematical Analysis
 
 ## Table of Contents
 
-- [The Vote Exchange: Mathematical Analysis](#the-vote-exchange-mathematical-analysis)
+- [Nashfall: Mathematical Analysis](#nashfall-mathematical-analysis)
   - [Table of Contents](#table-of-contents)
   - [Introduction](#introduction)
   - [Expected Value Analysis](#expected-value-analysis)
@@ -35,9 +35,11 @@ For the core gameplay rules and examples, see [rules.md](./rules.md).
 
 ## Introduction
 
-This document provides mathematical analysis of The Vote Exchange game mechanics. The calculations use Bernoulli Distributions to model probabilities and expected values. Note that all calculations subtract $1.00 to account for the initial buy-in.
+This document provides mathematical analysis of Nashfall's Vote Exchange Protocol game mechanics. The calculations use Bernoulli Distributions to model probabilities and expected values. Note that all calculations subtract $1.00 to account for the initial buy-in.
 
 **Important Note**: These calculations are provided as a reference for understanding game mechanics. The actual implementation may vary, and players should not rely solely on these calculations for strategy.
+
+**Implementation Status** (February 2026): The `EVCalculator` component is live in the game — it exposes expected value display to players in-game via the EV panel button. The formulas in the Implementation Considerations section have been partially addressed: EV is displayed, probability/odds are shown. Deeper multi-round analysis and dynamic guarantee pricing remain future work.
 
 ## Expected Value Analysis
 

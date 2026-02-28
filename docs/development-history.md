@@ -1,6 +1,6 @@
 # Development History
 
-This document summarizes the development sprints for The Vote Exchange.
+This document summarizes the development sprints for Nashfall.
 
 ---
 
@@ -10,7 +10,7 @@ This document summarizes the development sprints for The Vote Exchange.
 |--------|-------|--------|
 | Sprint 1 | UI Modernization | Complete |
 | Sprint 2 | Visual Polish | Complete |
-| Sprint 3 | Core Vote Exchange (Server) | Complete |
+| Sprint 3 | Core Vote Exchange Protocol (Server) | Complete |
 | Sprint 4 | Game Flow Automation | Complete |
 | Sprint 5 | Polish & Developer Tools | Complete |
 | Sprint 6 | Social & Engagement Features | Complete |
@@ -32,7 +32,7 @@ This document summarizes the development sprints for The Vote Exchange.
 - Improved resource transfer UI with validation
 - Visual waypoint indicators for unit movement
 
-> **Note**: These components are part of the Colony Builder prototype (`/canvas` route), not the Vote Exchange (`/vote` route).
+> **Note**: These components are part of the Colony Builder prototype (`/canvas` route), not the Vote Exchange Protocol (`/vote` route).
 
 ---
 
@@ -50,9 +50,9 @@ This document summarizes the development sprints for The Vote Exchange.
 
 ---
 
-## Sprint 3: Core Vote Exchange (Server)
+## Sprint 3: Core Vote Exchange Protocol (Server)
 
-**Goal**: Implement Vote Exchange game logic server-side
+**Goal**: Implement Vote Exchange Protocol game logic server-side
 
 **Completed**:
 - **Database Tables**: User (wallet), GameRoom (pot), Vote (ownership), Transaction, Guarantee, GuaranteePurchase
@@ -183,16 +183,142 @@ This document summarizes the development sprints for The Vote Exchange.
 
 ---
 
+## Sprint 11: UI/UX Fix Pass (Feb 26, 2026)
+
+**Focus**: Systematic 24-issue fix pass across P0 critical bugs, P1 UX, and P3 polish.
+
+### Completed
+
+**P0 — Critical Bugs**
+- Fixed Game Over modal showing "Anonymous" winners (live `resolvePlayerName()` lookup)
+- Fixed "Return to Lobby" not dismissing the Game Over modal (`gameOverDismissed` signal)
+- Fixed ChatOverlay `z-[60]` covering Game Over modal `z-50` (raised modal to `z-[70]`)
+- Added try/catch around subscription callback; surfaces refresh banner on `RangeError` schema mismatch
+- Made `GamePreStartInteractions` room a reactive accessor; all references use `room()?.X`
+
+**P1 — UX**
+- Expanded panel buttons from single letters to icon + text label (Build, Equip, Gene, EV, Tourney, Bet)
+- Side Bets accessible to all players (removed `isEliminated()` gate)
+- Market panel defaults to open (`marketOpen` initialises to `true`)
+- Leave button now shows inline confirmation card with forfeit warning
+- Tavern dispatches `open-chat-overlay` custom event (functional)
+- Leaderboard dark theme: all light-mode Tailwind classes replaced
+- Leaderboard data loading moved to `createEffect` gated on `connected() && conn()`
+- Player profile ID shows truncated hex with copy-to-clipboard button
+- `gamesPlayed` now uses `wins.length` (removed fabricated formula)
+- In-game navigation links (Ranks, Profile, Home) added to top bar
+- "Syncing…" replaced with pulsing dot + 8-second timeout warning
+- AdminPanel gated behind `isDev()` helper
+- Guest name prompt shown when name is empty after subscription on direct `/vote` nav
+- Position updates throttled (100ms interval + 0.1-unit dead zone)
+- Global ChatOverlay suppressed on `/vote` routes; in-game ChatPanel is sole interface
+- Tie tiebreaker displayed in EliminationModal
+
+**P3 — Polish**
+- 3-second game-start countdown overlay when all players ready
+- Live per-color vote tally below each drop zone during voting
+
+### Key Files
+- `src/components/Vote/VotingInterface.tsx`
+- `src/components/Vote/GamePreStartInteractions.tsx`
+- `src/components/ChatOverlay.tsx`
+- `src/components/game/Leaderboard.tsx`
+- `src/components/game/PlayerProfile.tsx`
+- `src/hooks/useSpacetimeDB.tsx`
+- `src/app.tsx`
+
+---
+
+## Sprint 12: Match History & Chat Bubbles (Feb 26, 2026)
+
+**Focus**: Give players visibility into what is happening in the game and around them.
+
+### Completed
+- **In-game event feed**: Scrollable HUD panel showing all player actions in real time (trades, harvests, purchases, eliminations, votes cast, side bets placed, laborers spawned)
+- **Post-game match history**: Full chronological event log accessible from Game Over modal and player profile page
+- **3D speech bubbles**: Billboard mesh rendered above avatar when a player or bot sends a chat message; fades after 4 seconds
+- **Bot chat rendering**: Bot messages sent via `send_chat` reducer now appear as speech bubbles in the 3D viewport
+
+### Key Files
+- `src/components/game/EventFeedPanel.tsx` (new)
+- `src/components/game/MatchHistoryPanel.tsx` (new)
+- `src/lib/colony-scene.ts` (speech bubble mesh)
+
+---
+
+## Sprint 13: Bot Full Simulation Expansion (Feb 26, 2026)
+
+**Focus**: Make bots behave as close to a real player as possible.
+
+### Completed
+- **`combatEnabled` fix**: `createRoom` now passes `combatEnabled: true`
+- **New subscriptions**: Bots subscribe to `unit`, `resource`, and `unit_stats` tables
+- **Avatar wandering**: Bots pick random wander targets every 20 ticks; call `updatePlayerPosition` every 5 ticks; visible as moving avatars in colony viewport
+- **Laborer spawning**: Bots call `spawnLaborer` when laborer count is below `votesPerPlayer`; 10-tick cooldown; silently catches "Insufficient funds"
+- **Resource harvesting loop**: Each laborer assigned to nearest resource node; `moveUnit` called every tick; `gatherResource` called when within 28 units; target rotated when depleted
+- **Market activity**: ~15% per-tick chance to list a vote for sale or buy an underpriced vote; `marketCooldown` gate prevents spam
+- **Side bet placement**: Eliminated bots place a bet on the majority color (10% of wallet balance); one-shot per game via `hasPlacedSideBet` flag
+- **State reset**: All laborer targets, flags, and cooldowns cleared on game transition
+
+### Key Files
+- `scripts/bot-runner.ts`
+
+---
+
+## Sprint 14: Minion Resource & Combat Mechanics (Feb 26, 2026)
+
+**Focus**: Make the Colony Builder layer feel like a real game with meaningful laborer progression and stakes.
+
+### Completed
+- **Minion harvesting assignment UI**: Player can assign any owned minion to a resource node from the unit context panel; minion pathfinds and harvests automatically
+- **Per-skill XP system**: Seven skills, each capped at level 5:
+  - Woodcutting (wood nodes), Mining (metal ore), Quarrying (stone/gems), Hunting (hide/food), Farming (fiber/food), Crafting (craft actions), Combat (battle arena)
+  - XP values and level thresholds defined in `SKILL_XP_TABLE`
+  - `award_skill_xp` server helper increments the correct skill field on `UnitStats`
+- **Minion evacuation**: "Withdraw" action available on any minion not assigned as a vote and not promised in a guarantee; evacuated minions leave the battlefield with their inventory; reducer: `evacuate_unit`
+- **Auto-chess combat**: Majority-voting laborers teleported to BattleArena on vote resolution; automated turn-based resolution using unit stats + equipment; results written to game event log
+- **`combat_enabled` room flag**: Room creation UI includes a Combat toggle; when off, majority laborers are eliminated directly without entering the Battle Arena (safe for development and playtesting)
+- **Crafting from harvested resources**: Crafting UI allows converting harvested raw resources into equipment using building inventories
+
+### Key Files
+- `server/src/lib.rs` (per-skill XP, evacuate_unit reducer, combat_enabled flag)
+- `src/components/Vote/VotingInterface.tsx` (harvesting assignment, evacuation UI)
+- `src/components/game/BattleArenaViewport.tsx`
+
+---
+
+## Sprint 15: Terrain Procedural Generation (Feb 26, 2026)
+
+**Focus**: Make the colony world feel geographically coherent, visually interesting, and aligned with gameplay.
+
+### Completed
+- **Simplex-noise height displacement**: `PlaneGeometry` segments = 56; vertices displaced by multi-octave noise; power-curve ease function keeps center flat (gameplay area) and lets edges rise to rolling hills (max ~3 units)
+- **Multi-zone biome texturing**: `createEarthTexture()` rewritten with noise-based biome zones — lush grass, earthy grass, packed dirt, sandy dust, rocky stone — rendered pixel-by-pixel on a 512×512 canvas
+- **Fine surface details**: Pixel-level grain noise (random) overlaid; 1,400 scattered pebble dots
+- **Worn dirt paths**: 8 quadratic-curve paths radiating from center toward corners and edges (opacity 0.22, blend mode multiply)
+- **Water feature**: `CircleGeometry` pond near NW edge with semi-transparent reflective `MeshStandardMaterial` and point light above for faked reflections on nearby geometry
+- **Environment prop scattering**: `scatterEnvironment()` places rocks (rock_1a, rock_1b), bushes (bush_1a, bush_2a), and grass tufts (grass_1a, grass_1b) with noise affinity gating; perimeter boundary rock clusters at N/E/S/W compass points
+- **Server-side resource clustering**: Initial resources spawned in geographic biome zones matching client coordinate space; Forest NW (wood/fiber/food), Quarry NE (stone/sand/coal), Mine SW (metal_ore/coal/gems), Plains SE (hide/food/fiber), sparse Center (gems/metal_ore/wood)
+- **`GROUND_SIZE` alignment**: Updated to 100 to match server coordinate space (0–100)
+
+### Key Files
+- `src/lib/three-utils.ts` (`createEarthTexture`)
+- `src/lib/colony-scene.ts` (`buildStaticGeometry`, `scatterEnvironment`)
+- `server/src/lib.rs` (biome zone resource spawning)
+
+---
+
 ## Project Statistics
 
-- **Total Components Created**: 30+
-- **Lines of Rust Server Code**: ~2,200
-- **Unit Tests**: 24 passing (Colony Builder only -- no Vote Exchange tests)
+- **Total Components Created**: 40+
+- **Lines of Rust Server Code**: ~2,400+
+- **Unit Tests**: 24 passing (Colony Builder only — no Vote Exchange tests)
 - **E2E Test Files**: 9 Playwright spec files (~120 test cases across 5 simulation scenarios)
-- **Backend Reducers**: 30+
-- **Database Tables**: 6 Vote Exchange + 3 chat + 4 social + Colony Builder tables
+- **Backend Reducers**: 40+
+- **Database Tables**: 6 Vote Exchange + 3 chat + 4 social + Colony Builder tables + UnitStats/UnitSkills
 - **Sound Effects**: 13
 - **Animation Utilities**: 7
+- **Bot Simulation**: Full player simulation (wandering, harvesting, trading, side bets)
 
 ---
 

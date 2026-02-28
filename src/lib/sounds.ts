@@ -1,5 +1,5 @@
 /**
- * Sound effects for The Vote Exchange
+ * Sound effects for The Vote Exchange Protocol
  * Using Web Audio API for better performance
  */
 

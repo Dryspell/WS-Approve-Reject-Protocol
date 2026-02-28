@@ -52,8 +52,8 @@ Self-hosting from `public/` is adequate while total assets remain under ~20MB. C
 **Setup**:
 1. Create an R2 bucket
 2. Upload `public/assets/` contents to the bucket
-3. Bind a custom subdomain (e.g., `assets.socketsignals.com`)
-4. Set `VITE_ASSET_BASE_URL=https://assets.socketsignals.com`
+3. Bind a custom subdomain (e.g., `assets.nashfall.com`)
+4. Set `VITE_ASSET_BASE_URL=https://assets.nashfall.com`
 
 ### AWS CloudFront + S3
 
@@ -81,17 +81,17 @@ Self-hosting from `public/` is adequate while total assets remain under ~20MB. C
 
 ```bash
 # Example with Cloudflare R2 (using rclone)
-rclone sync public/assets/ r2:socketsignals-assets/
+rclone sync public/assets/ r2:nashfall-assets/
 
 # Example with AWS S3
-aws s3 sync public/assets/ s3://socketsignals-assets/ --cache-control "public, max-age=31536000, immutable"
+aws s3 sync public/assets/ s3://nashfall-assets/ --cache-control "public, max-age=31536000, immutable"
 ```
 
 ### 2. Set the environment variable
 
 ```bash
 # .env.production
-VITE_ASSET_BASE_URL=https://assets.socketsignals.com
+VITE_ASSET_BASE_URL=https://assets.nashfall.com
 ```
 
 ### 3. Verify CORS headers
@@ -99,7 +99,7 @@ VITE_ASSET_BASE_URL=https://assets.socketsignals.com
 The CDN must return proper CORS headers for Three.js to load assets cross-origin:
 
 ```
-Access-Control-Allow-Origin: https://socketsignals.com
+Access-Control-Allow-Origin: https://nashfall.com
 Access-Control-Allow-Methods: GET, HEAD
 Access-Control-Allow-Headers: Range
 ```
@@ -194,7 +194,7 @@ When ready, add an asset upload step to the deployment pipeline:
 # Example GitHub Actions step
 - name: Upload assets to CDN
   run: |
-    rclone sync public/assets/ r2:socketsignals-assets/
+    rclone sync public/assets/ r2:nashfall-assets/
   env:
     RCLONE_CONFIG_R2_TYPE: s3
     RCLONE_CONFIG_R2_PROVIDER: Cloudflare

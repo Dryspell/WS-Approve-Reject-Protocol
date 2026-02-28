@@ -1,8 +1,8 @@
-# The Vote Exchange: Parlor Edition
+# Nashfall: Parlor Edition
 
 ## Overview
 
-A fast-paced social deduction and negotiation board game for 4-10 players. This streamlined variant captures the essence of The Vote Exchange's minority voting and trading mechanics while adapting them for smooth in-person play.
+A fast-paced social deduction and negotiation board game for 4-10 players. This streamlined variant captures the essence of The Vote Exchange Protocol's minority voting and trading mechanics while adapting them for smooth in-person play.
 
 **Players:** 4-10
 **Play Time:** 30-60 minutes
@@ -12,7 +12,7 @@ A fast-paced social deduction and negotiation board game for 4-10 players. This 
 
 ## Table of Contents
 
-- [The Vote Exchange: Parlor Edition](#the-vote-exchange-parlor-edition)
+- [Nashfall: Parlor Edition](#nashfall-parlor-edition)
   - [Overview](#overview)
   - [Table of Contents](#table-of-contents)
   - [Components](#components)
@@ -312,4 +312,4 @@ Public statements are NEVER binding unless a Contract Card is used.
 
 ---
 
-*For the digital version and full Vote Exchange experience, see the main game documentation.*
+*For the digital version and full Vote Exchange Protocol experience, see the main game documentation.*

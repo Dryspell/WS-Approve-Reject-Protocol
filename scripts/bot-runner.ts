@@ -855,7 +855,7 @@ if (isDirectRun) {
 
   (async () => {
     console.log('='.repeat(60));
-    console.log('  Socket Signal Bot Runner');
+    console.log('  Nashfall Bot Runner');
     console.log('='.repeat(60));
     console.log(`  Bots:     ${cliConfig.count}`);
     console.log(`  Room:     ${cliConfig.room}`);

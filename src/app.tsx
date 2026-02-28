@@ -65,33 +65,33 @@ export default function App() {
 		<Router
 			root={props => (
 				<MetaProvider>
-					<Title>Socket Signals - Real-Time Multiplayer Voting Game</Title>
-					<Meta name="description" content="Join the ultimate real-time multiplayer voting game. Strategize, vote, and compete with players worldwide in Socket Signals." />
-					<Meta name="keywords" content="multiplayer game, voting game, real-time game, online game, strategy game, social game, SpacetimeDB" />
-					<Meta name="author" content="Socket Signals Team" />
-					
-					{/* OpenGraph */}
-					<Meta property="og:type" content="website" />
-					<Meta property="og:locale" content="en_US" />
-					<Meta property="og:url" content="https://socketsignals.com" />
-					<Meta property="og:site_name" content="Socket Signals" />
-					<Meta property="og:title" content="Socket Signals - Real-Time Multiplayer Voting Game" />
-					<Meta property="og:description" content="Join the ultimate real-time multiplayer voting game. Strategize, vote, and compete with players worldwide." />
-					<Meta property="og:image" content="/og-image.png" />
-					<Meta property="og:image:width" content="1200" />
-					<Meta property="og:image:height" content="630" />
-					<Meta property="og:image:alt" content="Socket Signals - Multiplayer Voting Game" />
-					
-					{/* Twitter Card */}
-					<Meta name="twitter:card" content="summary_large_image" />
-					<Meta name="twitter:title" content="Socket Signals - Real-Time Multiplayer Voting Game" />
-					<Meta name="twitter:description" content="Join the ultimate real-time multiplayer voting game. Strategize, vote, and compete with players worldwide." />
-					<Meta name="twitter:image" content="/og-image.png" />
-					<Meta name="twitter:creator" content="@socketsignals" />
-					
-					{/* Robots */}
-					<Meta name="robots" content="index, follow" />
-					<Link rel="canonical" href="https://socketsignals.com" />
+				<Title>Nashfall — The Vote Exchange Protocol</Title>
+				<Meta name="description" content="Join Nashfall — The Vote Exchange Protocol. Strategize, trade votes, and compete in a real-time multiplayer minority-wins elimination game." />
+				<Meta name="keywords" content="multiplayer game, voting game, real-time game, online game, strategy game, social game, SpacetimeDB" />
+				<Meta name="author" content="Nashfall Team" />
+				
+				{/* OpenGraph */}
+				<Meta property="og:type" content="website" />
+				<Meta property="og:locale" content="en_US" />
+				<Meta property="og:url" content="https://nashfall.com" />
+				<Meta property="og:site_name" content="Nashfall" />
+				<Meta property="og:title" content="Nashfall — The Vote Exchange Protocol" />
+				<Meta property="og:description" content="Strategize, trade votes, and compete in a real-time multiplayer minority-wins elimination game." />
+				<Meta property="og:image" content="/og-image.png" />
+				<Meta property="og:image:width" content="1200" />
+				<Meta property="og:image:height" content="630" />
+				<Meta property="og:image:alt" content="Nashfall — The Vote Exchange Protocol" />
+				
+				{/* Twitter Card */}
+				<Meta name="twitter:card" content="summary_large_image" />
+				<Meta name="twitter:title" content="Nashfall — The Vote Exchange Protocol" />
+				<Meta name="twitter:description" content="Strategize, trade votes, and compete in a real-time multiplayer minority-wins elimination game." />
+				<Meta name="twitter:image" content="/og-image.png" />
+				<Meta name="twitter:creator" content="@nashfall" />
+				
+				{/* Robots */}
+				<Meta name="robots" content="index, follow" />
+				<Link rel="canonical" href="https://nashfall.com" />
 					
 					<AppShell>{props.children}</AppShell>
 				</MetaProvider>

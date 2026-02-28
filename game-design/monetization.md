@@ -1,8 +1,18 @@
-# The Vote Exchange: Monetization and SaaS
+# Nashfall: Monetization and SaaS
+
+> **Document Status**: This is a **vision and aspirational planning document**. The vast majority of the revenue streams, SaaS features, and cryptocurrency mechanics described here are **not yet implemented**. The current game uses play-money only (no real USD backing, no blockchain, no cash-out). Only the following are currently live:
+> - Transaction fees (1% on trades, added to pot)
+> - Tournament entry structure (table exists; UI wired)
+> - Side-betting system (SideBet table, SideBetPanel)
+> - Dual in-game currency (MT + MBLS balances, play-money only)
+>
+> This document is maintained as a roadmap for future monetization phases. Do not treat it as a requirements document for current development.
+
+---
 
 ## Table of Contents
 
-- [The Vote Exchange: Monetization and SaaS](#the-vote-exchange-monetization-and-saas)
+- [Nashfall: Monetization and SaaS](#nashfall-monetization-and-saas)
   - [Table of Contents](#table-of-contents)
   - [Core Monetization Strategy](#core-monetization-strategy)
     - [Revenue Streams](#revenue-streams)
@@ -23,7 +33,7 @@
     - [Generalizing the SaaS model](#generalizing-the-saas-model)
   - [In-Game Currency System](#in-game-currency-system)
     - [Overview of In-Game Currencies](#overview-of-in-game-currencies)
-    - [The Vote Exchange Currency System](#the-vote-exchange-currency-system)
+    - [The Vote Exchange Protocol Currency System](#the-vote-exchange-currency-system)
       - [Currency Exchange and Market Dynamics](#currency-exchange-and-market-dynamics)
       - [Benefits of the Dual Currency System](#benefits-of-the-dual-currency-system)
       - [Technical Considerations](#technical-considerations)
@@ -81,7 +91,7 @@ Vall Street can monetize through multiple channels:
 
 ### Core Concept
 
-The Vote Exchange can be implemented as a modular system with two main components:
+Nashfall can be implemented as a modular system with two main components:
 
 1. Voting/Polling System
 2. Trading/Marketplace System
@@ -193,9 +203,9 @@ The game implements a dual-currency system:
 ## Monetization Platform
 
 For context with In-Game Currency, see the relevant section of this document.
-For The Vote Exchange as a concept, it is easy to license or write a platform with an API and subscription model for any specified token. For more on this model, see the section "The Vote Exchange: SaaS Model".
+For The Vote Exchange Protocol as a concept, it is easy to license or write a platform with an API and subscription model for any specified token. For more on this model, see the section "The Vote Exchange Protocol: SaaS Model".
 
-For The Vote Exchange as a stand-alone, there are many places in which [the company] Vall Street can monetize the game; there are additional ones in the context of THE GRAND SCHEME. We list some here:
+For The Vote Exchange Protocol as a stand-alone, there are many places in which [the company] Vall Street can monetize the game; there are additional ones in the context of THE GRAND SCHEME. We list some here:
 
 - On Initial purchase of the game
 - On purchase of In-Game Currency
@@ -210,9 +220,9 @@ It is easy to imagine Vall Street taking a 1% (or more) scrape off many of these
 
 ## SaaS Cloud Model
 
-At its core, The Vote Exchange is a relatively simple game with lots of modularity and potential variation. We see that such a system could be enjoyable and desirable not only in our dedicated game concept (the MMO/Colony-Builder aspects of this document), but truly in any system that already has CHAT functionality and/or a POINT system. While these systems are often present in other games, we expect the most desire to implement the Vote Exchange would come from users of live-streaming services such as Facebook, Youtube, Twitter, Instagram, Snapchat and Twitch as well as dedicated chat services such as Discord and Slack.
+At its core, The Vote Exchange Protocol is a relatively simple game with lots of modularity and potential variation. We see that such a system could be enjoyable and desirable not only in our dedicated game concept (the MMO/Colony-Builder aspects of this document), but truly in any system that already has CHAT functionality and/or a POINT system. While these systems are often present in other games, we expect the most desire to implement the Vote Exchange Protocol would come from users of live-streaming services such as Facebook, Youtube, Twitter, Instagram, Snapchat and Twitch as well as dedicated chat services such as Discord and Slack.
 
-In this model, a company owner or channel owner would pay for subscription access to our platform which would allow the construction of Vote Exchange games whose interface would be through chat commands or API commands. One should compare this to the product "Stream Boss" where viewers play a similar game. Other similar products are Twitch's creation of a betting system in which viewers can bet Channel Points on some future outcome of the stream (say the Streamer beating the level). Those who pay for our subscription access would be able to charge their viewers or users for game entry and take a percentage cut of entry, just as we would as well.
+In this model, a company owner or channel owner would pay for subscription access to our platform which would allow the construction of Vote Exchange Protocol games whose interface would be through chat commands or API commands. One should compare this to the product "Stream Boss" where viewers play a similar game. Other similar products are Twitch's creation of a betting system in which viewers can bet Channel Points on some future outcome of the stream (say the Streamer beating the level). Those who pay for our subscription access would be able to charge their viewers or users for game entry and take a percentage cut of entry, just as we would as well.
 
 The benefits of this model are many-fold:
 
@@ -226,7 +236,7 @@ With a model like this created, we are effectively doing all computation on the 
 
 ### Generalizing the SaaS model
 
-In making The Vote Exchange into a cloud model, we see The Vote Exchange as a complex iteration and integration of two simpler products: A vote/polling system and a trading/marketplace system. We look here to offer both parent systems as products as well as our own particular Vote Exchange system. That is, for live streaming and chat services, we hope to sell subscription based vote/polling services and trading/marketplace services that integrate via a generic chat system, again referencing and leveraging services like Discord, Twitch, Youtube, Facebook, Twitter and Slack.
+In making The Vote Exchange Protocol into a cloud model, we see The Vote Exchange Protocol as a complex iteration and integration of two simpler products: A vote/polling system and a trading/marketplace system. We look here to offer both parent systems as products as well as our own particular Vote Exchange Protocol system. That is, for live streaming and chat services, we hope to sell subscription based vote/polling services and trading/marketplace services that integrate via a generic chat system, again referencing and leveraging services like Discord, Twitch, Youtube, Facebook, Twitter and Slack.
 
 To be clear, a customer of our cloud subscription model would be paying for a game room with voting and marketplace structures and customizable currencies all integrable with the common live streaming and chat services of the day.
 
@@ -247,9 +257,9 @@ In-game currencies (IGC) have become a standard feature in modern games, typical
 
 Most games today implement both types, with real-valued IGC often used for cosmetic items rather than competitive advantages to avoid "pay-to-win" criticism. Notable exceptions that allow bidirectional exchange between currencies include Albion Online, EVE Online, and Second Life.
 
-### The Vote Exchange Currency System
+### The Vote Exchange Protocol Currency System
 
-The Vote Exchange implements two primary currencies:
+Nashfall implements two primary currencies:
 
 1. **Empty Marbles (MT)**:
    - Vall Street's internal token
@@ -265,7 +275,7 @@ The Vote Exchange implements two primary currencies:
 
 #### Currency Exchange and Market Dynamics
 
-- Players can upgrade MT to MBLS through successful gameplay in The Vote Exchange
+- Players can upgrade MT to MBLS through successful gameplay in The Vote Exchange Protocol
 - Exchange rates between MT and MBLS are determined by:
   - Difficulty of upgrading MT to MBLS
   - Market liquidity

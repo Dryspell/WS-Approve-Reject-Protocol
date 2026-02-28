@@ -1,5 +1,5 @@
 /**
- * Animation utilities for The Vote Exchange
+ * Animation utilities for The Vote Exchange Protocol
  * Using CSS transitions and keyframes for performance
  */
 
