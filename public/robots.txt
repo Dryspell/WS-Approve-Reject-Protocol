@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /profile
+Disallow: /history
+Disallow: /social
+Disallow: /chat
+Disallow: /canvas/
+Disallow: /db-inspector
+
+Sitemap: https://nashfall.com/sitemap.xml

@@ -38,9 +38,7 @@ export default function Nav() {
             class="mr-3 flex items-center gap-1.5 py-2.5 text-sm font-bold transition-colors"
             classList={{ "text-white": dark(), "text-gray-900": !dark() }}
           >
-            <svg class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
+            <img src="/icon-64.png" alt="Nashfall" width="24" height="24" />
             <span class="hidden sm:inline">Nashfall</span>
           </a>
 

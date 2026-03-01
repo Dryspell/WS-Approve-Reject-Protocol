@@ -299,9 +299,7 @@ export default function Home() {
       <footer class="border-t border-white/5 px-6 py-8">
         <div class="mx-auto flex max-w-5xl items-center justify-between text-xs text-white/30">
           <div class="flex items-center gap-1.5">
-            <svg class="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
+            <img src="/icon-64.png" alt="Nashfall" width="24" height="24" />
             Nashfall
           </div>
           <div class="flex gap-6">

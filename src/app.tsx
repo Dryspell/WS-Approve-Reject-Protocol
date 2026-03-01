@@ -77,7 +77,7 @@ export default function App() {
 				<Meta property="og:site_name" content="Nashfall" />
 				<Meta property="og:title" content="Nashfall — The Vote Exchange Protocol" />
 				<Meta property="og:description" content="Strategize, trade votes, and compete in a real-time multiplayer minority-wins elimination game." />
-				<Meta property="og:image" content="/og-image.png" />
+				<Meta property="og:image" content="https://nashfall.com/og-image.png" />
 				<Meta property="og:image:width" content="1200" />
 				<Meta property="og:image:height" content="630" />
 				<Meta property="og:image:alt" content="Nashfall — The Vote Exchange Protocol" />
@@ -86,7 +86,7 @@ export default function App() {
 				<Meta name="twitter:card" content="summary_large_image" />
 				<Meta name="twitter:title" content="Nashfall — The Vote Exchange Protocol" />
 				<Meta name="twitter:description" content="Strategize, trade votes, and compete in a real-time multiplayer minority-wins elimination game." />
-				<Meta name="twitter:image" content="/og-image.png" />
+				<Meta name="twitter:image" content="https://nashfall.com/og-image.png" />
 				<Meta name="twitter:creator" content="@nashfall" />
 				
 				{/* Robots */}
