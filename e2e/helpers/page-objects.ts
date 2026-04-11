@@ -99,6 +99,19 @@ export class VoteGamePage {
       tid(TID.connectionStatus),
       { timeout },
     );
+    await this.dismissNamePrompt();
+  }
+
+  /**
+   * Dismiss the "Choose a Display Name" modal if it appears.
+   * Clicks "Skip — play as guest" so tests can proceed.
+   */
+  async dismissNamePrompt() {
+    const skipBtn = this.page.locator('button:has-text("Skip")');
+    if (await skipBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await skipBtn.click({ force: true });
+      await skipBtn.waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+    }
   }
 
   // ── Room management ──────────────────────────────────────
@@ -119,8 +132,14 @@ export class VoteGamePage {
       allowMidgameJoin = false,
     } = options;
 
+    // Leave any active room view that may overlap the header
+    if (await this.leaveRoomButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await this.leaveRoomButton.click({ force: true });
+      await this.page.waitForTimeout(500);
+    }
+
     await expect(this.createRoomButton).toBeEnabled({ timeout: 15000 });
-    await this.createRoomButton.click();
+    await this.createRoomButton.click({ force: true });
     await this.roomNameInput.fill(name);
 
     if (await this.buyinAmountInput.isVisible({ timeout: 2000 }).catch(() => false)) {

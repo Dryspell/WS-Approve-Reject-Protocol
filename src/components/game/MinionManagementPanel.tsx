@@ -4,7 +4,7 @@ import type { DbConnection } from "~/module_bindings/index";
 import type { Unit, UnitStats } from "~/module_bindings/types";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
-import { useToast } from "../ui/toast";
+import { showToast } from "../ui/toast";
 
 // XP thresholds to reach levels 2-5
 const LEVEL_THRESHOLDS = [100, 300, 700, 1500];
@@ -43,7 +43,6 @@ export default function MinionManagementPanel(props: {
   votesPerPlayer: number;
   onClose: () => void;
 }) {
-  const { showToast } = useToast();
   const [selectedUnitId, setSelectedUnitId] = createSignal<number | null>(null);
 
   const localId = createMemo(() => props.identity()?.toHexString());

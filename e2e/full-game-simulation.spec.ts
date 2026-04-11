@@ -15,6 +15,12 @@ import {
   snapshot,
 } from './helpers/game-flows';
 import * as fs from 'fs';
+import { execSync } from 'child_process';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Full Game Simulation — Hybrid Mode
@@ -29,6 +35,18 @@ test.describe('Full Game Simulation (1 Browser + 4 Bots)', () => {
   let logStream: fs.WriteStream;
 
   test.beforeAll(() => ensureLogDir());
+
+  test.beforeEach(async () => {
+    try {
+      execSync('npx tsx scripts/reset-test-db.ts', {
+        cwd: path.resolve(__dirname, '..'),
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+    } catch {
+      // Non-fatal: tests can still run with existing data
+    }
+  });
 
   test.afterEach(async () => {
     if (setup) await hybridCleanup(setup);
