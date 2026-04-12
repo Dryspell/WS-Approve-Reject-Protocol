@@ -1,4 +1,4 @@
-import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect } from "solid-js";
+import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup, createEffect, getOwner, runWithOwner, type Owner } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -51,6 +51,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [draggedVote, setDraggedVote] = createSignal<Vote | null>(null);
   const [showEliminationModal, setShowEliminationModal] = createSignal(false);
   const [lastProcessedRound, setLastProcessedRound] = createSignal(0);
+  const [savedRoundTotals, setSavedRoundTotals] = createSignal<{ red: number; blue: number; minority: "red" | "blue" | "tie" }>({ red: 0, blue: 0, minority: "tie" });
   const [endRoundVotes, setEndRoundVotes] = createSignal<EndRoundVote[]>([]);
   const [otherPlayerAvatars, setOtherPlayerAvatars] = createSignal<OtherPlayerAvatar[]>([]);
   const [tradePopup, setTradePopup] = createSignal<{ offerId: number; x: number; y: number } | null>(null);
@@ -73,96 +74,126 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     const connection = conn();
     if (!connection || !connected()) return;
 
+    const owner = getOwner();
+    const owned = <T,>(fn: () => T) => { if (owner) runWithOwner(owner, fn); else fn(); };
+
     // Subscribe to votes
     connection.db.vote.onInsert((ctx, vote) => {
-      setVotes((prev) => [...prev, vote]);
+      owned(() => setVotes((prev) => {
+        if (prev.some((v) => v.id === vote.id)) return prev;
+        return [...prev, vote];
+      }));
     });
 
     connection.db.vote.onUpdate((ctx, oldVote, newVote) => {
-      setVotes((prev) =>
+      owned(() => setVotes((prev) =>
         prev.map((v) => (v.id === newVote.id ? newVote : v))
-      );
+      ));
     });
 
     connection.db.vote.onDelete((ctx, vote) => {
-      setVotes((prev) => prev.filter((v) => v.id !== vote.id));
+      owned(() => setVotes((prev) => prev.filter((v) => v.id !== vote.id)));
     });
 
     // Subscribe to users
     connection.db.user.onInsert((ctx, user) => {
-      setAllPlayers((prev) => [...prev, user]);
+      owned(() => setAllPlayers((prev) => {
+        if (prev.some((u) => u.identity.isEqual(user.identity))) return prev;
+        return [...prev, user];
+      }));
     });
 
     connection.db.user.onUpdate((ctx, oldUser, newUser) => {
-      setAllPlayers((prev) =>
+      owned(() => setAllPlayers((prev) =>
         prev.map((u) => (u.identity.isEqual(newUser.identity) ? newUser : u))
-      );
+      ));
     });
 
     // Subscribe to GameRoom updates to detect round changes
     connection.db.game_room.onUpdate((ctx, oldRoom, newRoom) => {
-      // Check if a new round just started (round number increased)
-      if (newRoom.id === props.room.id && newRoom.currentRound > lastProcessedRound()) {
-        // Show elimination modal for the previous round
-        if (lastProcessedRound() > 0) {
-          setShowEliminationModal(true);
-        }
-        setLastProcessedRound(newRoom.currentRound);
-
-        // Auto-trigger combat when a new round starts, if combat is enabled for this room
-        if (newRoom.combatEnabled && newRoom.gameStatus === "in_progress") {
-          const roomUnits = serverUnits().filter(
-            (u) => u.roomId === props.room.id && u.unitType === "minion"
+      owned(() => {
+        if (newRoom.id === props.room.id && newRoom.currentRound > lastProcessedRound()) {
+          const prevRound = lastProcessedRound();
+          const prevRoundVotes = votes().filter(
+            (v) => v.roomId === props.room.id && v.roundNumber === prevRound
           );
-          const redIds = roomUnits.filter((u) => u.voteColor === "red").map((u) => u.id);
-          const blueIds = roomUnits.filter((u) => u.voteColor === "blue").map((u) => u.id);
-          if (redIds.length > 0 && blueIds.length > 0) {
-            try {
-              connection.reducers.createBattleArena({ roomId: props.room.id, redUnitIds: redIds, blueUnitIds: blueIds });
-            } catch (e) {
-              console.warn("Auto-battle trigger failed:", e);
+          const red = prevRoundVotes.filter((v) => v.color === "red").length;
+          const blue = prevRoundVotes.filter((v) => v.color === "blue").length;
+          const minority: "red" | "blue" | "tie" =
+            red < blue ? "red" : blue < red ? "blue" : "tie";
+          setSavedRoundTotals({ red, blue, minority });
+
+          if (prevRound > 0) {
+            setShowEliminationModal(true);
+          }
+          setLastProcessedRound(newRoom.currentRound);
+
+          if (newRoom.combatEnabled && newRoom.gameStatus === "in_progress") {
+            const roomUnits = serverUnits().filter(
+              (u) => u.roomId === props.room.id && u.unitType === "minion"
+            );
+            const redIds = roomUnits.filter((u) => u.voteColor === "red").map((u) => u.id);
+            const blueIds = roomUnits.filter((u) => u.voteColor === "blue").map((u) => u.id);
+            if (redIds.length > 0 && blueIds.length > 0) {
+              try {
+                connection.reducers.createBattleArena({ roomId: props.room.id, redUnitIds: redIds, blueUnitIds: blueIds });
+              } catch (e) {
+                console.warn("Auto-battle trigger failed:", e);
+              }
             }
           }
         }
-      }
+      });
     });
 
     // Subscribe to transactions for market history
     connection.db.transaction.onInsert((ctx, transaction) => {
-      setTransactions((prev) => [...prev, transaction]);
+      owned(() => setTransactions((prev) => {
+        if (prev.some((t) => t.id === transaction.id)) return prev;
+        return [...prev, transaction];
+      }));
     });
 
     // Subscribe to units
     connection.db.unit.onInsert((ctx, unit) => {
-      setServerUnits((prev) => [...prev, unit]);
+      owned(() => setServerUnits((prev) => {
+        if (prev.some((u) => u.id === unit.id)) return prev;
+        return [...prev, unit];
+      }));
     });
     connection.db.unit.onUpdate((ctx, oldUnit, newUnit) => {
-      setServerUnits((prev) => prev.map((u) => (u.id === newUnit.id ? newUnit : u)));
+      owned(() => setServerUnits((prev) => prev.map((u) => (u.id === newUnit.id ? newUnit : u))));
     });
     connection.db.unit.onDelete((ctx, unit) => {
-      setServerUnits((prev) => prev.filter((u) => u.id !== unit.id));
+      owned(() => setServerUnits((prev) => prev.filter((u) => u.id !== unit.id)));
     });
 
     // Subscribe to resources
     connection.db.resource.onInsert((ctx, resource) => {
-      setServerResources((prev) => [...prev, resource]);
+      owned(() => setServerResources((prev) => {
+        if (prev.some((r) => r.id === resource.id)) return prev;
+        return [...prev, resource];
+      }));
     });
     connection.db.resource.onUpdate((ctx, oldRes, newRes) => {
-      setServerResources((prev) => prev.map((r) => (r.id === newRes.id ? newRes : r)));
+      owned(() => setServerResources((prev) => prev.map((r) => (r.id === newRes.id ? newRes : r))));
     });
     connection.db.resource.onDelete((ctx, resource) => {
-      setServerResources((prev) => prev.filter((r) => r.id !== resource.id));
+      owned(() => setServerResources((prev) => prev.filter((r) => r.id !== resource.id)));
     });
 
     // Subscribe to unit stats
     connection.db.unit_stats.onInsert((ctx, stats) => {
-      setUnitStats((prev) => [...prev, stats]);
+      owned(() => setUnitStats((prev) => {
+        if (prev.some((s) => s.unitId === stats.unitId)) return prev;
+        return [...prev, stats];
+      }));
     });
     connection.db.unit_stats.onUpdate((ctx, oldStats, newStats) => {
-      setUnitStats((prev) => prev.map((s) => (s.unitId === newStats.unitId ? newStats : s)));
+      owned(() => setUnitStats((prev) => prev.map((s) => (s.unitId === newStats.unitId ? newStats : s))));
     });
     connection.db.unit_stats.onDelete((ctx, stats) => {
-      setUnitStats((prev) => prev.filter((s) => s.unitId !== stats.unitId));
+      owned(() => setUnitStats((prev) => prev.filter((s) => s.unitId !== stats.unitId)));
     });
 
     // Initial load of all data
@@ -177,49 +208,60 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
 
     // Subscribe to inventories
     connection.db.unit_inventory.onInsert((ctx, inv) => {
-      setUnitInventories((prev) => [...prev, inv]);
+      owned(() => setUnitInventories((prev) => {
+        if (prev.some((i) => i.unitId === inv.unitId)) return prev;
+        return [...prev, inv];
+      }));
     });
     connection.db.unit_inventory.onUpdate((ctx, oldInv, newInv) => {
-      setUnitInventories((prev) => prev.map((i) => (i.unitId === newInv.unitId ? newInv : i)));
+      owned(() => setUnitInventories((prev) => prev.map((i) => (i.unitId === newInv.unitId ? newInv : i))));
     });
     connection.db.unit_inventory.onDelete((ctx, inv) => {
-      setUnitInventories((prev) => prev.filter((i) => i.unitId !== inv.unitId));
+      owned(() => setUnitInventories((prev) => prev.filter((i) => i.unitId !== inv.unitId)));
     });
 
     // Subscribe to task queues
     connection.db.unit_task_queue.onInsert((ctx, task) => {
-      setUnitTaskQueues((prev) => [...prev, task]);
+      owned(() => setUnitTaskQueues((prev) => {
+        if (prev.some((t) => t.id === task.id)) return prev;
+        return [...prev, task];
+      }));
     });
     connection.db.unit_task_queue.onUpdate((ctx, oldTask, newTask) => {
-      setUnitTaskQueues((prev) => prev.map((t) => (t.id === newTask.id ? newTask : t)));
+      owned(() => setUnitTaskQueues((prev) => prev.map((t) => (t.id === newTask.id ? newTask : t))));
     });
     connection.db.unit_task_queue.onDelete((ctx, task) => {
-      setUnitTaskQueues((prev) => prev.filter((t) => t.id !== task.id));
+      owned(() => setUnitTaskQueues((prev) => prev.filter((t) => t.id !== task.id)));
     });
 
     // Subscribe to end-round votes
     connection.db.end_round_vote.onInsert((ctx, erv) => {
-      setEndRoundVotes((prev) => [...prev, erv]);
+      owned(() => setEndRoundVotes((prev) => {
+        if (prev.some((v) => v.id === erv.id)) return prev;
+        return [...prev, erv];
+      }));
     });
     connection.db.end_round_vote.onDelete((ctx, erv) => {
-      setEndRoundVotes((prev) => prev.filter((v) => v.id !== erv.id));
+      owned(() => setEndRoundVotes((prev) => prev.filter((v) => v.id !== erv.id)));
     });
 
     // Subscribe to player positions
     const refreshPlayerPositions = () => {
-      const myId = props.currentUser.identity.toHexString();
-      const positions = Array.from(connection.db.player_position.iter())
-        .filter(p => p.roomId === props.room.id && p.identity.toHexString() !== myId)
-        .map((p, i) => ({
-          id: p.identity.toHexString(),
-          name: allPlayers().find(u => u.identity.isEqual(p.identity))?.name || `Player ${i + 1}`,
-          characterClass: characterForIndex(i + 1) as CharacterClass,
-          x: p.x,
-          z: p.z,
-          rotationY: p.rotationY,
-          isMoving: p.isMoving,
-        }));
-      setOtherPlayerAvatars(positions);
+      owned(() => {
+        const myId = props.currentUser.identity.toHexString();
+        const positions = Array.from(connection.db.player_position.iter())
+          .filter(p => p.roomId === props.room.id && p.identity.toHexString() !== myId)
+          .map((p, i) => ({
+            id: p.identity.toHexString(),
+            name: allPlayers().find(u => u.identity.isEqual(p.identity))?.name || `Player ${i + 1}`,
+            characterClass: characterForIndex(i + 1) as CharacterClass,
+            x: p.x,
+            z: p.z,
+            rotationY: p.rotationY,
+            isMoving: p.isMoving,
+          }));
+        setOtherPlayerAvatars(positions);
+      });
     };
     connection.db.player_position.onInsert(() => refreshPlayerPositions());
     connection.db.player_position.onUpdate(() => refreshPlayerPositions());
@@ -234,42 +276,44 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     refreshPlayerPositions();
 
     // Subscribe to new Phase tables
-    connection.db.equipment.onInsert((ctx, eq) => setEquipment(prev => [...prev, eq]));
-    connection.db.equipment.onUpdate((ctx, old, eq) => setEquipment(prev => prev.map(e => e.id === eq.id ? eq : e)));
-    connection.db.equipment.onDelete((ctx, eq) => setEquipment(prev => prev.filter(e => e.id !== eq.id)));
+    connection.db.equipment.onInsert((ctx, eq) => owned(() => setEquipment(prev => prev.some(e => e.id === eq.id) ? prev : [...prev, eq])));
+    connection.db.equipment.onUpdate((ctx, old, eq) => owned(() => setEquipment(prev => prev.map(e => e.id === eq.id ? eq : e))));
+    connection.db.equipment.onDelete((ctx, eq) => owned(() => setEquipment(prev => prev.filter(e => e.id !== eq.id))));
     setEquipment(Array.from(connection.db.equipment.iter()));
 
-    connection.db.battle_arena.onInsert((ctx, a) => { setBattleDismissed(false); setBattleArenas(prev => [...prev, a]); });
-    connection.db.battle_arena.onUpdate((ctx, old, a) => setBattleArenas(prev => prev.map(x => x.id === a.id ? a : x)));
-    connection.db.battle_arena.onDelete((ctx, a) => setBattleArenas(prev => prev.filter(x => x.id !== a.id)));
+    connection.db.battle_arena.onInsert((ctx, a) => owned(() => { setBattleDismissed(false); setBattleArenas(prev => prev.some(x => x.id === a.id) ? prev : [...prev, a]); }));
+    connection.db.battle_arena.onUpdate((ctx, old, a) => owned(() => setBattleArenas(prev => prev.map(x => x.id === a.id ? a : x))));
+    connection.db.battle_arena.onDelete((ctx, a) => owned(() => setBattleArenas(prev => prev.filter(x => x.id !== a.id))));
     setBattleArenas(Array.from(connection.db.battle_arena.iter()));
 
-    connection.db.battle_unit.onInsert((ctx, bu) => setBattleUnits(prev => [...prev, bu]));
-    connection.db.battle_unit.onUpdate((ctx, old, bu) => setBattleUnits(prev => prev.map(x => x.id === bu.id ? bu : x)));
-    connection.db.battle_unit.onDelete((ctx, bu) => setBattleUnits(prev => prev.filter(x => x.id !== bu.id)));
+    connection.db.battle_unit.onInsert((ctx, bu) => owned(() => setBattleUnits(prev => prev.some(x => x.id === bu.id) ? prev : [...prev, bu])));
+    connection.db.battle_unit.onUpdate((ctx, old, bu) => owned(() => setBattleUnits(prev => prev.map(x => x.id === bu.id ? bu : x))));
+    connection.db.battle_unit.onDelete((ctx, bu) => owned(() => setBattleUnits(prev => prev.filter(x => x.id !== bu.id))));
     setBattleUnits(Array.from(connection.db.battle_unit.iter()));
 
-    connection.db.side_bet.onInsert((ctx, sb) => setSideBets(prev => [...prev, sb]));
-    connection.db.side_bet.onUpdate((ctx, old, sb) => setSideBets(prev => prev.map(x => x.id === sb.id ? sb : x)));
-    connection.db.side_bet.onDelete((ctx, sb) => setSideBets(prev => prev.filter(x => x.id !== sb.id)));
+    connection.db.side_bet.onInsert((ctx, sb) => owned(() => setSideBets(prev => prev.some(x => x.id === sb.id) ? prev : [...prev, sb])));
+    connection.db.side_bet.onUpdate((ctx, old, sb) => owned(() => setSideBets(prev => prev.map(x => x.id === sb.id ? sb : x))));
+    connection.db.side_bet.onDelete((ctx, sb) => owned(() => setSideBets(prev => prev.filter(x => x.id !== sb.id))));
     setSideBets(Array.from(connection.db.side_bet.iter()));
 
-    connection.db.laborer_genetics.onInsert((ctx, g) => setGenetics(prev => [...prev, g]));
-    connection.db.laborer_genetics.onUpdate((ctx, old, g) => setGenetics(prev => prev.map(x => x.unitId === g.unitId ? g : x)));
-    connection.db.laborer_genetics.onDelete((ctx, g) => setGenetics(prev => prev.filter(x => x.unitId !== g.unitId)));
+    connection.db.laborer_genetics.onInsert((ctx, g) => owned(() => setGenetics(prev => prev.some(x => x.unitId === g.unitId) ? prev : [...prev, g])));
+    connection.db.laborer_genetics.onUpdate((ctx, old, g) => owned(() => setGenetics(prev => prev.map(x => x.unitId === g.unitId ? g : x))));
+    connection.db.laborer_genetics.onDelete((ctx, g) => owned(() => setGenetics(prev => prev.filter(x => x.unitId !== g.unitId))));
     setGenetics(Array.from(connection.db.laborer_genetics.iter()));
 
-    connection.db.tournament.onInsert((ctx, t) => setTournaments(prev => [...prev, t]));
-    connection.db.tournament.onUpdate((ctx, old, t) => setTournaments(prev => prev.map(x => x.id === t.id ? t : x)));
-    connection.db.tournament.onDelete((ctx, t) => setTournaments(prev => prev.filter(x => x.id !== t.id)));
+    connection.db.tournament.onInsert((ctx, t) => owned(() => setTournaments(prev => prev.some(x => x.id === t.id) ? prev : [...prev, t])));
+    connection.db.tournament.onUpdate((ctx, old, t) => owned(() => setTournaments(prev => prev.map(x => x.id === t.id ? t : x))));
+    connection.db.tournament.onDelete((ctx, t) => owned(() => setTournaments(prev => prev.filter(x => x.id !== t.id))));
     setTournaments(Array.from(connection.db.tournament.iter()));
 
     // Subscribe to game events for the activity feed and replay viewer
     const roomIdStr = props.room.id.toString();
     connection.db.game_event.onInsert((ctx, event) => {
-      if (event.roomId === roomIdStr) {
-        setGameEvents((prev) => [...prev, event]);
-      }
+      owned(() => {
+        if (event.roomId === roomIdStr) {
+          setGameEvents((prev) => [...prev, event]);
+        }
+      });
     });
     const initialGameEvents = Array.from(connection.db.game_event.iter())
       .filter((e) => e.roomId === roomIdStr);
@@ -1536,10 +1580,10 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             roundNumber={Math.max(props.room.currentRound - 1, 0)}
             eliminatedPlayers={eliminatedPlayers().map(p => p.identity.toHexString())}
             survivingPlayers={remainingPlayers().map(p => p.identity.toHexString())}
-            minorityColor={(getVoteTotals().minority === "tie" ? "red" : getVoteTotals().minority) as "red" | "blue"}
-            tiebreaker={getVoteTotals().minority === "tie"}
-            redVotes={getVoteTotals().red}
-            blueVotes={getVoteTotals().blue}
+            minorityColor={(savedRoundTotals().minority === "tie" ? "red" : savedRoundTotals().minority) as "red" | "blue"}
+            tiebreaker={savedRoundTotals().minority === "tie"}
+            redVotes={savedRoundTotals().red}
+            blueVotes={savedRoundTotals().blue}
             room={props.room}
             currentUser={props.currentUser}
             onClose={() => setShowEliminationModal(false)}

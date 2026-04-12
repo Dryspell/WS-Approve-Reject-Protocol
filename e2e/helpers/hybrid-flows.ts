@@ -49,6 +49,8 @@ export interface HybridOptions {
   roomPrefix?: string;
   /** Optional log stream for simulation logging */
   logStream?: fs.WriteStream;
+  /** Enable the autonomous bot tick loop after game starts (default: true) */
+  enableAutoPlay?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +155,12 @@ export async function hybridStartGame(
   // Wait for game to start (pot becomes visible)
   await setup.gamePage.waitForGameStart();
   if (options.logStream) log(options.logStream, 'Game started');
+
+  // Enable autonomous bot behavior (wandering, laborers, market, chat)
+  if (options.enableAutoPlay !== false) {
+    setup.bots.enableAutoPlay();
+    if (options.logStream) log(options.logStream, 'Bot autoplay enabled');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +169,7 @@ export async function hybridStartGame(
 
 /**
  * Bots cast their votes. Real player votes separately via the UI.
+ * The voteAll method pauses/resumes autoplay internally.
  */
 export async function hybridBotsVote(
   setup: HybridGameSetup,
@@ -173,6 +182,7 @@ export async function hybridBotsVote(
 
 /**
  * All bots vote to end the round early.
+ * The voteEndRoundAll method pauses/resumes autoplay internally.
  */
 export async function hybridBotsEndRound(
   setup: HybridGameSetup,
@@ -189,14 +199,21 @@ export async function hybridEndRound(
   setup: HybridGameSetup,
   logStream?: fs.WriteStream,
 ): Promise<void> {
+  // Pause autoplay for the entire end-round sequence
+  setup.bots.disableAutoPlay();
+
   // Real player votes to end
   await setup.gamePage.clickEndRound();
 
-  // Bots vote to end
-  await hybridBotsEndRound(setup, logStream);
+  // Bots vote to end (skip internal pause/resume since we already paused)
+  await setup.bots.voteEndRoundAll(setup.roomName);
+  if (logStream) log(logStream, 'Bots voted to end round');
 
   // Wait for server to process
   await setup.page.waitForTimeout(2000);
+
+  // Resume autoplay for the next round
+  setup.bots.enableAutoPlay();
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +224,7 @@ export async function hybridEndRound(
  * Clean up the hybrid setup: close browser context and disconnect bots.
  */
 export async function hybridCleanup(setup: HybridGameSetup): Promise<void> {
+  setup.bots.disableAutoPlay();
   await setup.bots.cleanup();
   await setup.page.context().close();
 }

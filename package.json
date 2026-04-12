@@ -6,7 +6,7 @@
     "dev:client": "vinxi dev --port 3001",
     "dev:db:local": "spacetime start",
     "publish:local": "cd server && spacetime publish --server local -p . --yes game",
-    "publish:cloud": "cd server && spacetime publish -p . socket-signals",
+    "publish:cloud": "cd server && spacetime publish --server maincloud -p . socket-signals",
     "build": "vinxi build",
     "start": "vinxi start",
     "typecheck": "tsc --noEmit",

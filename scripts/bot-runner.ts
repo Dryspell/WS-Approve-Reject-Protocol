@@ -190,6 +190,11 @@ export class Bot {
     if (this.cfg.verbose) this.log(msg);
   }
 
+  /** Fire-and-forget a reducer call, swallowing server-side rejections. */
+  private safeCall(p: Promise<void>) {
+    p.catch((err) => this.debug(`Reducer rejected: ${err}`));
+  }
+
   // ---- Connection ---------------------------------------------------------
 
   connect(): Promise<void> {
@@ -205,7 +210,7 @@ export class Bot {
           this.identity = identity;
           this.log(`Connected (identity ${identity.toHexString().slice(0, 12)}...)`);
 
-          conn.reducers.setName({ name: this.name });
+          this.safeCall(conn.reducers.setName({ name: this.name }));
           this.debug(`Set name to "${this.name}"`);
 
           conn.subscriptionBuilder()
@@ -241,25 +246,25 @@ export class Bot {
 
   joinRoom(roomId: number) {
     if (!this.conn || !this.identity) return;
-    this.conn.reducers.joinRoom({ roomId, userId: this.identity.toHexString() });
+    this.safeCall(this.conn.reducers.joinRoom({ roomId, userId: this.identity.toHexString() }));
     this.state = 'LOBBY';
     this.readyToggled = false;
   }
 
   toggleReady(roomId: number) {
     if (!this.conn || !this.identity) return;
-    this.conn.reducers.toggleReady({ roomId, userId: this.identity.toHexString() });
+    this.safeCall(this.conn.reducers.toggleReady({ roomId, userId: this.identity.toHexString() }));
     this.readyToggled = true;
   }
 
   voteColor(voteId: number, color: string) {
     if (!this.conn) return;
-    this.conn.reducers.setVoteColor({ voteId, color });
+    this.safeCall(this.conn.reducers.setVoteColor({ voteId, color }));
   }
 
   voteEndRound(roomId: number) {
     if (!this.conn) return;
-    this.conn.reducers.voteEndRound({ roomId });
+    this.safeCall(this.conn.reducers.voteEndRound({ roomId }));
     this.hasVotedEndRound = true;
   }
 
@@ -295,6 +300,11 @@ export class Bot {
   stopLoop() {
     if (this.interval) clearInterval(this.interval);
     this.interval = null;
+  }
+
+  resumeLoop() {
+    if (this.interval) return;
+    this.startLoop();
   }
 
   private tick() {
@@ -333,13 +343,13 @@ export class Bot {
         return;
       }
       this.log(`Joining room "${this.cfg.room}" (id ${room.id})`);
-      this.conn.reducers.joinRoom({ roomId: room.id, userId: identityHex });
+      this.safeCall(this.conn.reducers.joinRoom({ roomId: room.id, userId: identityHex }));
       this.state = 'LOBBY';
       this.readyToggled = false;
       this.debug('Transitioned to LOBBY');
     } else if (this.index === 0) {
       this.log(`Creating room "${this.cfg.room}"`);
-      this.conn.reducers.createRoom({
+      this.safeCall(this.conn.reducers.createRoom({
         roomId: `room-${Date.now()}`,
         name: this.cfg.room,
         creatorId: identityHex,
@@ -349,8 +359,8 @@ export class Bot {
         maxPlayers: 10,
         allowRebuy: true,
         allowMidgameJoin: true,
-        combatEnabled: true, // fixed: was missing after schema update
-      });
+        combatEnabled: true,
+      }));
     } else {
       this.debug('Waiting for room to be created...');
     }
@@ -385,7 +395,7 @@ export class Bot {
           return;
         }
         this.log('Toggling ready');
-        this.conn.reducers.toggleReady({ roomId: room.id, userId: this.identity.toHexString() });
+        this.safeCall(this.conn.reducers.toggleReady({ roomId: room.id, userId: this.identity.toHexString() }));
 
         // After a short grace period, if all members are ready, call startGame
         setTimeout(() => {
@@ -400,9 +410,7 @@ export class Bot {
           const allReady = memberCount > 0 && readyCount >= memberCount;
           if (allReady) {
             this.log(`All ${memberCount} players ready — calling startGame`);
-            try {
-              this.conn.reducers.startGame({ roomId: currentRoom.id });
-            } catch (_e) { /* already started or permission denied */ }
+            this.safeCall(this.conn.reducers.startGame({ roomId: currentRoom.id }));
           }
         }, 3000);
       }, delay);
@@ -425,7 +433,7 @@ export class Bot {
       return;
     }
 
-    if (room.gameStatus === 'finished') {
+    if (room.gameStatus === 'finished' || room.gameStatus === 'completed') {
       this.log('Game finished');
       this.state = 'IDLE';
       this.readyToggled = false;
@@ -448,7 +456,7 @@ export class Bot {
       for (let i = 0; i < uncoloredVotes.length; i++) {
         const color = colors[i];
         this.debug(`Setting vote ${uncoloredVotes[i].id} -> ${color}`);
-        this.conn.reducers.setVoteColor({ voteId: uncoloredVotes[i].id, color });
+        this.safeCall(this.conn.reducers.setVoteColor({ voteId: uncoloredVotes[i].id, color }));
       }
     }
 
@@ -460,7 +468,7 @@ export class Bot {
     if (!this.hasVotedEndRound && myVotes.length > 0 && uncoloredVotes.length === 0) {
       if (Math.random() < 0.4) {
         this.debug('Voting to end round');
-        this.conn.reducers.voteEndRound({ roomId: room.id });
+        this.safeCall(this.conn.reducers.voteEndRound({ roomId: room.id }));
         this.hasVotedEndRound = true;
         this.votedEndRoundForRound = room.currentRound;
       }
@@ -500,15 +508,13 @@ export class Bot {
       this.posUpdateTick = 0;
       const rotationY = Math.atan2(dx, dz);
       const isMoving = d > 0.5;
-      try {
-        this.conn.reducers.updatePlayerPosition({
-          roomId: room.id,
-          x: this.posX,
-          z: this.posZ,
-          rotationY,
-          isMoving,
-        });
-      } catch { /* non-fatal */ }
+      this.safeCall(this.conn.reducers.updatePlayerPosition({
+        roomId: room.id,
+        x: this.posX,
+        z: this.posZ,
+        rotationY,
+        isMoving,
+      }));
     }
   }
 
@@ -531,16 +537,8 @@ export class Bot {
     // Spawn more laborers if under the votesPerPlayer cap
     if (myMinions.length < room.votesPerPlayer && this.spawnCooldown <= 0) {
       this.debug(`Spawning laborer (${myMinions.length}/${room.votesPerPlayer})`);
-      try {
-        this.conn.reducers.spawnLaborer({ roomId: room.id });
-        this.spawnCooldown = SPAWN_COOLDOWN_TICKS;
-      } catch (err) {
-        const msg = String(err);
-        if (msg.toLowerCase().includes('insufficient')) {
-          this.debug('Insufficient funds to spawn laborer');
-          this.spawnCooldown = SPAWN_COOLDOWN_TICKS * 3; // back off longer if broke
-        }
-      }
+      this.safeCall(this.conn.reducers.spawnLaborer({ roomId: room.id }));
+      this.spawnCooldown = SPAWN_COOLDOWN_TICKS;
     }
 
     // Collect all resources in this room that still have supply
@@ -587,20 +585,14 @@ export class Bot {
       const d = dist2d(unit.position.x, unit.position.y, resource.position.x, resource.position.y);
 
       if (d <= GATHER_RANGE) {
-        // In range — harvest
-        try {
-          this.conn.reducers.gatherResource({ unitId: unit.id, resourceId });
-          this.debug(`Laborer ${unit.id} gathered ${resource.resourceType} (dist ${d.toFixed(1)})`);
-        } catch { /* non-fatal */ }
+        this.safeCall(this.conn.reducers.gatherResource({ unitId: unit.id, resourceId }));
+        this.debug(`Laborer ${unit.id} gathered ${resource.resourceType} (dist ${d.toFixed(1)})`);
       } else {
-        // Not in range — move toward resource
-        try {
-          this.conn.reducers.moveUnit({
-            unitId: unit.id,
-            targetPosition: { x: resource.position.x, y: resource.position.y },
-          });
-          this.debug(`Laborer ${unit.id} moving toward resource (dist ${d.toFixed(1)})`);
-        } catch { /* non-fatal */ }
+        this.safeCall(this.conn.reducers.moveUnit({
+          unitId: unit.id,
+          targetPosition: { x: resource.position.x, y: resource.position.y },
+        }));
+        this.debug(`Laborer ${unit.id} moving toward resource (dist ${d.toFixed(1)})`);
       }
     }
   }
@@ -632,13 +624,11 @@ export class Bot {
       );
       if (uncoloredVote) {
         const price = room.buyinAmount * 1.3;
-        try {
-          this.conn.reducers.setVoteForSale({ voteId: uncoloredVote.id, price });
-          this.hasListedVoteForSale = true;
-          this.marketCooldown = MARKET_COOLDOWN_TICKS;
-          this.debug(`Listed vote ${uncoloredVote.id} for sale at ${price.toFixed(2)}`);
-          return;
-        } catch { /* non-fatal */ }
+        this.safeCall(this.conn.reducers.setVoteForSale({ voteId: uncoloredVote.id, price }));
+        this.hasListedVoteForSale = true;
+        this.marketCooldown = MARKET_COOLDOWN_TICKS;
+        this.debug(`Listed vote ${uncoloredVote.id} for sale at ${price.toFixed(2)}`);
+        return;
       }
     }
 
@@ -652,17 +642,15 @@ export class Bot {
         v.playerId !== identityHex
     );
     if (cheapVote && cheapVote.salePrice != null) {
-      try {
-        this.conn.reducers.createTradeOffer({
-          roomId: room.id,
-          roundNumber: room.currentRound,
-          offerType: 'buy',
-          voteId: cheapVote.id,
-          price: cheapVote.salePrice,
-        });
-        this.marketCooldown = MARKET_COOLDOWN_TICKS;
-        this.debug(`Bought vote ${cheapVote.id} for ${cheapVote.salePrice.toFixed(2)}`);
-      } catch { /* non-fatal */ }
+      this.safeCall(this.conn.reducers.createTradeOffer({
+        roomId: room.id,
+        roundNumber: room.currentRound,
+        offerType: 'buy',
+        voteId: cheapVote.id,
+        price: cheapVote.salePrice,
+      }));
+      this.marketCooldown = MARKET_COOLDOWN_TICKS;
+      this.debug(`Bought vote ${cheapVote.id} for ${cheapVote.salePrice.toFixed(2)}`);
     }
   }
 
@@ -697,16 +685,14 @@ export class Bot {
       return;
     }
 
-    try {
-      this.conn.reducers.placeSideBet({
-        roomId: room.id,
-        betType: 'color_wins',
-        betTarget: majorityColor,
-        amount: betAmount,
-      });
-      this.hasPlacedSideBet = true;
-      this.log(`Placed side bet $${betAmount.toFixed(2)} on ${majorityColor} (eliminated)`);
-    } catch { /* non-fatal */ }
+    this.safeCall(this.conn.reducers.placeSideBet({
+      roomId: room.id,
+      betType: 'color_wins',
+      betTarget: majorityColor,
+      amount: betAmount,
+    }));
+    this.hasPlacedSideBet = true;
+    this.log(`Placed side bet $${betAmount.toFixed(2)} on ${majorityColor} (eliminated)`);
   }
 
   // ---- Strategies ---------------------------------------------------------
@@ -758,15 +744,11 @@ export class Bot {
     this.lastChatTick = 0;
     const text = pick(CHAT_MESSAGES);
     this.debug(`Chat: "${text}"`);
-    try {
-      this.conn.reducers.sendChatMessage({
-        roomId: `game_${room.id}`,
-        text,
-        roundNumber: room.gameStatus === 'lobby' ? undefined : room.currentRound,
-      });
-    } catch (err) {
-      this.debug(`Chat failed (will retry later): ${err}`);
-    }
+    this.safeCall(this.conn.reducers.sendChatMessage({
+      roomId: `game_${room.id}`,
+      text,
+      roundNumber: room.gameStatus === 'lobby' ? undefined : room.currentRound,
+    }));
   }
 
   // ---- Helpers ------------------------------------------------------------

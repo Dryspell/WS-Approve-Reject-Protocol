@@ -120,8 +120,10 @@ export class TestBotHelper {
    * All bots set their votes for the current round using the given color
    * or their assigned strategy. If `color` is provided, all votes go to
    * that color; otherwise each bot uses its own strategy logic.
+   * Pauses the autonomous loop to avoid conflicts.
    */
   async voteAll(roomName: string, color?: 'red' | 'blue'): Promise<void> {
+    this.disableAutoPlay();
     for (const bot of this.bots) {
       const room = bot.findRoom(roomName);
       if (!room) continue;
@@ -133,30 +135,42 @@ export class TestBotHelper {
       }
     }
     await new Promise((r) => setTimeout(r, 300));
+    this.enableAutoPlay();
   }
 
   /**
    * All bots vote to end the current round.
+   * Pauses the autonomous loop to avoid conflicts.
    */
   async voteEndRoundAll(roomName: string): Promise<void> {
+    this.disableAutoPlay();
     for (const bot of this.bots) {
       const room = bot.findRoom(roomName);
       if (room) bot.voteEndRound(room.id);
       await new Promise((r) => setTimeout(r, 50));
     }
     await new Promise((r) => setTimeout(r, 500));
+    this.enableAutoPlay();
   }
 
   /**
-   * Enable the autonomous tick loop on all bots (they'll join, ready,
-   * vote, and chat on their own based on their strategy).
+   * Enable the autonomous tick loop on all bots so they wander, spawn
+   * laborers, gather resources, interact with the market, and chat.
    */
   enableAutoPlay(): void {
-    // Reconnect the loops by creating new intervals. Since stopLoop()
-    // cleared them, we re-start by calling connect-like logic. However,
-    // the simplest approach is to just not stop the loop in the first place.
-    // For now, this is a no-op placeholder -- bots should use imperative methods.
-    console.warn('TestBotHelper.enableAutoPlay() is not yet implemented; use imperative methods.');
+    for (const bot of this.bots) {
+      bot.resumeLoop();
+    }
+  }
+
+  /**
+   * Pause the autonomous tick loop on all bots (they'll stop acting
+   * autonomously but remain connected).
+   */
+  disableAutoPlay(): void {
+    for (const bot of this.bots) {
+      bot.stopLoop();
+    }
   }
 
   /** Get all bots */
