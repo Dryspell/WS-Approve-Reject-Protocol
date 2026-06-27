@@ -4,9 +4,8 @@ import GuaranteeMarket from "./GuaranteeMarket";
 import StrategyPanel from "./StrategyPanel";
 import MarketTrends from "./MarketTrends";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
-import { ToastHelper } from "~/lib/toast-helpers";
-import { sounds } from "~/lib/sounds";
 import { resolvePlayerName } from "~/lib/game-utils";
+import { buyListedVote, listVote, unlistVote } from "~/lib/vote-trading";
 
 interface VoteMarketPanelProps {
   votes: Vote[];
@@ -74,47 +73,21 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
     }
   };
 
-  const handleBuyVote = async (voteId: number, price: number) => {
-    const connection = conn();
-    if (!connection) return;
-    if (props.userWalletBalance < price) {
-      ToastHelper.warning("Insufficient Funds", `You need $${price} but have $${props.userWalletBalance.toFixed(2)}`);
-      return;
-    }
-    try {
-      connection.reducers.transferVoteOwnership({ voteId, buyerId: props.currentUserId, price });
-      ToastHelper.success("Vote Purchased", `You bought vote #${voteId} for $${price}`);
-      sounds.tradeComplete();
-      sounds.moneyReceived();
-    } catch {
-      ToastHelper.error("Failed to purchase vote");
-      sounds.error();
-    }
+  const handleBuyVote = (voteId: number, price: number) => {
+    buyListedVote(conn(), {
+      voteId,
+      buyerId: props.currentUserId,
+      price,
+      walletBalance: props.userWalletBalance,
+    });
   };
 
-  const handleSetPrice = async (voteId: number) => {
-    const connection = conn();
-    if (!connection) return;
-    const price = priceInputs()[voteId];
-    if (price && price > 0) {
-      try {
-        connection.reducers.setVoteForSale({ voteId, price });
-        ToastHelper.success("Vote Listed", `Vote #${voteId} listed for $${price}`);
-      } catch {
-        ToastHelper.error("Failed to list vote");
-      }
-    }
+  const handleSetPrice = (voteId: number) => {
+    listVote(conn(), voteId, priceInputs()[voteId]);
   };
 
-  const handleRemoveFromMarket = async (voteId: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.removeVoteFromSale({ voteId });
-      ToastHelper.success("Vote Unlisted", `Vote #${voteId} removed from market`);
-    } catch {
-      ToastHelper.error("Failed to remove vote");
-    }
+  const handleRemoveFromMarket = (voteId: number) => {
+    unlistVote(conn(), voteId);
   };
 
   const setPriceInput = (voteId: number, value: number) => {

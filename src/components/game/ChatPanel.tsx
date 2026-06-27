@@ -3,6 +3,7 @@ import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import type { ChatMessage as DBChatMessage } from "~/module_bindings/types";
 import { showToast } from "~/components/ui/toast";
 import { TID } from "~/lib/test-ids";
+import { acceptOffer, cancelOffer, makeOffer } from "~/lib/vote-trading";
 
 interface ChatMessage {
   id: string;
@@ -158,52 +159,34 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
     });
   };
 
-  const handleAcceptOffer = async (offerId: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      await connection.reducers.acceptTradeOffer({ offerId });
-      showToast({ title: "Trade Accepted", description: "The trade has been completed!", variant: "success" });
-    } catch (error: any) {
-      showToast({ title: "Trade Failed", description: error?.message || "Could not complete trade", variant: "error" });
-    }
+  const handleAcceptOffer = (offerId: number) => {
+    acceptOffer(conn(), offerId);
   };
 
-  const handleDeclineOffer = async (offerId: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      await connection.reducers.cancelTradeOffer({ offerId });
-    } catch {
-      // Only the creator can cancel; declining as a non-creator is just ignoring it
-    }
+  const handleDeclineOffer = (offerId: number) => {
+    cancelOffer(conn(), offerId);
   };
 
-  const handleCreateTradeOffer = async () => {
+  const handleCreateTradeOffer = () => {
     const connection = conn();
     if (!connection) return;
-    try {
-      const voteId = tradeType() === 'sell_vote'
-        ? (() => {
-            const myVotes = Array.from(connection.db.vote.iter()).filter(
-              v => v.roomId === props.roomId && v.playerId === identity()?.toHexString()
-            );
-            return myVotes.length > 0 ? myVotes[0].id : null;
-          })()
-        : null;
+    const voteId = tradeType() === 'sell_vote'
+      ? (() => {
+          const myVotes = Array.from(connection.db.vote.iter()).filter(
+            v => v.roomId === props.roomId && v.playerId === identity()?.toHexString()
+          );
+          return myVotes.length > 0 ? myVotes[0].id : null;
+        })()
+      : null;
 
-      await connection.reducers.createTradeOffer({
-        roomId: props.roomId,
-        roundNumber: props.roundNumber ?? 1,
-        offerType: tradeType(),
-        voteId,
-        price: tradePrice(),
-      });
-      setShowTradeForm(false);
-      showToast({ title: "Offer Posted", description: `Your ${tradeType() === 'sell_vote' ? 'sell' : 'buy'} offer has been posted`, variant: "success" });
-    } catch (error: any) {
-      showToast({ title: "Error", description: error?.message || "Failed to create offer", variant: "error" });
-    }
+    const result = makeOffer(connection, {
+      roomId: props.roomId,
+      roundNumber: props.roundNumber ?? 1,
+      offerType: tradeType(),
+      voteId,
+      price: tradePrice(),
+    });
+    if (result.ok) setShowTradeForm(false);
   };
 
   const sendMessage = () => {

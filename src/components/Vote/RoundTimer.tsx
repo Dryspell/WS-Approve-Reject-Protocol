@@ -1,14 +1,18 @@
 import { Component, createSignal, onMount, onCleanup, Show, untrack } from "solid-js";
 import { Badge } from "~/components/ui/badge";
 
+export type GamePhase = "voting" | "action" | "resolution";
+
 interface RoundTimerProps {
   roundNumber: number;
   roundStartTime: bigint | undefined;
   roundDuration?: number; // Duration in seconds (default 120s = 2 minutes)
   onRoundEnd?: () => void;
+  /** Fired whenever the active phase changes (and once on mount). Lets the HUD
+   *  shift emphasis between voting and colony actions without duplicating the
+   *  timing math. */
+  onPhaseChange?: (phase: GamePhase) => void;
 }
-
-type GamePhase = "voting" | "action" | "resolution";
 
 const RoundTimer: Component<RoundTimerProps> = (props) => {
   const duration = () => props.roundDuration || 120; // 2 minutes default
@@ -19,6 +23,8 @@ const RoundTimer: Component<RoundTimerProps> = (props) => {
   let interval: number | undefined;
 
   onMount(() => {
+    // Emit the starting phase so the HUD is in sync before the first tick.
+    props.onPhaseChange?.(phase());
     // Update timer every second
     interval = setInterval(() => {
       untrack(() => {
@@ -36,12 +42,11 @@ const RoundTimer: Component<RoundTimerProps> = (props) => {
 
         // Determine phase based on time remaining
         const percentRemaining = (remaining / duration()) * 100;
-        if (percentRemaining > 66) {
-          setPhase("voting");
-        } else if (percentRemaining > 33) {
-          setPhase("action");
-        } else {
-          setPhase("resolution");
+        const nextPhase: GamePhase =
+          percentRemaining > 66 ? "voting" : percentRemaining > 33 ? "action" : "resolution";
+        if (nextPhase !== phase()) {
+          setPhase(nextPhase);
+          props.onPhaseChange?.(nextPhase);
         }
 
         // Warning if less than 30 seconds

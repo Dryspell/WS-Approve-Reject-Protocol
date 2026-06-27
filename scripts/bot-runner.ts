@@ -92,6 +92,11 @@ const SUBSCRIBE_QUERIES = [
   'SELECT * FROM unit',
   'SELECT * FROM resource',
   'SELECT * FROM unit_stats',
+  // Needed so bots (and integration tests) can observe gathering/crafting
+  // outcomes: harvested resources land in unit_inventory, queued craft/gather
+  // jobs live in unit_task_queue.
+  'SELECT * FROM unit_inventory',
+  'SELECT * FROM unit_task_queue',
 ];
 
 // Gather range must be < the server's 30-unit threshold
@@ -522,7 +527,7 @@ export class Bot {
 
   private tickLaborers(room: ReturnType<Bot['findRoom']>) {
     if (!this.conn || !this.identity || !room) return;
-    if (room.gameStatus !== 'in_progress') return;
+    if (room.gameStatus !== 'active') return;
 
     const identityHex = this.identity.toHexString();
 
@@ -601,7 +606,7 @@ export class Bot {
 
   private tickMarket(room: ReturnType<Bot['findRoom']>) {
     if (!this.conn || !this.identity || !room) return;
-    if (room.gameStatus !== 'in_progress') return;
+    if (room.gameStatus !== 'active') return;
 
     if (this.marketCooldown > 0) {
       this.marketCooldown--;
@@ -659,7 +664,7 @@ export class Bot {
   private tickSideBet(room: ReturnType<Bot['findRoom']>) {
     if (!this.conn || !this.identity || !room) return;
     if (this.hasPlacedSideBet) return;
-    if (room.gameStatus !== 'in_progress') return;
+    if (room.gameStatus !== 'active') return;
 
     const identityHex = this.identity.toHexString();
     if (!room.eliminatedPlayers.includes(identityHex)) return;
@@ -814,7 +819,13 @@ function parseArgs(argv: string[]) {
   return opts;
 }
 
-const isDirectRun = process.argv[1]?.includes('bot-runner');
+// Guard against browser environments: this CLI block must only run under Node.
+// `Bot`, `TestBotHelper`, and other consumers import this module in the browser
+// (e.g. the in-app Practice vs Bots feature), where `process` is unavailable.
+const isDirectRun =
+  typeof process !== 'undefined' &&
+  Array.isArray(process.argv) &&
+  !!process.argv[1]?.includes('bot-runner');
 
 if (isDirectRun) {
   const cliConfig = parseArgs(process.argv);

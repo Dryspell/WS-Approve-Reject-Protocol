@@ -1,4 +1,4 @@
-import { Component, createSignal, For, Show } from "solid-js";
+import { Component, createSignal, createEffect, onCleanup, For, Show } from "solid-js";
 import type { Guarantee, GuaranteePurchase, Vote } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { ToastHelper } from "~/lib/toast-helpers";
@@ -16,6 +16,39 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
   const { conn } = useSpacetimeDB();
   const [guarantees, setGuarantees] = createSignal<Guarantee[]>([]);
   const [purchases, setPurchases] = createSignal<GuaranteePurchase[]>([]);
+
+  // Load + live-subscribe guarantee data. The `guarantee` / `guarantee_purchase`
+  // tables are already subscribed globally in useSpacetimeDB; this panel just
+  // mirrors them into local signals (previously these signals were never
+  // populated, so the whole guarantee market rendered empty).
+  createEffect(() => {
+    const connection = conn();
+    if (!connection) return;
+
+    const refreshGuarantees = () =>
+      setGuarantees(Array.from(connection.db.guarantee.iter()));
+    const refreshPurchases = () =>
+      setPurchases(Array.from(connection.db.guarantee_purchase.iter()));
+
+    refreshGuarantees();
+    refreshPurchases();
+
+    connection.db.guarantee.onInsert(refreshGuarantees);
+    connection.db.guarantee.onUpdate(refreshGuarantees);
+    connection.db.guarantee.onDelete(refreshGuarantees);
+    connection.db.guarantee_purchase.onInsert(refreshPurchases);
+    connection.db.guarantee_purchase.onUpdate(refreshPurchases);
+    connection.db.guarantee_purchase.onDelete(refreshPurchases);
+
+    onCleanup(() => {
+      connection.db.guarantee.removeOnInsert(refreshGuarantees);
+      connection.db.guarantee.removeOnUpdate(refreshGuarantees);
+      connection.db.guarantee.removeOnDelete(refreshGuarantees);
+      connection.db.guarantee_purchase.removeOnInsert(refreshPurchases);
+      connection.db.guarantee_purchase.removeOnUpdate(refreshPurchases);
+      connection.db.guarantee_purchase.removeOnDelete(refreshPurchases);
+    });
+  });
 
   const [createColor, setCreateColor] = createSignal<"red" | "blue">("red");
   const [createPrice, setCreatePrice] = createSignal<number>(5);

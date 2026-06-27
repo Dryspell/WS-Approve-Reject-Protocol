@@ -15,6 +15,7 @@ import { Button } from "../ui/button";
 import { resolvePlayerName } from "~/lib/game-utils";
 import { TID } from "~/lib/test-ids";
 import GuestNamePrompt from "~/components/GuestNamePrompt";
+import { practiceBots, type Strategy } from "~/lib/practice-bots";
 
 /**
  * Check if multiuser mode is enabled via URL parameter.
@@ -80,6 +81,13 @@ const VoteBox: Component = () => {
   const [subscriptionsSet, setSubscriptionsSet] = createSignal(false);
   const [currentUser, setCurrentUser] = createSignal<any>(null);
   const [user, setUser] = createUserSignal();
+
+  // Practice vs Bots
+  const [showPractice, setShowPractice] = createSignal(false);
+  const [practiceBotCount, setPracticeBotCount] = createSignal(4);
+  const [practiceStrategy, setPracticeStrategy] = createSignal<Strategy>("mixed");
+  const [practiceStarting, setPracticeStarting] = createSignal(false);
+  const [botsActive, setBotsActive] = createSignal(0);
 
   // Initialize SpacetimeDB connection
   const { conn, connected, identity, subscribed, connectionError } = useSpacetimeDB();
@@ -356,6 +364,102 @@ const VoteBox: Component = () => {
     }
   };
 
+  // Resolve a freshly-created room's numeric id by polling the local cache.
+  const waitForRoomByName = (name: string, timeoutMs = 5000): Promise<number | null> => {
+    const target = name.trim().toLowerCase();
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const tick = () => {
+        const match = Object.values(rooms()).find(
+          (r) => r.name.trim().toLowerCase() === target,
+        );
+        if (match) return resolve(match.id);
+        if (Date.now() - start >= timeoutMs) return resolve(null);
+        setTimeout(tick, 150);
+      };
+      tick();
+    });
+  };
+
+  const startPractice = async () => {
+    const connection = conn();
+    if (!connection || !connected()) {
+      showToast({ title: "Error", description: "Not connected to SpacetimeDB", variant: "error", duration: DEFAULT_TOAST_DURATION });
+      return;
+    }
+
+    setPracticeStarting(true);
+    try {
+      const roomId = createId();
+      const suffix = Math.random().toString(36).slice(2, 6);
+      const roomName = `Practice vs Bots ${suffix}`;
+      const creatorId = identity()?.toHexString() || "anonymous";
+
+      await connection.reducers.createRoom({
+        roomId,
+        name: roomName,
+        creatorId,
+        buyinAmount: buyinAmount(),
+        votesPerPlayer: votesPerPlayer(),
+        minPlayers: 0,
+        maxPlayers: 0,
+        allowRebuy: true,
+        allowMidgameJoin: true,
+        combatEnabled: combatEnabled(),
+      });
+
+      // Wait for the server to assign a numeric id, then drop the human into the lobby.
+      const numericId = await waitForRoomByName(roomName);
+      if (numericId !== null) {
+        setCurrentRoom(String(numericId));
+      }
+
+      // Spawn the bots — they auto-join this room by name, ready up, and play.
+      await practiceBots.spawn(roomName, practiceBotCount(), { strategy: practiceStrategy() });
+      setBotsActive(practiceBots.count);
+
+      setShowPractice(false);
+      showToast({
+        title: `${practiceBotCount()} bots spawned`,
+        description: "They're joining and readying up — click Ready to start the match.",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    } catch (error) {
+      console.error("Failed to start practice:", error);
+      showToast({
+        title: "Couldn't start practice",
+        description: error instanceof Error ? error.message : "Failed to start practice game",
+        variant: "error",
+        duration: DEFAULT_TOAST_DURATION,
+      });
+    } finally {
+      setPracticeStarting(false);
+    }
+  };
+
+  const stopPractice = () => {
+    practiceBots.stopAll();
+    setBotsActive(0);
+    showToast({ title: "Bots stopped", description: "All practice bots have been disconnected.", duration: DEFAULT_TOAST_DURATION });
+  };
+
+  // Tear down practice bots when their room finishes or disappears.
+  createEffect(() => {
+    if (botsActive() === 0) return;
+    const activeName = practiceBots.activeRoom;
+    if (!activeName) return;
+    const room = Object.values(rooms()).find(
+      (r) => r.name.trim().toLowerCase() === activeName.trim().toLowerCase(),
+    );
+    if (!room || room.gameStatus === "completed") {
+      practiceBots.stopAll();
+      setBotsActive(0);
+    }
+  });
+
+  // Always disconnect bots when leaving the page.
+  onCleanup(() => practiceBots.stopAll());
+
   return (
     <div class="flex h-screen flex-col bg-[#1a1a2e]">
         {/* Top Bar */}
@@ -388,14 +492,36 @@ const VoteBox: Component = () => {
               </span>
             </Show>
           </div>
-          <Button
-            size="sm"
-            onClick={() => setShowCreateRoom(true)}
-            disabled={!connected()}
-            data-testid={TID.createRoomBtn}
-          >
-            + New Room
-          </Button>
+          <div class="flex items-center gap-2">
+            <Show when={botsActive() > 0}>
+              <button
+                onClick={stopPractice}
+                class="flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/20"
+                title="Disconnect all practice bots"
+              >
+                <span class="inline-block h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
+                Stop Bots ({botsActive()})
+              </button>
+            </Show>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowPractice((v) => !v)}
+              disabled={!connected()}
+              class="border-violet-400/40 text-violet-200 hover:bg-violet-500/20"
+              data-testid="practice-bots-btn"
+            >
+              🤖 Practice vs Bots
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setShowCreateRoom(true)}
+              disabled={!connected()}
+              data-testid={TID.createRoomBtn}
+            >
+              + New Room
+            </Button>
+          </div>
         </div>
 
         {/* Create Room Panel */}
@@ -463,6 +589,89 @@ const VoteBox: Component = () => {
                     data-testid={TID.submitCreateRoomBtn}
                   >
                     Create (${buyinAmount().toFixed(0)} | {votesPerPlayer()}v)
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Show>
+
+        {/* Practice vs Bots Panel */}
+        <Show when={showPractice()}>
+          <div class="border-b border-violet-400/20 bg-violet-950/30 backdrop-blur-md p-4">
+            <div class="mx-auto max-w-3xl space-y-3">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-violet-200">🤖 Practice vs Bots</span>
+                <span class="text-xs text-white/40">Creates a private room and fills it with AI players. Click Ready to start.</span>
+              </div>
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-white/60">Bots</label>
+                  <div class="flex gap-1">
+                    <For each={[2, 3, 4, 6]}>
+                      {(n) => (
+                        <button
+                          onClick={() => setPracticeBotCount(n)}
+                          class="flex-1 rounded-md border px-2 py-1.5 text-sm font-medium transition-colors"
+                          classList={{
+                            "border-violet-400/60 bg-violet-500/30 text-violet-100": practiceBotCount() === n,
+                            "border-white/10 bg-white/5 text-white/50 hover:bg-white/10": practiceBotCount() !== n,
+                          }}
+                        >
+                          {n}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-white/60">Bot style</label>
+                  <select
+                    value={practiceStrategy()}
+                    onChange={(e) => setPracticeStrategy(e.currentTarget.value as Strategy)}
+                    class="w-full rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white shadow-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                  >
+                    <option value="mixed">Mixed</option>
+                    <option value="contrarian">Contrarian</option>
+                    <option value="follower">Follower</option>
+                    <option value="random">Random</option>
+                    <option value="splitter">Splitter</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-white/60">Buy-in ($)</label>
+                  <input
+                    type="number" min="0.01" step="1"
+                    value={buyinAmount()}
+                    onInput={(e) => setBuyinAmount(parseFloat(e.currentTarget.value) || 10)}
+                    class="w-full rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white shadow-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                  />
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-white/60">Votes / Player</label>
+                  <input
+                    type="number" min="1" max="20" step="1"
+                    value={votesPerPlayer()}
+                    onInput={(e) => setVotesPerPlayer(parseInt(e.currentTarget.value) || 5)}
+                    class="w-full rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white shadow-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                  />
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <label class="flex items-center gap-1.5 text-xs cursor-pointer" classList={{ "text-emerald-400": combatEnabled(), "text-white/40": !combatEnabled() }}>
+                  <input type="checkbox" checked={combatEnabled()} onChange={(e) => setCombatEnabled(e.currentTarget.checked)} class="rounded" />
+                  ⚔️ Combat
+                </label>
+                <div class="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setShowPractice(false)} class="border-white/20 text-white/70 hover:bg-white/10">Cancel</Button>
+                  <Button
+                    size="sm"
+                    onClick={startPractice}
+                    disabled={!connected() || practiceStarting() || buyinAmount() <= 0}
+                    class="bg-violet-600 hover:bg-violet-500"
+                    data-testid="start-practice-btn"
+                  >
+                    {practiceStarting() ? "Starting…" : `Start vs ${practiceBotCount()} bots`}
                   </Button>
                 </div>
               </div>
@@ -553,14 +762,24 @@ const VoteBox: Component = () => {
             <Show when={!currentRoom() || !rooms()[currentRoom()!]}>
               <div class="flex h-64 items-center justify-center">
                 <div class="text-center">
-                  <Show when={roomIds().length > 0} fallback={
-                    <>
-                      <p class="text-lg font-medium text-white/40">No rooms yet</p>
-                      <p class="text-sm text-white/30">Create a room to get started</p>
-                    </>
-                  }>
-                    <p class="text-lg font-medium text-white/40">Select a room to join</p>
-                    <p class="text-sm text-white/30">Click a room tab above, or create a new one</p>
+                  <Show
+                    when={connected() && subscribed()}
+                    fallback={
+                      <div class="flex flex-col items-center gap-2">
+                        <span class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-amber-400" />
+                        <p class="text-sm text-white/40">Syncing game state…</p>
+                      </div>
+                    }
+                  >
+                    <Show when={roomIds().length > 0} fallback={
+                      <>
+                        <p class="text-lg font-medium text-white/40">No rooms yet</p>
+                        <p class="text-sm text-white/30">Create a room to get started</p>
+                      </>
+                    }>
+                      <p class="text-lg font-medium text-white/40">Select a room to join</p>
+                      <p class="text-sm text-white/30">Click a room tab above, or create a new one</p>
+                    </Show>
                   </Show>
                 </div>
               </div>

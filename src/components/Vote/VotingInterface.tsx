@@ -2,9 +2,9 @@ import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup
 import { useNavigate } from "@solidjs/router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue, EndRoundVote, Equipment, BattleArena, BattleUnit, SideBet, LaborerGenetics, Tournament, GameEvent } from "~/module_bindings/types";
+import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue, EndRoundVote, Equipment, BattleArena, BattleUnit, SideBet, LaborerGenetics, Tournament, GameEvent, GuaranteePurchase } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
-import RoundTimer from "./RoundTimer";
+import RoundTimer, { type GamePhase } from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
 import EliminationModal from "./EliminationModal";
 import ChatPanel from "../game/ChatPanel";
@@ -17,6 +17,7 @@ import { DebugPanel } from "~/components/dev/DebugPanel";
 import { AdminPanel } from "~/components/dev/AdminPanel";
 import { ToastHelper } from "~/lib/toast-helpers";
 import { sounds } from "~/lib/sounds";
+import { buyListedVote, makeOffer } from "~/lib/vote-trading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import ColonyViewport, { type ColonyUnit, type ColonyResource, type ColonyBuilding, type TeamColor, type OtherPlayerAvatar } from "../game/ColonyViewport";
 import UnitContextPanel from "../game/UnitContextPanel";
@@ -61,7 +62,9 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [sideBets, setSideBets] = createSignal<SideBet[]>([]);
   const [genetics, setGenetics] = createSignal<LaborerGenetics[]>([]);
   const [tournaments, setTournaments] = createSignal<Tournament[]>([]);
+  const [guaranteePurchases, setGuaranteePurchases] = createSignal<GuaranteePurchase[]>([]);
   const [activePanel, setActivePanel] = createSignal<string | null>(null);
+  const [gamePhase, setGamePhase] = createSignal<GamePhase>("voting");
   const [battleDismissed, setBattleDismissed] = createSignal(false);
   const [gameOverDismissed, setGameOverDismissed] = createSignal(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = createSignal(false);
@@ -128,7 +131,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           }
           setLastProcessedRound(newRoom.currentRound);
 
-          if (newRoom.combatEnabled && newRoom.gameStatus === "in_progress") {
+          if (newRoom.combatEnabled && newRoom.gameStatus === "active") {
             const roomUnits = serverUnits().filter(
               (u) => u.roomId === props.room.id && u.unitType === "minion"
             );
@@ -306,6 +309,12 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     connection.db.tournament.onDelete((ctx, t) => owned(() => setTournaments(prev => prev.filter(x => x.id !== t.id))));
     setTournaments(Array.from(connection.db.tournament.iter()));
 
+    const refreshGuaranteePurchases = () => owned(() => setGuaranteePurchases(Array.from(connection.db.guarantee_purchase.iter())));
+    connection.db.guarantee_purchase.onInsert(refreshGuaranteePurchases);
+    connection.db.guarantee_purchase.onUpdate(refreshGuaranteePurchases);
+    connection.db.guarantee_purchase.onDelete(refreshGuaranteePurchases);
+    refreshGuaranteePurchases();
+
     // Subscribe to game events for the activity feed and replay viewer
     const roomIdStr = props.room.id.toString();
     connection.db.game_event.onInsert((ctx, event) => {
@@ -349,6 +358,24 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const redVotes = () => myVotes().filter((v) => v.color === "red");
   const blueVotes = () => myVotes().filter((v) => v.color === "blue");
   const unsetVotes = () => myVotes().filter((v) => !v.color);
+
+  // Guarantees the current player has purchased (feeds the EV calculator).
+  const myId = () => props.currentUser.identity.toHexString();
+  const myGuaranteesPurchased = () =>
+    guaranteePurchases().filter((p) => p.buyerId === myId()).length;
+
+  // Phase-aware HUD: a single source of truth for "what should the player focus
+  // on right now". Colony controls recede during Voting and come forward during
+  // Action — nothing is ever hidden, only de-emphasized.
+  const phaseFocusHint = () => {
+    switch (gamePhase()) {
+      case "voting": return "🗳️ Voting — cast & trade your votes";
+      case "action": return "⚡ Action — gather resources & build your colony";
+      case "resolution": return "📊 Resolution — lock in, round resolving";
+    }
+  };
+  // True while colony/building actions are the priority (Action phase).
+  const colonyFocus = () => gamePhase() === "action";
 
   // Get remaining players (not eliminated)
   const remainingPlayers = () => {
@@ -580,24 +607,13 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     ),
   );
 
-  const handleBuyVote = async (voteId: number, price: number) => {
-    const connection = conn();
-    if (!connection) return;
-    if (props.currentUser.walletBalance < price) {
-      ToastHelper.warning("Insufficient Funds", `You need $${price}`);
-      return;
-    }
-    try {
-      connection.reducers.transferVoteOwnership({
-        voteId,
-        buyerId: props.currentUser.identity.toHexString(),
-        price,
-      });
-      ToastHelper.success("Vote Purchased", `Bought vote #${voteId} for $${price}`);
-      sounds.tradeComplete();
-    } catch {
-      ToastHelper.error("Failed to purchase vote");
-    }
+  const handleBuyVote = (voteId: number, price: number) => {
+    buyListedVote(conn(), {
+      voteId,
+      buyerId: props.currentUser.identity.toHexString(),
+      price,
+      walletBalance: props.currentUser.walletBalance,
+    });
   };
 
   const handleVoteEndRound = async () => {
@@ -629,6 +645,45 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const handleTradeOfferClick = (offerId: number, screenX: number, screenY: number) => {
     setTradePopup({ offerId, x: screenX, y: screenY });
   };
+
+  // ── Vote-market ticker ────────────────────────────────────────────────
+  // Persistent, glanceable price signal so players can track the vote market
+  // without opening the Market panel. Recent vote sales drive "last trade";
+  // open listings drive the lowest ask per color (what you'd pay to buy now).
+  const voteSales = createMemo(() =>
+    transactions()
+      .filter((t) => t.roomId === props.room.id && t.transactionType === "vote_sale")
+      .sort((a, b) => Number(b.timestamp) - Number(a.timestamp)),
+  );
+  const lastTradePrice = () => voteSales()[0]?.amount ?? null;
+  const prevTradePrice = () => voteSales()[1]?.amount ?? null;
+  const tradeCount = () => voteSales().length;
+  const openListings = createMemo(() =>
+    votes().filter((v) => v.roomId === props.room.id && v.isForSale),
+  );
+  const lowestAsk = (color: "red" | "blue") => {
+    const prices = openListings()
+      .filter((v) => v.color === color)
+      .map((v) => v.salePrice || 0)
+      .filter((p) => p > 0);
+    return prices.length ? Math.min(...prices) : null;
+  };
+
+  // Flash the ticker briefly whenever a new trade settles, so the "action"
+  // of vote trading is felt even when the Market panel is closed.
+  let lastSeenTradeId: number | null = null;
+  const [tradeFlash, setTradeFlash] = createSignal(false);
+  createEffect(() => {
+    const latestId = voteSales()[0]?.id;
+    if (latestId === undefined) return;
+    if (latestId === lastSeenTradeId) return;
+    const firstRun = lastSeenTradeId === null;
+    lastSeenTradeId = latestId;
+    if (firstRun) return; // don't flash on initial load
+    setTradeFlash(true);
+    const t = setTimeout(() => setTradeFlash(false), 900);
+    onCleanup(() => clearTimeout(t));
+  });
 
   // Phase B-J handlers
   const roomBuildings = createMemo(() =>
@@ -827,9 +882,16 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         {/* Floating chat bubbles (bottom-left, layer 20) */}
         <FloatingChatBubbles roomId={props.room.id} players={allPlayers()} />
 
-        {/* Unit Context Panel (right side) */}
+        {/* Unit Context Panel (right side) — shifts left of the Market panel when
+            it's open so the two right-side panels never overlap. */}
         <Show when={selectedUnit()}>
-          <div class="absolute right-4 top-16 z-30 pointer-events-none">
+          <div
+            class="absolute top-16 z-30 pointer-events-none transition-all"
+            classList={{
+              "right-[19rem] xl:right-[21rem]": marketOpen(),
+              "right-4": !marketOpen(),
+            }}
+          >
             <UnitContextPanel
               unit={selectedUnit()!}
               stats={selectedUnitStats()}
@@ -876,6 +938,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               roundNumber={props.room.currentRound}
               roundStartTime={props.room.startTime ? BigInt(props.room.startTime) : undefined}
               roundDuration={props.room.roundDuration}
+              onPhaseChange={setGamePhase}
             />
           </div>
 
@@ -940,6 +1003,52 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </Show>
 
           <div class="flex-1" />
+
+          {/* Vote-market ticker — glanceable last-trade price + lowest ask per
+              color, with a flash on each new trade. Click to open the Market. */}
+          <Show when={props.room.gameStatus === "active"}>
+            <button
+              onClick={() => setMarketOpen(true)}
+              title="Vote market — last trade price and lowest ask to buy a Red/Blue vote. Click to open Market."
+              data-testid="vote-market-ticker"
+              class="flex items-center gap-2 rounded-md border px-2.5 py-1 transition-colors"
+              classList={{
+                "border-amber-400/60 bg-amber-400/20": tradeFlash(),
+                "border-white/10 bg-white/5 hover:bg-white/10": !tradeFlash(),
+              }}
+            >
+              <span class="text-[10px] uppercase tracking-wide text-white/40">Votes</span>
+              <span class="flex items-center gap-1 text-xs">
+                <span class="text-white/40">Last</span>
+                <Show when={lastTradePrice() !== null} fallback={<span class="text-white/30">—</span>}>
+                  <span class="font-semibold text-white">${lastTradePrice()!.toFixed(0)}</span>
+                  <Show when={prevTradePrice() !== null && lastTradePrice() !== prevTradePrice()}>
+                    <span
+                      classList={{
+                        "text-emerald-400": lastTradePrice()! > (prevTradePrice() ?? 0),
+                        "text-red-400": lastTradePrice()! < (prevTradePrice() ?? 0),
+                      }}
+                    >
+                      {lastTradePrice()! > (prevTradePrice() ?? 0) ? "▲" : "▼"}
+                    </span>
+                  </Show>
+                </Show>
+              </span>
+              <span class="flex items-center gap-1.5 border-l border-white/10 pl-2 text-xs">
+                <span class="flex items-center gap-0.5" title="Lowest ask — Red vote">
+                  <span class="h-2 w-2 rounded-full bg-red-500" />
+                  <span class="text-white/70">{lowestAsk("red") !== null ? `$${lowestAsk("red")!.toFixed(0)}` : "—"}</span>
+                </span>
+                <span class="flex items-center gap-0.5" title="Lowest ask — Blue vote">
+                  <span class="h-2 w-2 rounded-full bg-blue-500" />
+                  <span class="text-white/70">{lowestAsk("blue") !== null ? `$${lowestAsk("blue")!.toFixed(0)}` : "—"}</span>
+                </span>
+                <span class="text-[10px] text-white/30" title="Total vote trades this game">
+                  {tradeCount()}⇄
+                </span>
+              </span>
+            </button>
+          </Show>
 
           {/* Pot */}
           <div class="flex items-center gap-1.5 rounded-md bg-amber-500/20 px-2.5 py-1 border border-amber-400/30">
@@ -1019,6 +1128,22 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             </Button>
           </Show>
         </div>
+
+        {/* Phase focus hint — guides attention each phase without removing any
+            controls. Centered under the top bar; non-interactive. */}
+        <Show when={props.room.gameStatus === "active"}>
+          <div
+            class="pointer-events-none absolute left-1/2 top-14 z-20 -translate-x-1/2 flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium backdrop-blur-md transition-colors"
+            classList={{
+              "border-amber-400/40 bg-amber-500/15 text-amber-200": gamePhase() === "voting",
+              "border-green-400/40 bg-green-500/15 text-green-200": gamePhase() === "action",
+              "border-rose-400/40 bg-rose-500/15 text-rose-200": gamePhase() === "resolution",
+            }}
+            data-testid="phase-focus-hint"
+          >
+            {phaseFocusHint()}
+          </div>
+        </Show>
 
         {/* ── LEFT: Players Panel ── */}
         <div class="absolute left-3 top-14 bottom-20 z-10 flex flex-col" classList={{ "w-52": playersOpen(), "w-8": !playersOpen() }}>
@@ -1128,12 +1253,19 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </Show>
         </div>
 
-        {/* ── Panel Toolbar (bottom-left quick access) ── */}
-        <div class="absolute left-3 bottom-[calc(100%-100vh+4rem)] z-20 flex flex-col gap-1" style="bottom: auto; top: auto;">
-        </div>
-
-        {/* Floating panel buttons along top-right of viewport */}
-        <div class="absolute right-[calc(theme(spacing.3)+theme(spacing.8)+0.25rem)] top-14 z-20 flex flex-col gap-1">
+        {/* Floating panel buttons along top-right of viewport — sits just left of
+            the Market panel, tracking its open/collapsed width so they never overlap.
+            Colony controls recede during Voting and come forward during the Action
+            phase (phase-aware emphasis; still fully clickable at all times). */}
+        <div
+          class="absolute top-14 z-20 flex flex-col gap-1 transition-all"
+          classList={{
+            "right-[19rem] xl:right-[21rem]": marketOpen(),
+            "right-12": !marketOpen(),
+            "opacity-100": colonyFocus() || activePanel() !== null,
+            "opacity-50 hover:opacity-100": !colonyFocus() && activePanel() === null,
+          }}
+        >
           {[
             { key: "buildings", label: "Build", icon: "🏗️" },
             { key: "equipment", label: "Equip", icon: "⚔️" },
@@ -1208,7 +1340,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               buyinAmount={props.room.buyinAmount}
               myVoteCount={myVotes().length}
               totalVotes={votes().filter(v => v.roomId === props.room.id).length}
-              guaranteesPurchased={0}
+              guaranteesPurchased={myGuaranteesPurchased()}
             />
           </div>
         </Show>
@@ -1282,16 +1414,28 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               <For each={myVotes()}>
                 {(vote) => {
                   const isSelected = () => viewportSelectedIds().includes(vote.id);
+                  const isDragging = () => draggedVote()?.id === vote.id;
                   return (
                     <button
-                      class="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium transition-all"
+                      draggable={true}
+                      title="Drag onto a Red/Blue drop zone to cast, or click to select"
+                      class="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium transition-all cursor-grab active:cursor-grabbing"
                       classList={{
                         "border-red-400/60 bg-red-500/20 text-red-300": vote.color === "red",
                         "border-blue-400/60 bg-blue-500/20 text-blue-300": vote.color === "blue",
                         "border-dashed border-white/20 bg-white/5 text-white/40": !vote.color,
                         "ring-2 ring-green-400/70 ring-offset-1 ring-offset-transparent": isSelected(),
                         "scale-110 shadow-lg shadow-amber-400/20": hoveredVoteId() === vote.id,
+                        "opacity-40": isDragging(),
                       }}
+                      onDragStart={(e) => {
+                        if (e.dataTransfer) {
+                          e.dataTransfer.effectAllowed = "move";
+                          e.dataTransfer.setData("text/plain", String(vote.id));
+                        }
+                        handleDragStart(vote);
+                      }}
+                      onDragEnd={() => setDraggedVote(null)}
                       onClick={() => {
                         setViewportSelectedIds(prev =>
                           prev.includes(vote.id) ? prev.filter(id => id !== vote.id) : [...prev, vote.id]
@@ -1509,12 +1653,13 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                             </button>
                             <button
                               class="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] text-white/50 hover:bg-white/10"
+                              title="Post an open buy offer at your own price"
                               onClick={() => {
                                 setCounterPrice(Math.max(o().price * 0.8, 0.01));
                                 setShowCounter(true);
                               }}
                             >
-                              Counter
+                              Make Offer
                             </button>
                           </div>
                         </Show>
@@ -1533,21 +1678,13 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                               <button
                                 class="rounded bg-amber-500/80 px-2 py-1 text-[10px] font-semibold text-white hover:bg-amber-400"
                                 onClick={() => {
-                                  const connection = conn();
-                                  if (connection) {
-                                    try {
-                                      connection.reducers.createTradeOffer({
-                                        roomId: props.room.id,
-                                        roundNumber: props.room.currentRound,
-                                        offerType: "buy_vote",
-                                        voteId: undefined,
-                                        price: counterPrice(),
-                                      });
-                                      ToastHelper.success("Counter Offer", `Buy offer posted at $${counterPrice().toFixed(2)}`);
-                                    } catch {
-                                      ToastHelper.error("Failed to create counter offer");
-                                    }
-                                  }
+                                  makeOffer(conn(), {
+                                    roomId: props.room.id,
+                                    roundNumber: props.room.currentRound,
+                                    offerType: "buy_vote",
+                                    voteId: undefined,
+                                    price: counterPrice(),
+                                  });
                                   setTradePopup(null);
                                 }}
                               >
