@@ -1,6 +1,13 @@
 import { Component, createMemo, Show, For, createSignal } from "solid-js";
 import type { Unit, UnitStats, UnitInventory, UnitTaskQueue, Resource } from "~/module_bindings/types";
 import type { TeamColor } from "./ColonyViewport";
+import {
+  CAMP_COST,
+  CRAFT_RECIPES,
+  REFINE_RECIPES,
+  doubleChancePercent,
+  skillLevelForResource,
+} from "~/lib/skills";
 
 interface UnitContextPanelProps {
   unit: Unit;
@@ -9,10 +16,24 @@ interface UnitContextPanelProps {
   tasks?: UnitTaskQueue[];
   resources?: Resource[];
   onClose: () => void;
+  canSeeVoteColor?: boolean;
   onSetVoteColor?: (color: string) => void;
   onQueueTask?: (taskType: string, targetId: string) => void;
+  onHarvestKind?: (resourceType: string) => void;
+  onFoundCamp?: () => void;
+  onRefine?: (rawType: string) => void;
+  onCraft?: (recipe: string) => void;
+  onSendHome?: () => void;
+  hasCamp?: boolean;
   onCancelTask?: (taskId: number) => void;
 }
+
+const ACTIONS_PER_ROUND = 3;
+const FEATURED_HARVEST: Array<{ type: string; label: string }> = [
+  { type: "wood", label: "Wood" },
+  { type: "stone", label: "Stone" },
+  { type: "metal_ore", label: "Ore" },
+];
 
 const RESOURCE_LABELS: Record<string, string> = {
   wood: "Wood",
@@ -67,7 +88,8 @@ const RESOURCE_ICONS: Record<string, string> = {
 };
 
 const UnitContextPanel: Component<UnitContextPanelProps> = (props) => {
-  const teamColor = () => (props.unit.voteColor || "unset") as TeamColor;
+  const teamColor = () =>
+    (props.canSeeVoteColor === false ? "unset" : props.unit.voteColor || "unset") as TeamColor;
   const [harvestExpanded, setHarvestExpanded] = createSignal(false);
 
   const healthRatio = createMemo(() => {
@@ -95,6 +117,47 @@ const UnitContextPanel: Component<UnitContextPanelProps> = (props) => {
   const activeTasks = createMemo(() =>
     (props.tasks || []).filter((t) => t.status !== "completed" && t.status !== "failed"),
   );
+
+  const actionsLeft = () => props.stats?.actionsRemaining ?? 0;
+
+  const resourceStock = createMemo(() => {
+    const stock = new Map<string, number>();
+    for (const resource of props.resources || []) {
+      if (resource.amount <= 0) continue;
+      stock.set(resource.resourceType, (stock.get(resource.resourceType) ?? 0) + resource.amount);
+    }
+    return stock;
+  });
+
+  const otherHarvestTypes = createMemo(() =>
+    [...resourceStock().keys()]
+      .filter((kind) => !FEATURED_HARVEST.some((f) => f.type === kind))
+      .sort(),
+  );
+
+  const bagCount = (kind: string) => {
+    const inv = props.inventory;
+    if (!inv) return 0;
+    switch (kind) {
+      case "wood": return inv.wood;
+      case "stone": return inv.stone;
+      case "metal_ore": return inv.metalOre;
+      case "lumber": return inv.lumber;
+      case "cut_stone": return inv.cutStone;
+      case "metal_ingot": return inv.metalIngot;
+      default: return 0;
+    }
+  };
+
+  const canSendHome = () =>
+    actionsLeft() > 0 && !props.unit.voteColor && !props.unit.voteGuarantee;
+
+  const harvestDoublePct = (kind: string) => {
+    if (!props.stats) return 0;
+    return doubleChancePercent(skillLevelForResource(kind, props.stats));
+  };
+
+  const craftDoublePct = () => doubleChancePercent(props.stats?.craftingLevel ?? 1);
 
   return (
     <div class="pointer-events-auto w-72 rounded-xl border border-white/10 bg-slate-900/90 shadow-2xl backdrop-blur-xl">
@@ -151,6 +214,48 @@ const UnitContextPanel: Component<UnitContextPanelProps> = (props) => {
         </div>
       </Show>
 
+      <Show when={props.stats && props.unit.unitType === "minion"}>
+        <div class="px-4 pt-3">
+          <div class="mb-1 flex items-center justify-between text-[10px]">
+            <span class="text-white/40">Actions this round</span>
+            <span class="text-white/60">
+              {actionsLeft()} / {ACTIONS_PER_ROUND}
+            </span>
+          </div>
+          <div class="flex gap-1">
+            {Array.from({ length: ACTIONS_PER_ROUND }, (_, i) => (
+              <div
+                class="h-1.5 flex-1 rounded-full"
+                classList={{
+                  "bg-emerald-400": i < actionsLeft(),
+                  "bg-white/10": i >= actionsLeft(),
+                }}
+              />
+            ))}
+          </div>
+          <div class="mt-2 grid grid-cols-3 gap-1 text-center">
+            <div class="rounded bg-white/[0.03] px-1 py-1">
+              <div class="text-[9px] text-white/30">Wood</div>
+              <div class="text-[10px] text-amber-200/80">
+                L{props.stats!.woodcuttingLevel} · {doubleChancePercent(props.stats!.woodcuttingLevel)}%
+              </div>
+            </div>
+            <div class="rounded bg-white/[0.03] px-1 py-1">
+              <div class="text-[9px] text-white/30">Mine</div>
+              <div class="text-[10px] text-amber-200/80">
+                L{props.stats!.miningLevel} · {doubleChancePercent(props.stats!.miningLevel)}%
+              </div>
+            </div>
+            <div class="rounded bg-white/[0.03] px-1 py-1">
+              <div class="text-[9px] text-white/30">Craft</div>
+              <div class="text-[10px] text-amber-200/80">
+                L{props.stats!.craftingLevel} · {doubleChancePercent(props.stats!.craftingLevel)}%
+              </div>
+            </div>
+          </div>
+        </div>
+      </Show>
+
       {/* Stats grid */}
       <Show when={props.stats}>
         <div class="grid grid-cols-3 gap-1.5 px-4 py-3">
@@ -169,11 +274,24 @@ const UnitContextPanel: Component<UnitContextPanelProps> = (props) => {
         </div>
       </Show>
 
-      {/* Vote assignment */}
+      {/* Vote assignment — this minion *is* a vote ticket */}
       <div class="border-t border-white/5 px-4 py-3">
-        <div class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
-          Vote Color
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+          This unit is a vote
         </div>
+        <p class="mb-2 text-[10px] leading-snug text-white/40">
+          {props.canSeeVoteColor === false
+            ? "This player's vote is hidden until the round ends."
+            : "Cast it Red or Blue. Minority color lives; majority is eliminated."}
+        </p>
+        <Show
+          when={props.canSeeVoteColor !== false}
+          fallback={
+            <div class="rounded-lg border border-dashed border-white/10 bg-white/5 py-2 text-center text-[11px] text-white/35">
+              Color hidden
+            </div>
+          }
+        >
         <div class="flex gap-2">
           <button
             class="flex-1 rounded-lg py-1.5 text-xs font-medium transition-all"
@@ -196,6 +314,7 @@ const UnitContextPanel: Component<UnitContextPanelProps> = (props) => {
             Blue
           </button>
         </div>
+        </Show>
       </div>
 
       {/* Inventory */}
@@ -229,46 +348,143 @@ const UnitContextPanel: Component<UnitContextPanelProps> = (props) => {
         </div>
       </Show>
 
-      {/* Harvest assignment (minions only) */}
-      <Show when={props.unit.unitType === "minion" && props.resources && props.resources.length > 0}>
+      {/* Instant harvest — 1 action, 1 resource, no travel */}
+      <Show when={props.unit.unitType === "minion"}>
         <div class="border-t border-white/5 px-4 py-3">
-          <button
-            class="mb-2 flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-white/30 hover:text-white/50 transition-colors"
-            onClick={() => setHarvestExpanded((v) => !v)}
-          >
-            <span>Assign to Harvest</span>
-            <span>{harvestExpanded() ? "▲" : "▼"}</span>
-          </button>
-          <Show when={harvestExpanded()}>
-            {/* Current task indicator */}
-            <Show when={props.unit.taskType === "gather" && props.unit.targetId}>
-              <div class="mb-2 flex items-center justify-between rounded bg-amber-500/10 border border-amber-500/20 px-2 py-1.5">
-                <span class="text-[11px] text-amber-400">Currently harvesting</span>
-                <button
-                  class="text-[10px] text-white/30 hover:text-red-400 transition-colors"
-                  onClick={() => props.onQueueTask?.("", "")}
-                  title="Stop harvesting"
-                >
-                  Stop ✕
-                </button>
+          <div class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+            Harvest (1 action)
+          </div>
+          <div class="grid grid-cols-3 gap-1.5">
+            <For each={FEATURED_HARVEST}>
+              {(kind) => (
+                  <button
+                    class="rounded-lg border px-2 py-1.5 text-center transition-all disabled:cursor-not-allowed disabled:opacity-35"
+                    classList={{
+                      "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20":
+                        actionsLeft() > 0 && (resourceStock().get(kind.type) ?? 0) > 0,
+                      "border-white/5 bg-white/[0.03]":
+                        actionsLeft() <= 0 || (resourceStock().get(kind.type) ?? 0) <= 0,
+                    }}
+                    disabled={actionsLeft() <= 0 || (resourceStock().get(kind.type) ?? 0) <= 0}
+                    onClick={() => props.onHarvestKind?.(kind.type)}
+                  >
+                    <div class="text-sm">{RESOURCE_ICONS[kind.type] ?? "📦"}</div>
+                    <div class="text-[10px] font-medium text-white/70">{kind.label}</div>
+                    <div class="text-[9px] text-white/30">{resourceStock().get(kind.type) ?? 0} left</div>
+                    <div class="text-[9px] text-amber-300/70">{harvestDoublePct(kind.type)}% 2×</div>
+                  </button>
+                )}
+            </For>
+          </div>
+          <Show when={otherHarvestTypes().length > 0}>
+            <button
+              class="mt-2 flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-white/30 hover:text-white/50 transition-colors"
+              onClick={() => setHarvestExpanded((v) => !v)}
+            >
+              <span>Other resources</span>
+              <span>{harvestExpanded() ? "▲" : "▼"}</span>
+            </button>
+            <Show when={harvestExpanded()}>
+              <div class="mt-1 space-y-1 max-h-32 overflow-y-auto">
+                <For each={otherHarvestTypes()}>
+                  {(kind) => (
+                      <button
+                        class="flex w-full items-center justify-between rounded bg-white/[0.03] px-2 py-1.5 text-left border border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-35 hover:bg-emerald-500/10 hover:border-emerald-500/20"
+                        disabled={actionsLeft() <= 0 || (resourceStock().get(kind) ?? 0) <= 0}
+                        onClick={() => props.onHarvestKind?.(kind)}
+                      >
+                        <span class="flex items-center gap-1.5">
+                          <span>{RESOURCE_ICONS[kind] ?? "📦"}</span>
+                          <span class="text-[11px] text-white/60 capitalize">{kind.replace("_", " ")}</span>
+                        </span>
+                        <span class="text-[10px] text-white/30">{resourceStock().get(kind) ?? 0} left</span>
+                      </button>
+                    )}
+                </For>
               </div>
             </Show>
-            <div class="space-y-1 max-h-40 overflow-y-auto">
-              <For each={props.resources!.filter((r) => r.amount > 0)}>
-                {(resource) => (
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={props.unit.unitType === "minion"}>
+        <div class="border-t border-white/5 px-4 py-3 space-y-2">
+          <div class="text-[10px] font-semibold uppercase tracking-wider text-white/30">
+            Camp
+          </div>
+          <Show
+            when={props.hasCamp}
+            fallback={
+              <button
+                class="w-full rounded-lg border px-2 py-1.5 text-[11px] transition-all disabled:cursor-not-allowed disabled:opacity-35"
+                classList={{
+                  "border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20":
+                    actionsLeft() > 0 && bagCount("wood") >= CAMP_COST.wood && bagCount("stone") >= CAMP_COST.stone,
+                  "border-white/5 bg-white/[0.03] text-white/40":
+                    actionsLeft() <= 0 || bagCount("wood") < CAMP_COST.wood || bagCount("stone") < CAMP_COST.stone,
+                }}
+                disabled={actionsLeft() <= 0 || bagCount("wood") < CAMP_COST.wood || bagCount("stone") < CAMP_COST.stone}
+                onClick={() => props.onFoundCamp?.()}
+              >
+                Found camp · 3 wood + 2 stone
+              </button>
+            }
+          >
+            <p class="text-[11px] text-emerald-400/80">Camp is up. Refine and craft unlocked.</p>
+            <div class="mb-1 text-[10px] text-white/30">
+              Refine (1 action + 2 raw) · craft {craftDoublePct()}% 2×
+            </div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <For each={[...REFINE_RECIPES]}>
+                {(recipe) => (
                   <button
-                    class="flex w-full items-center justify-between rounded bg-white/[0.03] px-2 py-1.5 text-left hover:bg-emerald-500/10 hover:border-emerald-500/20 border border-transparent transition-all"
-                    onClick={() => props.onQueueTask?.("gather", resource.id)}
+                    class="rounded-lg border border-white/5 bg-white/[0.03] px-1.5 py-1.5 text-center text-[10px] text-white/70 disabled:opacity-35 hover:bg-sky-500/10"
+                    disabled={actionsLeft() <= 0 || bagCount(recipe.raw) < recipe.rawAmount}
+                    onClick={() => props.onRefine?.(recipe.raw)}
                   >
-                    <span class="flex items-center gap-1.5">
-                      <span>{RESOURCE_ICONS[resource.resourceType] ?? "📦"}</span>
-                      <span class="text-[11px] text-white/60 capitalize">{resource.resourceType.replace("_", " ")}</span>
-                    </span>
-                    <span class="text-[10px] text-white/30">{resource.amount}/{resource.maxAmount}</span>
+                    {recipe.label}
+                    <div class="text-[9px] text-white/30">{bagCount(recipe.raw)} raw</div>
                   </button>
                 )}
               </For>
             </div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <For each={[...CRAFT_RECIPES]}>
+                {(recipe) => {
+                  const canCraft =
+                    actionsLeft() > 0 &&
+                    bagCount("lumber") >= recipe.lumber &&
+                    bagCount("cut_stone") >= recipe.cutStone &&
+                    bagCount("metal_ingot") >= recipe.metalIngot;
+                  return (
+                    <button
+                      class="rounded-lg border border-white/5 bg-white/[0.03] px-1.5 py-1.5 text-center text-[10px] text-white/70 disabled:opacity-35 hover:bg-violet-500/10"
+                      disabled={!canCraft}
+                      onClick={() => props.onCraft?.(recipe.id)}
+                    >
+                      {recipe.label}
+                      <div class="text-[9px] text-white/30">{recipe.costLabel}</div>
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
+          <button
+            class="w-full rounded-lg border px-2 py-1.5 text-[11px] transition-all disabled:cursor-not-allowed disabled:opacity-35"
+            classList={{
+              "border-sky-500/30 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20": canSendHome(),
+              "border-white/5 bg-white/[0.03] text-white/40": !canSendHome(),
+            }}
+            disabled={!canSendHome()}
+            onClick={() => props.onSendHome?.()}
+          >
+            Send home · keep bag, void this vote — next lobby only
+          </button>
+          <Show when={props.unit.voteColor || props.unit.voteGuarantee}>
+            <p class="text-[10px] text-white/30">
+              Uncolor and drop any guarantee before sending home.
+            </p>
           </Show>
         </div>
       </Show>

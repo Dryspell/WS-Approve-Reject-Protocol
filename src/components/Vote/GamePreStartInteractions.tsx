@@ -14,6 +14,7 @@ import { TID } from "~/lib/test-ids";
 import LobbyViewport, { type LobbyPlayer } from "../game/LobbyViewport";
 import { characterForIndex } from "~/lib/asset-loader";
 import MinionManagementPanel from "../game/MinionManagementPanel";
+import RosterPicker from "../game/RosterPicker";
 import CharacterCustomizationPanel from "../game/CharacterCustomizationPanel";
 
 export default function GamePreStartInteractions(props: {
@@ -309,6 +310,17 @@ export default function GamePreStartInteractions(props: {
               <div class="text-9xl font-black text-white drop-shadow-2xl animate-pulse">
                 {countdown()}
               </div>
+            </div>
+          </Show>
+
+          <Show when={getUserIdForServer() && memberIds().includes(getUserIdForServer()!)}>
+            <div class="absolute bottom-48 left-1/2 -translate-x-1/2 z-10 w-full max-w-lg px-4">
+              <RosterPicker
+                conn={props.conn}
+                identity={props.identity}
+                roomId={currentRoom().id}
+                votesPerPlayer={currentRoom().votesPerPlayer || 5}
+              />
             </div>
           </Show>
 

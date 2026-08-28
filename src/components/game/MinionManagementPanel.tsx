@@ -5,6 +5,8 @@ import type { Unit, UnitStats } from "~/module_bindings/types";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { showToast } from "../ui/toast";
+import { doubleChancePercent } from "~/lib/skills";
+import RosterPicker from "./RosterPicker";
 
 // XP thresholds to reach levels 2-5
 const LEVEL_THRESHOLDS = [100, 300, 700, 1500];
@@ -103,6 +105,12 @@ export default function MinionManagementPanel(props: {
         <div class="flex flex-1 overflow-hidden">
           {/* Minion list */}
           <div class="flex-1 overflow-y-auto p-4 space-y-2">
+            <RosterPicker
+              conn={props.conn}
+              identity={props.identity}
+              roomId={parseInt(props.roomId, 10)}
+              votesPerPlayer={props.votesPerPlayer}
+            />
             <Show
               when={myMinions().length > 0}
               fallback={
@@ -177,7 +185,7 @@ export default function MinionManagementPanel(props: {
                             ? unit.voteColor
                               ? "Cannot send home: vote already cast"
                               : "Cannot send home: promised as guarantee"
-                            : "Send this minion home to keep them safe"
+                            : "Send home — they leave this expedition and wait for the next lobby"
                         }
                         onClick={(e) => {
                           e.stopPropagation();
@@ -247,6 +255,7 @@ export default function MinionManagementPanel(props: {
                                   <Show when={skill.level >= 5}>
                                     <span class="text-yellow-400 text-[9px]">MAX</span>
                                   </Show>
+                                  <span class="text-amber-300/70">{doubleChancePercent(skill.level)}% 2×</span>
                                 </span>
                               </div>
                               <div class="h-1.5 rounded-full bg-white/5 overflow-hidden">
@@ -276,7 +285,7 @@ export default function MinionManagementPanel(props: {
                       </button>
                       <p class="text-[9px] text-white/20 text-center mt-1">
                         {isSendHomeSafe(unit)
-                          ? "Removes minion from game — safe from combat death"
+                          ? "Leaves this expedition. They wait on your account for the next lobby."
                           : unit.voteColor
                           ? "Vote already cast — cannot send home"
                           : "Promised as guarantee — cannot send home"}

@@ -2,7 +2,7 @@ import { type Component, createSignal, createMemo, For, Show, onMount, onCleanup
 import { useNavigate } from "@solidjs/router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue, EndRoundVote, Equipment, BattleArena, BattleUnit, SideBet, LaborerGenetics, Tournament, GameEvent, GuaranteePurchase } from "~/module_bindings/types";
+import type { User, GameRoom, Vote, Transaction, Unit, Resource, UnitStats, UnitInventory, UnitTaskQueue, EndRoundVote, Equipment, BattleArena, BattleUnit, BattleCombatEvent, SideBet, GameEvent, Guarantee, GuaranteePurchase, OwnedLaborer, OwnedEquipment } from "~/module_bindings/types";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import RoundTimer, { type GamePhase } from "./RoundTimer";
 import VoteMarketPanel from "./VoteMarketPanel";
@@ -17,20 +17,23 @@ import { DebugPanel } from "~/components/dev/DebugPanel";
 import { AdminPanel } from "~/components/dev/AdminPanel";
 import { ToastHelper } from "~/lib/toast-helpers";
 import { sounds } from "~/lib/sounds";
-import { buyListedVote, makeOffer } from "~/lib/vote-trading";
+import { buyListedVote, listVote, unlistVote, makeOffer } from "~/lib/vote-trading";
+import { playerFateAtLock, suggestedListPrice, visibleVoteColor } from "~/lib/vote-tally";
+import { isVoteGuaranteed } from "~/lib/guarantees";
+import { encodeWhisper } from "~/lib/whisper";
+import VoteTallyBoard from "./VoteTallyBoard";
+import VoteCoach from "./VoteCoach";
+import PlayerContextMenu, { type PlayerMenuTarget } from "../game/PlayerContextMenu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import ColonyViewport, { type ColonyUnit, type ColonyResource, type ColonyBuilding, type TeamColor, type OtherPlayerAvatar } from "../game/ColonyViewport";
 import UnitContextPanel from "../game/UnitContextPanel";
-import BuildingPanel from "../game/BuildingPanel";
 import EquipmentPanel from "../game/EquipmentPanel";
 import BattleArenaViewport from "../game/BattleArenaViewport";
-import GeneticsPanel from "../game/GeneticsPanel";
 import SideBetPanel from "../game/SideBetPanel";
-import EVCalculator from "../game/EVCalculator";
-import TournamentPanel from "../game/TournamentPanel";
 import { characterForIndex, type CharacterClass } from "~/lib/asset-loader";
 import { resolvePlayerName } from "~/lib/game-utils";
 import { TID } from "~/lib/test-ids";
+import AccountSaveCard from "../game/AccountSaveCard";
 
 
 interface VotingInterfaceProps {
@@ -59,16 +62,19 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [equipment, setEquipment] = createSignal<Equipment[]>([]);
   const [battleArenas, setBattleArenas] = createSignal<BattleArena[]>([]);
   const [battleUnits, setBattleUnits] = createSignal<BattleUnit[]>([]);
+  const [battleEvents, setBattleEvents] = createSignal<BattleCombatEvent[]>([]);
   const [sideBets, setSideBets] = createSignal<SideBet[]>([]);
-  const [genetics, setGenetics] = createSignal<LaborerGenetics[]>([]);
-  const [tournaments, setTournaments] = createSignal<Tournament[]>([]);
+  const [guarantees, setGuarantees] = createSignal<Guarantee[]>([]);
   const [guaranteePurchases, setGuaranteePurchases] = createSignal<GuaranteePurchase[]>([]);
   const [activePanel, setActivePanel] = createSignal<string | null>(null);
   const [gamePhase, setGamePhase] = createSignal<GamePhase>("voting");
   const [battleDismissed, setBattleDismissed] = createSignal(false);
+  const [watchingArenaId, setWatchingArenaId] = createSignal<number | null>(null);
   const [gameOverDismissed, setGameOverDismissed] = createSignal(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = createSignal(false);
   const [gameEvents, setGameEvents] = createSignal<GameEvent[]>([]);
+  const [ownedLaborers, setOwnedLaborers] = createSignal<OwnedLaborer[]>([]);
+  const [ownedEquipment, setOwnedEquipment] = createSignal<OwnedEquipment[]>([]);
 
   // Round processing is now server-authoritative via RoundTimerEntry scheduler.
   // Clients are passive observers — room state changes drive the UI.
@@ -115,6 +121,23 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     // Subscribe to GameRoom updates to detect round changes
     connection.db.game_room.onUpdate((ctx, oldRoom, newRoom) => {
       owned(() => {
+        if (
+          newRoom.id === props.room.id &&
+          (oldRoom.gameStatus === "active" || oldRoom.gameStatus === "arena") &&
+          newRoom.gameStatus === "completed"
+        ) {
+          const roundVotes = votes().filter(
+            (v) => v.roomId === props.room.id && v.roundNumber === oldRoom.currentRound
+          );
+          const red = roundVotes.filter((v) => v.color === "red").length;
+          const blue = roundVotes.filter((v) => v.color === "blue").length;
+          const minority: "red" | "blue" | "tie" =
+            red < blue ? "red" : blue < red ? "blue" : "tie";
+          setSavedRoundTotals({ red, blue, minority });
+          if (minority === "tie" && red + blue > 0) {
+            setShowEliminationModal(true);
+          }
+        }
         if (newRoom.id === props.room.id && newRoom.currentRound > lastProcessedRound()) {
           const prevRound = lastProcessedRound();
           const prevRoundVotes = votes().filter(
@@ -130,21 +153,6 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             setShowEliminationModal(true);
           }
           setLastProcessedRound(newRoom.currentRound);
-
-          if (newRoom.combatEnabled && newRoom.gameStatus === "active") {
-            const roomUnits = serverUnits().filter(
-              (u) => u.roomId === props.room.id && u.unitType === "minion"
-            );
-            const redIds = roomUnits.filter((u) => u.voteColor === "red").map((u) => u.id);
-            const blueIds = roomUnits.filter((u) => u.voteColor === "blue").map((u) => u.id);
-            if (redIds.length > 0 && blueIds.length > 0) {
-              try {
-                connection.reducers.createBattleArena({ roomId: props.room.id, redUnitIds: redIds, blueUnitIds: blueIds });
-              } catch (e) {
-                console.warn("Auto-battle trigger failed:", e);
-              }
-            }
-          }
         }
       });
     });
@@ -284,6 +292,13 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     connection.db.equipment.onDelete((ctx, eq) => owned(() => setEquipment(prev => prev.filter(e => e.id !== eq.id))));
     setEquipment(Array.from(connection.db.equipment.iter()));
 
+    connection.db.owned_laborer.onInsert((_ctx, lab) => owned(() => setOwnedLaborers((prev) => prev.some((x) => x.id === lab.id) ? prev : [...prev, lab])));
+    connection.db.owned_laborer.onDelete((_ctx, lab) => owned(() => setOwnedLaborers((prev) => prev.filter((x) => x.id !== lab.id))));
+    setOwnedLaborers(Array.from(connection.db.owned_laborer.iter()));
+    connection.db.owned_equipment.onInsert((_ctx, item) => owned(() => setOwnedEquipment((prev) => prev.some((x) => x.id === item.id) ? prev : [...prev, item])));
+    connection.db.owned_equipment.onDelete((_ctx, item) => owned(() => setOwnedEquipment((prev) => prev.filter((x) => x.id !== item.id))));
+    setOwnedEquipment(Array.from(connection.db.owned_equipment.iter()));
+
     connection.db.battle_arena.onInsert((ctx, a) => owned(() => { setBattleDismissed(false); setBattleArenas(prev => prev.some(x => x.id === a.id) ? prev : [...prev, a]); }));
     connection.db.battle_arena.onUpdate((ctx, old, a) => owned(() => setBattleArenas(prev => prev.map(x => x.id === a.id ? a : x))));
     connection.db.battle_arena.onDelete((ctx, a) => owned(() => setBattleArenas(prev => prev.filter(x => x.id !== a.id))));
@@ -294,20 +309,20 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     connection.db.battle_unit.onDelete((ctx, bu) => owned(() => setBattleUnits(prev => prev.filter(x => x.id !== bu.id))));
     setBattleUnits(Array.from(connection.db.battle_unit.iter()));
 
+    connection.db.battle_combat_event.onInsert((_ctx, ev) => owned(() => setBattleEvents(prev => prev.some(x => x.id === ev.id) ? prev : [...prev, ev])));
+    connection.db.battle_combat_event.onDelete((_ctx, ev) => owned(() => setBattleEvents(prev => prev.filter(x => x.id !== ev.id))));
+    setBattleEvents(Array.from(connection.db.battle_combat_event.iter()));
+
     connection.db.side_bet.onInsert((ctx, sb) => owned(() => setSideBets(prev => prev.some(x => x.id === sb.id) ? prev : [...prev, sb])));
     connection.db.side_bet.onUpdate((ctx, old, sb) => owned(() => setSideBets(prev => prev.map(x => x.id === sb.id ? sb : x))));
     connection.db.side_bet.onDelete((ctx, sb) => owned(() => setSideBets(prev => prev.filter(x => x.id !== sb.id))));
     setSideBets(Array.from(connection.db.side_bet.iter()));
 
-    connection.db.laborer_genetics.onInsert((ctx, g) => owned(() => setGenetics(prev => prev.some(x => x.unitId === g.unitId) ? prev : [...prev, g])));
-    connection.db.laborer_genetics.onUpdate((ctx, old, g) => owned(() => setGenetics(prev => prev.map(x => x.unitId === g.unitId ? g : x))));
-    connection.db.laborer_genetics.onDelete((ctx, g) => owned(() => setGenetics(prev => prev.filter(x => x.unitId !== g.unitId))));
-    setGenetics(Array.from(connection.db.laborer_genetics.iter()));
-
-    connection.db.tournament.onInsert((ctx, t) => owned(() => setTournaments(prev => prev.some(x => x.id === t.id) ? prev : [...prev, t])));
-    connection.db.tournament.onUpdate((ctx, old, t) => owned(() => setTournaments(prev => prev.map(x => x.id === t.id ? t : x))));
-    connection.db.tournament.onDelete((ctx, t) => owned(() => setTournaments(prev => prev.filter(x => x.id !== t.id))));
-    setTournaments(Array.from(connection.db.tournament.iter()));
+    const refreshGuarantees = () => owned(() => setGuarantees(Array.from(connection.db.guarantee.iter())));
+    connection.db.guarantee.onInsert(refreshGuarantees);
+    connection.db.guarantee.onUpdate(refreshGuarantees);
+    connection.db.guarantee.onDelete(refreshGuarantees);
+    refreshGuarantees();
 
     const refreshGuaranteePurchases = () => owned(() => setGuaranteePurchases(Array.from(connection.db.guarantee_purchase.iter())));
     connection.db.guarantee_purchase.onInsert(refreshGuaranteePurchases);
@@ -359,19 +374,17 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const blueVotes = () => myVotes().filter((v) => v.color === "blue");
   const unsetVotes = () => myVotes().filter((v) => !v.color);
 
-  // Guarantees the current player has purchased (feeds the EV calculator).
-  const myId = () => props.currentUser.identity.toHexString();
-  const myGuaranteesPurchased = () =>
-    guaranteePurchases().filter((p) => p.buyerId === myId()).length;
+  const votesRevealed = () =>
+    showEliminationModal() || props.room.gameStatus === "completed" || props.room.gameStatus === "arena";
 
   // Phase-aware HUD: a single source of truth for "what should the player focus
   // on right now". Colony controls recede during Voting and come forward during
   // Action — nothing is ever hidden, only de-emphasized.
   const phaseFocusHint = () => {
     switch (gamePhase()) {
-      case "voting": return "🗳️ Voting — cast & trade your votes";
-      case "action": return "⚡ Action — gather resources & build your colony";
-      case "resolution": return "📊 Resolution — lock in, round resolving";
+      case "voting": return "🗳️ Trade & vote — minority lives, majority is out.";
+      case "action": return "⚡ Colony actions — you can still recast and trade.";
+      case "resolution": return "📊 Timeframe ending — votes lock when the timer hits zero.";
     }
   };
   // True while colony/building actions are the priority (Action phase).
@@ -390,6 +403,33 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     return allPlayers().filter((player) =>
       props.room.eliminatedPlayers.includes(player.identity.toHexString())
     );
+  };
+
+  const endedInTie = () =>
+    props.room.gameStatus === "completed" && remainingPlayers().length > 2;
+
+  const keptFromThisMatch = createMemo(() => {
+    const me = props.currentUser.identity.toHexString();
+    return ownedLaborers().filter((lab) => lab.ownerId === me && lab.sourceRoomId === props.room.id);
+  });
+
+  const gearNamesFor = (laborerId: number) =>
+    ownedEquipment()
+      .filter((item) => item.laborerId === laborerId)
+      .map((item) => item.itemName)
+      .join(" · ");
+
+  const resolvedRoundVotes = () =>
+    votes().filter((v) => v.roomId === props.room.id && v.roundNumber === props.room.currentRound);
+
+  const playerPayout = (playerId: string) => {
+    if (endedInTie()) {
+      const cast = resolvedRoundVotes().filter((v) => v.color === "red" || v.color === "blue");
+      const mine = cast.filter((v) => v.playerId === playerId).length;
+      if (cast.length === 0) return 0;
+      return (props.room.potSize * mine) / cast.length;
+    }
+    return props.room.potSize / Math.max(remainingPlayers().length, 1);
   };
 
   // Calculate vote totals for elimination modal
@@ -455,7 +495,12 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
   const [chatOpen, setChatOpen] = createSignal(false);
   const [viewportSelectedIds, setViewportSelectedIds] = createSignal<number[]>([]);
   const [hoveredVoteId, setHoveredVoteId] = createSignal<number | null>(null);
+  const [hoveredOwnerId, setHoveredOwnerId] = createSignal<string | null>(null);
+  const [playerMenu, setPlayerMenu] = createSignal<PlayerMenuTarget | null>(null);
+  const [whisperTarget, setWhisperTarget] = createSignal<{ id: string; name: string } | null>(null);
+  const [whisperText, setWhisperText] = createSignal("");
   const [voteFlashColor, setVoteFlashColor] = createSignal<string | null>(null);
+  const [listPrice, setListPrice] = createSignal(5);
 
   const handleDropZoneClick = (color: string) => {
     const selected = viewportSelectedIds();
@@ -494,7 +539,13 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         const stats = getStats(unit.id);
         return {
           id: unit.id,
-          team: (unit.voteColor || "unset") as TeamColor,
+          team: (visibleVoteColor(
+            unit.ownerId,
+            unit.voteColor,
+            props.currentUser.identity.toHexString(),
+            votesRevealed(),
+          ) || "unset") as TeamColor,
+          ownerId: unit.ownerId,
           x: unit.position.x - 50,
           z: unit.position.y - 50,
           characterClass: characterForIndex(i),
@@ -616,6 +667,34 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     });
   };
 
+  const selectedVotes = createMemo(() =>
+    myVotes().filter((v) => viewportSelectedIds().includes(v.id)),
+  );
+
+  const voteGuaranteed = (voteId: number) =>
+    isVoteGuaranteed(voteId, guarantees(), guaranteePurchases());
+
+  const selectedListed = createMemo(() => selectedVotes().filter((v) => v.isForSale));
+  const selectedUnlisted = createMemo(() =>
+    selectedVotes().filter((v) => !v.isForSale && !voteGuaranteed(v.id)),
+  );
+  const selectedGuaranteed = createMemo(() =>
+    selectedVotes().filter((v) => voteGuaranteed(v.id)),
+  );
+
+  const handleListSelected = () => {
+    const price = listPrice();
+    for (const vote of selectedUnlisted()) {
+      listVote(conn(), vote.id, price);
+    }
+  };
+
+  const handleUnlistSelected = () => {
+    for (const vote of selectedListed()) {
+      unlistVote(conn(), vote.id);
+    }
+  };
+
   const handleVoteEndRound = async () => {
     const connection = conn();
     if (!connection) return;
@@ -636,7 +715,13 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
       if (v.roomId !== props.room.id || !v.isForSale) continue;
       const unit = myUnits.find((u) => u.ownerId === v.playerId);
       if (unit) {
-        offers.push({ unitId: unit.id, offerId: v.id, type: "sell", price: v.salePrice || 0, color: (v.color as "red" | "blue") || null });
+        offers.push({
+          unitId: unit.id,
+          offerId: v.id,
+          type: "sell",
+          price: v.salePrice || 0,
+          color: (visibleVoteColor(v.playerId, v.color, props.currentUser.identity.toHexString(), votesRevealed()) as "red" | "blue") || null,
+        });
       }
     }
     return offers;
@@ -644,6 +729,84 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
 
   const handleTradeOfferClick = (offerId: number, screenX: number, screenY: number) => {
     setTradePopup({ offerId, x: screenX, y: screenY });
+  };
+
+  const openPlayerMenu = (playerId: string, x: number, y: number, unitId?: number) => {
+    const player = allPlayers().find((p) => p.identity.toHexString() === playerId);
+    const listed = unitId != null
+      ? votes().find((v) => v.id === unitId && v.isForSale)
+      : votes().find((v) => v.playerId === playerId && v.isForSale);
+    setPlayerMenu({
+      playerId,
+      name: player?.name || "Player",
+      unitId,
+      isSelf: playerId === props.currentUser.identity.toHexString(),
+      listedPrice: listed?.salePrice ?? undefined,
+      x,
+      y,
+    });
+  };
+
+  const handleWorldContextMenu = (target: { unitId?: number; playerId?: string }, x: number, y: number) => {
+    if (target.playerId) {
+      openPlayerMenu(target.playerId, x, y, target.unitId);
+      return;
+    }
+    if (target.unitId != null) {
+      const unit = serverUnits().find((u) => u.id === target.unitId);
+      if (unit?.ownerId) openPlayerMenu(unit.ownerId, x, y, target.unitId);
+    }
+  };
+
+  const startWhisper = (playerId: string, name: string) => {
+    setPlayerMenu(null);
+    setWhisperTarget({ id: playerId, name });
+    setWhisperText("");
+    setChatOpen(true);
+  };
+
+  const sendWhisper = () => {
+    const target = whisperTarget();
+    const text = whisperText().trim();
+    const connection = conn();
+    if (!target || !text || !connection) return;
+    try {
+      connection.reducers.sendChatMessage({
+        roomId: `game_${props.room.id}`,
+        text: encodeWhisper(target.id, text),
+        roundNumber: props.room.currentRound,
+      });
+      setWhisperText("");
+      ToastHelper.success("Whisper sent", `To ${target.name}`);
+    } catch (e: any) {
+      ToastHelper.error(e?.message || "Failed to send whisper");
+    }
+  };
+
+  const hoverHint = () => {
+    const owner = allPlayers().find((p) => p.identity.toHexString() === hoveredOwnerId());
+    const vote = votes().find((v) => v.id === hoveredVoteId());
+    const who =
+      hoveredOwnerId() === props.currentUser.identity.toHexString()
+        ? "You"
+        : owner?.name || "Player";
+    const shown = visibleVoteColor(vote?.playerId, vote?.color, props.currentUser.identity.toHexString(), votesRevealed());
+    const color = shown ? ` · ${shown}` : "";
+    const listed = vote?.isForSale ? ` · listed $${vote.salePrice}` : "";
+    return `${who}${color}${listed}`;
+  };
+
+  const offerToBuyFrom = (playerId: string) => {
+    setPlayerMenu(null);
+    setChatOpen(true);
+    makeOffer(conn(), {
+      roomId: props.room.id,
+      roundNumber: props.room.currentRound,
+      offerType: "buy_vote",
+      price: listPrice() > 0 ? listPrice() : 5,
+    });
+    const name = allPlayers().find((p) => p.identity.toHexString() === playerId)?.name || "them";
+    ToastHelper.info("Buy offer posted", `An open bid is in chat — ${name} can accept it.`);
   };
 
   // ── Vote-market ticker ────────────────────────────────────────────────
@@ -668,6 +831,20 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
       .filter((p) => p > 0);
     return prices.length ? Math.min(...prices) : null;
   };
+  const anyLowestAsk = () => {
+    const prices = openListings()
+      .map((v) => v.salePrice || 0)
+      .filter((p) => p > 0);
+    return prices.length ? Math.min(...prices) : null;
+  };
+
+  let seededListPrice = false;
+  createEffect(() => {
+    if (seededListPrice) return;
+    if (lastTradePrice() === null && anyLowestAsk() === null) return;
+    setListPrice(suggestedListPrice(lastTradePrice(), anyLowestAsk()));
+    seededListPrice = true;
+  });
 
   // Flash the ticker briefly whenever a new trade settles, so the "action"
   // of vote trading is felt even when the Market panel is closed.
@@ -684,44 +861,6 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     const t = setTimeout(() => setTradeFlash(false), 900);
     onCleanup(() => clearTimeout(t));
   });
-
-  // Phase B-J handlers
-  const roomBuildings = createMemo(() =>
-    serverUnits().filter(u => u.roomId === props.room.id && u.buildingType)
-  );
-
-  const handleConstructBuilding = (buildingType: string, x: number, z: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.constructBuilding({ roomId: props.room.id, position: { x, y: z }, buildingType });
-      ToastHelper.success("Building", `Started constructing ${buildingType}`);
-    } catch { ToastHelper.error("Failed to construct building"); }
-  };
-
-  const handleAssignUnit = (unitId: number, buildingId: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.assignUnitToBuilding({ unitId, buildingId });
-    } catch { ToastHelper.error("Failed to assign unit"); }
-  };
-
-  const handleContribute = (buildingId: number, resourceType: string, amount: number, sourceUnitId: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.contributeToBuilding({ buildingId, resourceType, amount, sourceUnitId });
-    } catch { ToastHelper.error("Failed to contribute"); }
-  };
-
-  const handleSetBuildingTax = (buildingId: number, taxRate: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.setBuildingTax({ buildingId, taxRate });
-    } catch { ToastHelper.error("Failed to set tax"); }
-  };
 
   const handleMoveUnit = (unitId: number, x: number, z: number) => {
     const connection = conn();
@@ -743,13 +882,71 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     } catch { ToastHelper.error("Failed to queue task"); }
   };
 
-  const handleSpawnLaborer = () => {
+  const handleHarvestKind = (resourceType: string) => {
+    const connection = conn();
+    if (!connection) return;
+    const ids = viewportSelectedIds();
+    if (ids.length === 0) return;
+    try {
+      for (const unitId of ids) {
+        connection.reducers.harvestKind({ unitId, resourceType });
+      }
+    } catch { ToastHelper.error("Could not harvest"); }
+  };
+
+  const selectedOwnedIds = () => {
+    const me = props.currentUser.identity.toHexString();
+    return viewportSelectedIds().filter((id) =>
+      serverUnits().some((u) => u.id === id && u.ownerId === me && u.unitType === "minion"),
+    );
+  };
+
+  const hasCamp = createMemo(() => {
+    const me = props.currentUser.identity.toHexString();
+    return serverUnits().some(
+      (u) => u.roomId === props.room.id && u.ownerId === me && u.buildingType === "camp",
+    );
+  });
+
+  const handleFoundCamp = () => {
+    const connection = conn();
+    if (!connection) return;
+    const unitId = selectedOwnedIds()[0];
+    if (unitId == null) return;
+    try {
+      connection.reducers.foundCamp({ unitId });
+    } catch { ToastHelper.error("Could not found a camp"); }
+  };
+
+  const handleRefine = (rawType: string) => {
     const connection = conn();
     if (!connection) return;
     try {
-      connection.reducers.spawnLaborer({ roomId: props.room.id });
-      ToastHelper.success("Laborer", "New laborer spawned!");
-    } catch { ToastHelper.error("Failed to spawn laborer"); }
+      for (const unitId of selectedOwnedIds()) {
+        connection.reducers.refineAtCamp({ unitId, rawType });
+      }
+    } catch { ToastHelper.error("Could not refine"); }
+  };
+
+  const handleCraftAndEquip = (recipe: string) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      for (const unitId of selectedOwnedIds()) {
+        connection.reducers.craftAndEquip({ unitId, recipe });
+      }
+    } catch { ToastHelper.error("Could not craft"); }
+  };
+
+  const handleSendHome = () => {
+    const connection = conn();
+    if (!connection) return;
+    const unitId = selectedOwnedIds()[0];
+    if (unitId == null) return;
+    try {
+      connection.reducers.transferLaborerToParent({ unitId, parentServerId: 0 });
+      ToastHelper.success("Sent home", "Bag and minion saved to your stash");
+    } catch { ToastHelper.error("Could not send home"); }
   };
 
   const handleEquipItem = (equipmentId: number, unitId: number) => {
@@ -768,23 +965,6 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     } catch { ToastHelper.error("Failed to unequip item"); }
   };
 
-  const handleCraftEquipment = (buildingId: number, equipmentType: string, material: string) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.craftEquipment({ roomId: props.room.id, buildingId, equipmentType, material });
-      ToastHelper.success("Crafted!", `${material} ${equipmentType} crafted`);
-    } catch { ToastHelper.error("Failed to craft equipment"); }
-  };
-
-  const handleProcessBattleTurn = (arenaId: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.processBattleTurn({ arenaId });
-    } catch { ToastHelper.error("Failed to process battle turn"); }
-  };
-
   const handlePlaceSideBet = (betType: string, betTarget: string, amount: number) => {
     const connection = conn();
     if (!connection) return;
@@ -794,35 +974,21 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
     } catch { ToastHelper.error("Failed to place bet"); }
   };
 
-  const handleBreed = (parentAId: number, parentBId: number, buildingId: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.breedLaborers({ roomId: props.room.id, parentAId, parentBId, breedingBuildingId: buildingId });
-      ToastHelper.success("Breeding", "Offspring created!");
-    } catch { ToastHelper.error("Failed to breed"); }
-  };
-
-  const handleJoinTournament = (tournamentId: number) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.joinTournament({ tournamentId });
-    } catch { ToastHelper.error("Failed to join tournament"); }
-  };
-
-  const handleCreateTournament = (name: string, entryFee: number, maxParticipants: number, bracketType: string) => {
-    const connection = conn();
-    if (!connection) return;
-    try {
-      connection.reducers.createTournament({ name, entryFee, maxParticipants, bracketType });
-      ToastHelper.success("Tournament Created", name);
-    } catch { ToastHelper.error("Failed to create tournament"); }
-  };
+  createEffect(() => {
+    const latest = battleArenas()
+      .filter((a) => a.roomId === props.room.id)
+      .sort((a, b) => b.id - a.id)[0];
+    if (!latest) return;
+    if (latest.status !== "completed" || props.room.gameStatus === "arena") {
+      setWatchingArenaId(latest.id);
+    }
+  });
 
   const activeBattle = createMemo(() => {
     if (battleDismissed()) return undefined;
-    return battleArenas().find(a => a.roomId === props.room.id && a.status !== "completed");
+    const id = watchingArenaId();
+    if (id == null) return undefined;
+    return battleArenas().find((a) => a.id === id);
   });
 
   const isEliminated = createMemo(() =>
@@ -871,9 +1037,14 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             onPositionUpdate={handleAvatarPositionUpdate}
             onSetTeam={handleViewportSetTeam}
             hoveredUnitId={hoveredVoteId()}
+            hoveredOwnerId={hoveredOwnerId()}
+            localPlayerId={props.currentUser.identity.toHexString()}
             activeOffers={activeOffers()}
             onMoveUnit={handleMoveUnit}
             onTradeOfferClick={handleTradeOfferClick}
+            onHoverUnit={setHoveredVoteId}
+            onHoverPlayer={setHoveredOwnerId}
+            onWorldContextMenu={handleWorldContextMenu}
           />
         </div>
 
@@ -898,9 +1069,19 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               inventory={selectedUnitInventory()}
               tasks={selectedUnitTasks()}
               resources={roomResources()}
+              canSeeVoteColor={
+                votesRevealed() ||
+                selectedUnit()!.ownerId === props.currentUser.identity.toHexString()
+              }
               onClose={() => setViewportSelectedIds([])}
               onSetVoteColor={handleSetUnitVoteColor}
               onQueueTask={handleQueueTask}
+              onHarvestKind={handleHarvestKind}
+              onFoundCamp={handleFoundCamp}
+              onRefine={handleRefine}
+              onCraft={handleCraftAndEquip}
+              onSendHome={handleSendHome}
+              hasCamp={hasCamp()}
               onCancelTask={handleCancelTask}
             />
           </div>
@@ -956,12 +1137,12 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 </button>
                 <Show when={helpOpen()}>
                   <div class="absolute left-0 top-8 z-50 w-72 rounded-xl bg-black/90 backdrop-blur-xl border border-white/10 p-4 shadow-2xl text-xs text-white/70 space-y-2">
-                    <p class="font-semibold text-white">🗳️ Voting Phase</p>
-                    <p>Place your votes on Red or Blue using the drop zones. You can trade votes on the market, sell guarantees, and make deals with other players.</p>
-                    <p class="font-semibold text-white mt-2">⚡ Action Phase</p>
-                    <p>Time to finalize deals. Check the EV Calculator to see which strategy is best given the current vote distribution.</p>
-                    <p class="font-semibold text-white mt-2">📊 Resolution Phase</p>
-                    <p>Votes are counted. The <strong class="text-red-300">majority color</strong> is eliminated. Minority survivors split the pot.</p>
+                    <p class="font-semibold text-white">The one rule</p>
+                    <p>The <strong class="text-emerald-300">minority</strong> color stays as votes. The <strong class="text-rose-300">majority</strong> fights in the arena; survivors go back to your roster unless this was the last round. A tie ends the game and splits the pot by vote count.</p>
+                    <p class="font-semibold text-white mt-2">🗳️ Casting</p>
+                    <p>Each chip is a vote you own. Click Red/Blue or drag a chip onto a color. Split across both colors and you cannot be fully eliminated. Unplaced chips split evenly when the round locks — they no longer die. Other players' colors stay hidden until the round is counted.</p>
+                    <p class="font-semibold text-white mt-2">💱 Trading</p>
+                    <p>List a selected vote for a price, or buy someone else's listing in the Market. A bought vote becomes yours — recast it however you want. Guarantees lock a vote to a color and cannot be sold or broken.</p>
                     <p class="text-white/40 mt-2">Click ? again to close.</p>
                   </div>
                 </Show>
@@ -1035,14 +1216,24 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 </Show>
               </span>
               <span class="flex items-center gap-1.5 border-l border-white/10 pl-2 text-xs">
-                <span class="flex items-center gap-0.5" title="Lowest ask — Red vote">
-                  <span class="h-2 w-2 rounded-full bg-red-500" />
-                  <span class="text-white/70">{lowestAsk("red") !== null ? `$${lowestAsk("red")!.toFixed(0)}` : "—"}</span>
-                </span>
-                <span class="flex items-center gap-0.5" title="Lowest ask — Blue vote">
-                  <span class="h-2 w-2 rounded-full bg-blue-500" />
-                  <span class="text-white/70">{lowestAsk("blue") !== null ? `$${lowestAsk("blue")!.toFixed(0)}` : "—"}</span>
-                </span>
+                <Show
+                  when={votesRevealed()}
+                  fallback={
+                    <span class="flex items-center gap-0.5" title="Lowest ask — vote colors stay hidden until the round ends">
+                      <span class="text-white/40">Ask</span>
+                      <span class="text-white/70">{anyLowestAsk() !== null ? `$${anyLowestAsk()!.toFixed(0)}` : "—"}</span>
+                    </span>
+                  }
+                >
+                  <span class="flex items-center gap-0.5" title="Lowest ask — Red vote">
+                    <span class="h-2 w-2 rounded-full bg-red-500" />
+                    <span class="text-white/70">{lowestAsk("red") !== null ? `$${lowestAsk("red")!.toFixed(0)}` : "—"}</span>
+                  </span>
+                  <span class="flex items-center gap-0.5" title="Lowest ask — Blue vote">
+                    <span class="h-2 w-2 rounded-full bg-blue-500" />
+                    <span class="text-white/70">{lowestAsk("blue") !== null ? `$${lowestAsk("blue")!.toFixed(0)}` : "—"}</span>
+                  </span>
+                </Show>
                 <span class="text-[10px] text-white/30" title="Total vote trades this game">
                   {tradeCount()}⇄
                 </span>
@@ -1144,6 +1335,15 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             {phaseFocusHint()}
           </div>
         </Show>
+        <Show when={props.room.gameStatus === "arena"}>
+          <button
+            class="absolute left-1/2 top-14 z-20 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-rose-400/50 bg-rose-500/20 px-3 py-1 text-[11px] font-medium text-rose-100 backdrop-blur-md"
+            data-testid="arena-focus-hint"
+            onClick={() => setBattleDismissed(false)}
+          >
+            Majority melee — survivors return to your roster unless this is the last round
+          </button>
+        </Show>
 
         {/* ── LEFT: Players Panel ── */}
         <div class="absolute left-3 top-14 bottom-20 z-10 flex flex-col" classList={{ "w-52": playersOpen(), "w-8": !playersOpen() }}>
@@ -1166,14 +1366,23 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                   const isCurrentUser = player.identity.isEqual(props.currentUser.identity);
                   const playerIndex = () => remainingPlayers().indexOf(player);
                   const accentColors = ["border-l-blue-400", "border-l-emerald-400", "border-l-violet-400", "border-l-amber-400", "border-l-rose-400", "border-l-cyan-400", "border-l-orange-400", "border-l-pink-400"];
+                  const fate = () => playerFateAtLock(playerVotes(), votes().filter((v) => v.roomId === props.room.id));
 
                   return (
                     <div
                       class="flex items-center gap-2 rounded-md border-l-[3px] bg-white/10 p-1.5 transition-all hover:bg-white/15"
                       classList={{
                         "ring-1 ring-blue-400/60": isCurrentUser,
+                        "ring-1 ring-amber-400/50 bg-white/15": !isCurrentUser && hoveredOwnerId() === player.identity.toHexString(),
                         [accentColors[playerIndex() % accentColors.length]]: true,
                       }}
+                      onMouseEnter={() => setHoveredOwnerId(player.identity.toHexString())}
+                      onMouseLeave={() => setHoveredOwnerId(null)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        openPlayerMenu(player.identity.toHexString(), e.clientX, e.clientY);
+                      }}
+                      title={isCurrentUser ? "You" : "Right-click to whisper or offer a trade"}
                     >
                       <div class="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-[10px] font-bold text-white/80">
                         {(player.name || "A")[0].toUpperCase()}
@@ -1186,21 +1395,63 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                         <div class="flex items-center gap-1.5 text-[10px] text-white/40">
                           <div class="flex items-center gap-0.5">
                             <For each={playerVotes()}>
-                              {(v) => (
+                              {(v) => {
+                                const shown = () =>
+                                  visibleVoteColor(
+                                    v.playerId,
+                                    v.color,
+                                    props.currentUser.identity.toHexString(),
+                                    votesRevealed(),
+                                  );
+                                return (
                                 <div
                                   class="h-1.5 w-1.5 rounded-full"
                                   classList={{
-                                    "bg-red-400": v.color === "red",
-                                    "bg-blue-400": v.color === "blue",
-                                    "bg-white/30": !v.color,
+                                    "bg-red-400": shown() === "red",
+                                    "bg-blue-400": shown() === "blue",
+                                    "bg-white/30": !shown(),
                                   }}
-                                  title={`Vote #${v.id}: ${v.color || "unset"}`}
+                                  title={
+                                    shown()
+                                      ? `Vote #${v.id}: ${shown()}${v.isForSale ? ` · listed $${v.salePrice}` : ""}`
+                                      : v.isForSale
+                                        ? `Vote listed $${v.salePrice} — color hidden until the round ends`
+                                        : "Vote color hidden until the round ends"
+                                  }
                                 />
-                              )}
+                                );
+                              }}
                             </For>
                             <span class="ml-0.5">{playerVotes().length}v</span>
                           </div>
                           <span>${player.walletBalance.toFixed(0)}</span>
+                          <Show when={fate() === "no_tickets"}>
+                            <span
+                              class="rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide bg-amber-500/20 text-amber-300"
+                              title="No votes held — buy one before the round ends or you leave"
+                            >
+                              {votesRevealed() ? "out" : "0 votes"}
+                            </span>
+                          </Show>
+                          <Show when={votesRevealed() && fate() !== "undecided" && fate() !== "no_tickets"}>
+                            <span
+                              class="rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide"
+                              classList={{
+                                "bg-emerald-500/20 text-emerald-300": fate() === "survive",
+                                "bg-rose-500/20 text-rose-300": fate() === "eliminated",
+                                "bg-amber-500/20 text-amber-300": fate() === "tie",
+                              }}
+                              title={
+                                fate() === "survive"
+                                  ? "Would survive if the round locked now"
+                                  : fate() === "eliminated"
+                                    ? "Would be eliminated if the round locked now"
+                                    : "Board is tied — pot would split"
+                              }
+                            >
+                              {fate() === "survive" ? "lives" : fate() === "eliminated" ? "out" : "tie"}
+                            </span>
+                          </Show>
                         </div>
                       </div>
                     </div>
@@ -1236,6 +1487,11 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             <Show when={marketOpen()} fallback={<span>◀</span>}>
               <span>▶</span>
               <span>Market</span>
+              <Show when={openListings().length > 0}>
+                <span class="rounded bg-amber-500/25 px-1 text-[9px] font-bold text-amber-200">
+                  {openListings().length} for sale
+                </span>
+              </Show>
             </Show>
           </button>
           <Show when={marketOpen()}>
@@ -1248,6 +1504,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 currentUserId={props.currentUser.identity.toHexString()}
                 userWalletBalance={props.currentUser.walletBalance}
                 players={allPlayers()}
+                votesRevealed={votesRevealed()}
               />
             </div>
           </Show>
@@ -1267,11 +1524,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           }}
         >
           {[
-            { key: "buildings", label: "Build", icon: "🏗️" },
             { key: "equipment", label: "Equip", icon: "⚔️" },
-            { key: "genetics", label: "Gene", icon: "🧬" },
-            { key: "ev", label: "EV", icon: "📊" },
-            { key: "tournament", label: "Tour.", icon: "🏆" },
             { key: "sidebets", label: "Bet", icon: "💰" },
           ].map(btn => (
             <button
@@ -1289,21 +1542,6 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           ))}
         </div>
 
-        {/* Slide-out feature panels */}
-        <Show when={activePanel() === "buildings"}>
-          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
-            <BuildingPanel
-              buildings={roomBuildings()}
-              units={roomUnits()}
-              onConstruct={handleConstructBuilding}
-              onAssignUnit={handleAssignUnit}
-              onContribute={handleContribute}
-              onSetTax={handleSetBuildingTax}
-              onSpawnLaborer={handleSpawnLaborer}
-            />
-          </div>
-        </Show>
-
         <Show when={activePanel() === "equipment"}>
           <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
             <EquipmentPanel
@@ -1311,36 +1549,6 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
               equipment={equipment().filter(e => e.roomId === props.room.id)}
               onEquip={handleEquipItem}
               onUnequip={handleUnequipItem}
-              onCraft={handleCraftEquipment}
-              buildings={roomBuildings().filter(b => 
-                b.buildingType?.startsWith("manufacturing_")
-              )}
-            />
-          </div>
-        </Show>
-
-        <Show when={activePanel() === "genetics"}>
-          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
-            <GeneticsPanel
-              selectedUnitId={viewportSelectedIds().length >= 1 ? viewportSelectedIds()[0] : null}
-              selectedUnitIdB={viewportSelectedIds().length >= 2 ? viewportSelectedIds()[1] : null}
-              genetics={genetics()}
-              units={roomUnits()}
-              onBreed={handleBreed}
-              breedingBuildings={roomBuildings().filter(b => b.buildingType === "breeding")}
-            />
-          </div>
-        </Show>
-
-        <Show when={activePanel() === "ev"}>
-          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
-            <EVCalculator
-              playerCount={remainingPlayers().length}
-              potSize={props.room.potSize}
-              buyinAmount={props.room.buyinAmount}
-              myVoteCount={myVotes().length}
-              totalVotes={votes().filter(v => v.roomId === props.room.id).length}
-              guaranteesPurchased={myGuaranteesPurchased()}
             />
           </div>
         </Show>
@@ -1358,36 +1566,34 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </div>
         </Show>
 
-        <Show when={activePanel() === "tournament"}>
-          <div class="absolute left-60 top-14 bottom-20 z-20 w-80 overflow-auto rounded-lg bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl">
-            <TournamentPanel
-              tournaments={tournaments()}
-              currentUserId={props.currentUser.identity.toHexString()}
-              onJoin={handleJoinTournament}
-              onCreate={handleCreateTournament}
-            />
-          </div>
-        </Show>
-
         {/* Battle Arena Overlay */}
         <Show when={activeBattle()}>
           {(arena) => (
             <BattleArenaViewport
               arena={arena()}
               battleUnits={battleUnits().filter(bu => bu.arenaId === arena().id)}
-              onProcessTurn={handleProcessBattleTurn}
+              events={battleEvents().filter(ev => ev.arenaId === arena().id)}
+              ownerLabel={(ownerId) => resolvePlayerName(ownerId, conn())}
               onClose={() => setBattleDismissed(true)}
+              onWatchingDone={() => setBattleDismissed(true)}
             />
           )}
         </Show>
 
         {/* ── BOTTOM CENTER: Vote Controls + Chat ── */}
         <div class="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 w-full max-w-2xl px-3">
+          <VoteCoach onOpenMarket={() => setMarketOpen(true)} />
           {/* Vote control bar */}
           <div class="rounded-xl bg-black/50 backdrop-blur-md p-3 border border-white/10 shadow-2xl">
             {/* Top row: vote summary + chips */}
             <div class="flex items-center gap-2 mb-2">
               <span class="text-xs font-semibold text-white/70">Your Votes ({myVotes().length})</span>
+              <Show
+                when={hoveredOwnerId() || hoveredVoteId() != null}
+                fallback={<span class="text-[10px] text-white/35">hover a unit to see its owner · right-click a player to whisper</span>}
+              >
+                <span class="text-[10px] text-amber-200/80">{hoverHint()}</span>
+              </Show>
               <div class="flex gap-1 ml-auto">
                 <span
                   class="rounded bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-300 border border-red-500/30"
@@ -1418,12 +1624,20 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                   return (
                     <button
                       draggable={true}
-                      title="Drag onto a Red/Blue drop zone to cast, or click to select"
+                      title={
+                        voteGuaranteed(vote.id)
+                          ? "Guaranteed — color is locked and this vote cannot be sold"
+                          : vote.isForSale
+                            ? `Listed for $${(vote.salePrice || 0).toFixed(2)} — click to select, drag to recast`
+                            : "Click to select, drag onto Red/Blue to cast, then List to sell"
+                      }
                       class="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium transition-all cursor-grab active:cursor-grabbing"
                       classList={{
-                        "border-red-400/60 bg-red-500/20 text-red-300": vote.color === "red",
-                        "border-blue-400/60 bg-blue-500/20 text-blue-300": vote.color === "blue",
-                        "border-dashed border-white/20 bg-white/5 text-white/40": !vote.color,
+                        "border-red-400/60 bg-red-500/20 text-red-300": vote.color === "red" && !vote.isForSale && !voteGuaranteed(vote.id),
+                        "border-blue-400/60 bg-blue-500/20 text-blue-300": vote.color === "blue" && !vote.isForSale && !voteGuaranteed(vote.id),
+                        "border-dashed border-white/20 bg-white/5 text-white/40": !vote.color && !vote.isForSale && !voteGuaranteed(vote.id),
+                        "border-amber-400/70 bg-amber-500/15 text-amber-200": vote.isForSale && !voteGuaranteed(vote.id),
+                        "border-violet-400/70 bg-violet-500/15 text-violet-200": voteGuaranteed(vote.id),
                         "ring-2 ring-green-400/70 ring-offset-1 ring-offset-transparent": isSelected(),
                         "scale-110 shadow-lg shadow-amber-400/20": hoveredVoteId() === vote.id,
                         "opacity-40": isDragging(),
@@ -1441,8 +1655,14 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                           prev.includes(vote.id) ? prev.filter(id => id !== vote.id) : [...prev, vote.id]
                         );
                       }}
-                      onMouseEnter={() => setHoveredVoteId(vote.id)}
-                      onMouseLeave={() => setHoveredVoteId(null)}
+                      onMouseEnter={() => {
+                        setHoveredVoteId(vote.id);
+                        setHoveredOwnerId(props.currentUser.identity.toHexString());
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredVoteId(null);
+                        setHoveredOwnerId(null);
+                      }}
                       data-testid={TID.voteChip(vote.id)}
                     >
                       <div
@@ -1454,87 +1674,55 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                         }}
                       />
                       #{vote.id}
+                      <Show when={voteGuaranteed(vote.id)}>
+                        <span class="rounded bg-violet-500/30 px-1 text-[9px] font-bold text-violet-200">
+                          locked
+                        </span>
+                      </Show>
+                      <Show when={vote.isForSale && !voteGuaranteed(vote.id)}>
+                        <span class="rounded bg-amber-500/30 px-1 text-[9px] font-bold text-amber-200">
+                          ${vote.salePrice}
+                        </span>
+                      </Show>
                     </button>
                   );
                 }}
               </For>
             </div>
 
-            {/* Drop zones — large, prominent, with live tally */}
-            {(() => {
-              const roomVotes = () => votes().filter(v => v.roomId === props.room.id);
-              const totalRed = () => roomVotes().filter(v => v.color === "red").length;
-              const totalBlue = () => roomVotes().filter(v => v.color === "blue").length;
-              return (
-                <div class="grid grid-cols-2 gap-2">
-                  <div
-                    data-testid={TID.voteRed}
-                    role="button"
-                    tabindex="0"
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop("red")}
-                    onClick={() => {
-                      handleDropZoneClick("red");
-                      setVoteFlashColor("red");
-                      setTimeout(() => setVoteFlashColor(null), 400);
-                    }}
-                    class="flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-red-500/40 bg-red-500/10 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/25 hover:border-red-400/60 transition-all active:scale-95"
-                    classList={{
-                      "border-red-400 bg-red-500/30": draggedVote() !== null,
-                      "animate-vote-flash-red": voteFlashColor() === "red",
-                    }}
-                  >
-                    <div class="flex items-center gap-1.5">
-                      <div class="h-3 w-3 rounded-full bg-red-500" />
-                      Red
-                    </div>
-                    <span class="text-[10px] font-normal text-red-400/60">{totalRed()} total</span>
-                  </div>
-                  <div
-                    data-testid={TID.voteBlue}
-                    role="button"
-                    tabindex="0"
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop("blue")}
-                    onClick={() => {
-                      handleDropZoneClick("blue");
-                      setVoteFlashColor("blue");
-                      setTimeout(() => setVoteFlashColor(null), 400);
-                    }}
-                    class="flex cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-blue-500/40 bg-blue-500/10 py-2 text-sm font-semibold text-blue-400 hover:bg-blue-500/25 hover:border-blue-400/60 transition-all active:scale-95"
-                    classList={{
-                      "border-blue-400 bg-blue-500/30": draggedVote() !== null,
-                      "animate-vote-flash-blue": voteFlashColor() === "blue",
-                    }}
-                  >
-                    <div class="flex items-center gap-1.5">
-                      <div class="h-3 w-3 rounded-full bg-blue-500" />
-                      Blue
-                    </div>
-                    <span class="text-[10px] font-normal text-blue-400/60">{totalBlue()} total</span>
-                  </div>
-                </div>
-              );
-            })()}
+            <VoteTallyBoard
+              roomVotes={votes().filter((v) => v.roomId === props.room.id)}
+              myVotes={myVotes()}
+              revealed={votesRevealed()}
+              draggedVote={draggedVote() !== null}
+              voteFlashColor={voteFlashColor()}
+              onDragOver={handleDragOver}
+              onDrop={(color) => handleDrop(color)}
+              onClick={(color) => {
+                handleDropZoneClick(color);
+                setVoteFlashColor(color);
+                setTimeout(() => setVoteFlashColor(null), 400);
+              }}
+            />
 
             {/* Unit action toolbar (when units selected) */}
             <Show when={viewportSelectedIds().length > 0}>
-              <div class="mt-2 flex items-center gap-2 rounded-lg bg-white/5 px-3 py-1.5 border border-white/10">
+              <div class="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-white/5 px-3 py-1.5 border border-white/10">
                 <span class="text-[11px] text-white/50">
-                  {viewportSelectedIds().length} unit{viewportSelectedIds().length !== 1 ? "s" : ""}
+                  {viewportSelectedIds().length} vote{viewportSelectedIds().length !== 1 ? "s" : ""} selected
                 </span>
                 <div class="flex-1" />
                 <button
                   class="rounded bg-red-600/80 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-red-500"
                   onClick={() => handleViewportSetTeam(viewportSelectedIds(), "red")}
                 >
-                  Set Red
+                  Cast Red
                 </button>
                 <button
                   class="rounded bg-blue-600/80 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-blue-500"
                   onClick={() => handleViewportSetTeam(viewportSelectedIds(), "blue")}
                 >
-                  Set Blue
+                  Cast Blue
                 </button>
                 <button
                   class="rounded bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/60 hover:bg-white/20"
@@ -1542,6 +1730,43 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                 >
                   Unset
                 </button>
+                <Show when={selectedGuaranteed().length > 0}>
+                  <span class="text-[10px] text-violet-300/80">
+                    {selectedGuaranteed().length} guaranteed — cannot sell
+                  </span>
+                </Show>
+                <Show when={selectedUnlisted().length > 0}>
+                  <div class="flex items-center gap-1 border-l border-white/10 pl-2">
+                    <span class="text-[10px] text-white/40">$</span>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.5"
+                      value={listPrice()}
+                      onInput={(e) => setListPrice(parseFloat(e.currentTarget.value) || 0)}
+                      class="w-14 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-white/80 outline-none focus:border-amber-400/50"
+                      title="List price — buyers pay this and take the vote"
+                    />
+                    <button
+                      class="rounded bg-amber-500/80 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-amber-400 disabled:opacity-30"
+                      onClick={handleListSelected}
+                      disabled={!(listPrice() > 0)}
+                      data-testid={TID.listVoteBtn}
+                      title="Put selected votes on the open market at this price"
+                    >
+                      List {selectedUnlisted().length}
+                    </button>
+                  </div>
+                </Show>
+                <Show when={selectedListed().length > 0}>
+                  <button
+                    class="rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/60 hover:bg-white/10"
+                    onClick={handleUnlistSelected}
+                    data-testid={TID.unlistVoteBtn}
+                  >
+                    Unlist {selectedListed().length}
+                  </button>
+                </Show>
               </div>
             </Show>
 
@@ -1589,12 +1814,65 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
           </Show>
         </div>
 
+        <Show when={playerMenu()}>
+          {(menu) => (
+            <>
+              <div class="fixed inset-0 z-40" onClick={() => setPlayerMenu(null)} onContextMenu={(e) => { e.preventDefault(); setPlayerMenu(null); }} />
+              <PlayerContextMenu
+                target={menu()}
+                onWhisper={() => startWhisper(menu().playerId, menu().name)}
+                onOfferTrade={() => offerToBuyFrom(menu().playerId)}
+                onBuyVote={
+                  menu().listedPrice != null && menu().unitId != null
+                    ? () => {
+                        handleBuyVote(menu().unitId!, menu().listedPrice!);
+                        setPlayerMenu(null);
+                      }
+                    : undefined
+                }
+                onClose={() => setPlayerMenu(null)}
+              />
+            </>
+          )}
+        </Show>
+
+        <Show when={whisperTarget()}>
+          {(target) => (
+            <div class="absolute bottom-36 left-1/2 z-40 w-full max-w-md -translate-x-1/2 px-3">
+              <div class="rounded-xl border border-violet-400/30 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-xl">
+                <div class="mb-2 flex items-center justify-between">
+                  <span class="text-xs font-semibold text-violet-200">Whisper to {target().name}</span>
+                  <button class="text-[10px] text-white/40 hover:text-white/70" onClick={() => setWhisperTarget(null)}>✕</button>
+                </div>
+                <p class="mb-2 text-[10px] text-white/40">Only you and they will see this in the game chat.</p>
+                <div class="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={whisperText()}
+                    onInput={(e) => setWhisperText(e.currentTarget.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") sendWhisper(); }}
+                    placeholder="Private message…"
+                    class="flex-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white placeholder-white/25 outline-none focus:border-violet-400/50"
+                  />
+                  <button
+                    class="rounded bg-violet-600/80 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-30"
+                    disabled={!whisperText().trim()}
+                    onClick={sendWhisper}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Show>
+
         {/* ===== TRADE POPUP (layer 40) ===== */}
         <Show when={tradePopup()}>
           {(popup) => {
             const offer = () => {
               const v = votes().find((v) => v.id === popup().offerId);
-              if (v) return { type: "sell" as const, price: v.salePrice || 0, color: v.color, seller: v.playerId, voteId: v.id };
+              if (v) return { type: "sell" as const, price: v.salePrice || 0, color: visibleVoteColor(v.playerId, v.color, props.currentUser.identity.toHexString(), votesRevealed()), seller: v.playerId, voteId: v.id };
               return null;
             };
 
@@ -1718,7 +1996,7 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
             eliminatedPlayers={eliminatedPlayers().map(p => p.identity.toHexString())}
             survivingPlayers={remainingPlayers().map(p => p.identity.toHexString())}
             minorityColor={(savedRoundTotals().minority === "tie" ? "red" : savedRoundTotals().minority) as "red" | "blue"}
-            tiebreaker={savedRoundTotals().minority === "tie"}
+            tiebreaker={false}
             redVotes={savedRoundTotals().red}
             blueVotes={savedRoundTotals().blue}
             room={props.room}
@@ -1731,16 +2009,19 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
         {/* Game Over Modal — z-[70] so it sits above ChatOverlay z-[60] */}
         <Show when={props.room.gameStatus === "completed" && !gameOverDismissed()}>
           <div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
-            <div class="w-96 rounded-xl border border-white/20 bg-slate-900/90 p-6 shadow-2xl backdrop-blur-xl animate-scale-in">
+            <div class="w-[28rem] max-h-[90vh] max-w-[90vw] overflow-y-auto rounded-xl border border-white/20 bg-slate-900/90 p-6 shadow-2xl backdrop-blur-xl animate-scale-in">
               <h2 class="mb-4 text-center text-2xl font-bold text-white">Game Over!</h2>
               <div class="space-y-4">
                 <div class="text-center">
-                  <p class="text-lg font-semibold text-white/80">Winners:</p>
+                  <Show when={endedInTie()} fallback={<p class="text-lg font-semibold text-white/80">Winners:</p>}>
+                    <p class="text-lg font-semibold text-white/80">Tie — pot split by votes</p>
+                    <p class="mt-1 text-xs text-white/50">Each ticket cast this round takes an equal share.</p>
+                  </Show>
                   <For each={remainingPlayers()}>
                     {(player) => (
                       <p class="text-xl font-bold text-emerald-400">
                         {resolvePlayerName(player.identity.toHexString(), conn())} - $
-                        {(props.room.potSize / Math.max(remainingPlayers().length, 1)).toFixed(2)}
+                        {playerPayout(player.identity.toHexString()).toFixed(2)}
                       </p>
                     )}
                   </For>
@@ -1748,6 +2029,35 @@ const VotingInterface: Component<VotingInterfaceProps> = (props) => {
                     <p class="text-sm text-white/40 mt-2">No survivors — pot returned</p>
                   </Show>
                 </div>
+                <Show when={keptFromThisMatch().length > 0}>
+                  <div class="rounded-lg border border-white/10 bg-white/5 p-3 text-left">
+                    <div class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                      Kept on your account
+                    </div>
+                    <For each={keptFromThisMatch()}>
+                      {(lab) => (
+                        <p class="text-[11px] text-white/70">
+                          {lab.displayName}
+                          {" · "}
+                          {lab.origin === "sent_home" ? "sent home" : lab.origin === "arena" ? "arena" : "survived"}
+                          {" · Wood L"}{lab.woodcuttingLevel}
+                          {" / Mine L"}{lab.miningLevel}
+                          <Show when={gearNamesFor(lab.id)}>
+                            {" · "}{gearNamesFor(lab.id)}
+                          </Show>
+                        </p>
+                      )}
+                    </For>
+                    <p class="mt-2 text-[10px] text-white/35">
+                      Sent-home veterans already left this expedition. They return in the next lobby, not this one.
+                    </p>
+                  </div>
+                </Show>
+                <AccountSaveCard
+                  conn={conn}
+                  identityHex={props.currentUser.identity.toHexString()}
+                  compact
+                />
                 <div class="flex gap-2">
                   <button
                     class="flex-1 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-all hover:from-purple-500 hover:to-blue-500"

@@ -97,18 +97,15 @@ const SUBSCRIBE_QUERIES = [
   // jobs live in unit_task_queue.
   'SELECT * FROM unit_inventory',
   'SELECT * FROM unit_task_queue',
+  'SELECT * FROM equipment',
 ];
 
-// Gather range must be < the server's 30-unit threshold
-const GATHER_RANGE = 28;
 // Wander speed: units moved per tick toward wander target
 const WANDER_STEP = 1.5;
 // How often to pick a new wander target (in ticks)
 const WANDER_RETARGET_TICKS = 20;
 // How often to push a position update (every N ticks)
 const POS_UPDATE_EVERY = 5;
-// Ticks to wait between laborer spawn attempts
-const SPAWN_COOLDOWN_TICKS = 10;
 // Ticks to wait between market actions
 const MARKET_COOLDOWN_TICKS = 15;
 
@@ -125,7 +122,7 @@ function pick<T>(arr: T[]): T {
 }
 
 function randomStrategy(): Exclude<Strategy, 'mixed'> {
-  return pick(['contrarian', 'follower', 'random', 'splitter'] as const);
+  return pick(['contrarian', 'contrarian', 'splitter', 'follower', 'random'] as const);
 }
 
 function rand(min: number, max: number): number {
@@ -327,7 +324,7 @@ export class Bot {
       case 'IN_GAME':
         this.tickInGame(room);
         this.tickPosition(room);
-        this.tickLaborers(room);
+        this.tickColony(room);
         this.tickMarket(room);
         this.tickSideBet(room);
         break;
@@ -470,8 +467,8 @@ export class Bot {
       this.hasVotedEndRound = false;
     }
 
-    if (!this.hasVotedEndRound && myVotes.length > 0 && uncoloredVotes.length === 0) {
-      if (Math.random() < 0.4) {
+    if (!this.hasVotedEndRound && myVotes.length > 0 && uncoloredVotes.length === 0 && this.allActionsSpent(room)) {
+      if (Math.random() < 0.5) {
         this.debug('Voting to end round');
         this.safeCall(this.conn.reducers.voteEndRound({ roomId: room.id }));
         this.hasVotedEndRound = true;
@@ -523,82 +520,98 @@ export class Bot {
     }
   }
 
-  // ---- Laborer spawning + resource harvesting -----------------------------
+  private allActionsSpent(room: NonNullable<ReturnType<Bot['findRoom']>>): boolean {
+    if (!this.conn || !this.identity) return true;
+    const identityHex = this.identity.toHexString();
+    const myMinions = [...this.conn.db.unit.iter()].filter(
+      (u) => u.unitType === 'minion' && u.ownerId === identityHex && u.roomId === room.id
+    );
+    if (myMinions.length === 0) return true;
+    return myMinions.every((unit) => {
+      const stats = [...this.conn.db.unit_stats.iter()].find((s) => s.unitId === unit.id);
+      return !stats || stats.actionsRemaining <= 0;
+    });
+  }
 
-  private tickLaborers(room: ReturnType<Bot['findRoom']>) {
+  private hasEquip(unitId: number, equipmentType: string): boolean {
+    if (!this.conn) return false;
+    return [...this.conn.db.equipment.iter()].some(
+      (eq) => eq.equippedToUnitId === unitId && eq.equipmentType === equipmentType
+    );
+  }
+
+  // ---- Colony actions: camp, refine, craft, harvest -----------------------
+
+  private tickColony(room: ReturnType<Bot['findRoom']>) {
     if (!this.conn || !this.identity || !room) return;
     if (room.gameStatus !== 'active') return;
 
     const identityHex = this.identity.toHexString();
-
-    // Decrement spawn cooldown each tick
-    if (this.spawnCooldown > 0) this.spawnCooldown--;
-
-    // Collect my minions in this room
     const myMinions = [...this.conn.db.unit.iter()].filter(
       (u) => u.unitType === 'minion' && u.ownerId === identityHex && u.roomId === room.id
     );
-
-    // Spawn more laborers if under the votesPerPlayer cap
-    if (myMinions.length < room.votesPerPlayer && this.spawnCooldown <= 0) {
-      this.debug(`Spawning laborer (${myMinions.length}/${room.votesPerPlayer})`);
-      this.safeCall(this.conn.reducers.spawnLaborer({ roomId: room.id }));
-      this.spawnCooldown = SPAWN_COOLDOWN_TICKS;
-    }
-
-    // Collect all resources in this room that still have supply
+    const hasCamp = [...this.conn.db.unit.iter()].some(
+      (u) => u.roomId === room.id && u.ownerId === identityHex && u.buildingType === 'camp'
+    );
     const roomResources = [...this.conn.db.resource.iter()].filter(
       (r) => r.roomId === room.id && r.amount > 0
     );
 
-    if (roomResources.length === 0) {
-      this.laborerResourceTargets.clear();
-      return;
-    }
-
-    // For each laborer, ensure it's moving toward and harvesting a resource
     for (const unit of myMinions) {
-      // Clean up stale targets (resource depleted or gone)
-      const targetId = this.laborerResourceTargets.get(unit.id);
-      if (targetId) {
-        const target = roomResources.find((r) => r.id === targetId);
-        if (!target) {
-          this.laborerResourceTargets.delete(unit.id);
+      const stats = [...this.conn.db.unit_stats.iter()].find((s) => s.unitId === unit.id);
+      if (stats && stats.actionsRemaining <= 0) continue;
+
+      const inv = [...this.conn.db.unit_inventory.iter()].find((i) => i.unitId === unit.id);
+      if (!inv) continue;
+
+      if (hasCamp) {
+        if (inv.metalIngot >= 2 && !this.hasEquip(unit.id, 'weapon')) {
+          this.safeCall(this.conn.reducers.craftAndEquip({ unitId: unit.id, recipe: 'weapon' }));
+          this.debug(`Laborer ${unit.id} crafted a spear`);
+          continue;
         }
-      }
-
-      // Assign a resource target if none
-      if (!this.laborerResourceTargets.has(unit.id)) {
-        // Pick the nearest resource
-        let nearest = roomResources[0];
-        let nearestDist = Infinity;
-        for (const res of roomResources) {
-          const d = dist2d(unit.position.x, unit.position.y, res.position.x, res.position.y);
-          if (d < nearestDist) {
-            nearestDist = d;
-            nearest = res;
-          }
+        if (inv.cutStone >= 2 && !this.hasEquip(unit.id, 'armor')) {
+          this.safeCall(this.conn.reducers.craftAndEquip({ unitId: unit.id, recipe: 'armor' }));
+          this.debug(`Laborer ${unit.id} crafted a vest`);
+          continue;
         }
-        this.laborerResourceTargets.set(unit.id, nearest.id);
-        this.debug(`Laborer ${unit.id} targeting resource ${nearest.id} (${nearest.resourceType}) at dist ${nearestDist.toFixed(1)}`);
+        if (inv.lumber >= 2 && !this.hasEquip(unit.id, 'tool')) {
+          this.safeCall(this.conn.reducers.craftAndEquip({ unitId: unit.id, recipe: 'tool' }));
+          this.debug(`Laborer ${unit.id} crafted a hatchet`);
+          continue;
+        }
+        if (inv.metalOre >= 2) {
+          this.safeCall(this.conn.reducers.refineAtCamp({ unitId: unit.id, rawType: 'metal_ore' }));
+          this.debug(`Laborer ${unit.id} refined ore`);
+          continue;
+        }
+        if (inv.stone >= 2) {
+          this.safeCall(this.conn.reducers.refineAtCamp({ unitId: unit.id, rawType: 'stone' }));
+          this.debug(`Laborer ${unit.id} refined stone`);
+          continue;
+        }
+        if (inv.wood >= 2) {
+          this.safeCall(this.conn.reducers.refineAtCamp({ unitId: unit.id, rawType: 'wood' }));
+          this.debug(`Laborer ${unit.id} refined wood`);
+          continue;
+        }
+      } else if (inv.wood >= 3 && inv.stone >= 2) {
+        this.safeCall(this.conn.reducers.foundCamp({ unitId: unit.id }));
+        this.debug(`Laborer ${unit.id} founded a camp`);
+        continue;
       }
 
-      const resourceId = this.laborerResourceTargets.get(unit.id)!;
-      const resource = roomResources.find((r) => r.id === resourceId);
-      if (!resource) continue;
+      if (roomResources.length === 0) continue;
 
-      const d = dist2d(unit.position.x, unit.position.y, resource.position.x, resource.position.y);
-
-      if (d <= GATHER_RANGE) {
-        this.safeCall(this.conn.reducers.gatherResource({ unitId: unit.id, resourceId }));
-        this.debug(`Laborer ${unit.id} gathered ${resource.resourceType} (dist ${d.toFixed(1)})`);
-      } else {
-        this.safeCall(this.conn.reducers.moveUnit({
-          unitId: unit.id,
-          targetPosition: { x: resource.position.x, y: resource.position.y },
-        }));
-        this.debug(`Laborer ${unit.id} moving toward resource (dist ${d.toFixed(1)})`);
+      let want = 'wood';
+      if (!hasCamp && inv.wood >= 3 && inv.stone < 2) want = 'stone';
+      else if (hasCamp) {
+        if (inv.metalOre <= inv.wood && inv.metalOre <= inv.stone) want = 'metal_ore';
+        else if (inv.stone <= inv.wood) want = 'stone';
       }
+      const available = roomResources.find((r) => r.resourceType === want) ?? roomResources[0];
+      this.safeCall(this.conn.reducers.harvestKind({ unitId: unit.id, resourceType: available.resourceType }));
+      this.debug(`Laborer ${unit.id} harvested ${available.resourceType}`);
     }
   }
 
@@ -618,8 +631,11 @@ export class Bot {
 
     const identityHex = this.identity.toHexString();
 
-    // List one uncolored vote for sale (once per game, at a slight markup)
-    if (!this.hasListedVoteForSale) {
+    // Only list surplus tickets — starting votes stay in play.
+    const myVotes = [...this.conn.db.vote.iter()].filter(
+      (v) => v.roomId === room.id && v.playerId === identityHex && v.roundNumber === room.currentRound
+    );
+    if (!this.hasListedVoteForSale && myVotes.length > room.votesPerPlayer) {
       const uncoloredVote = [...this.conn.db.vote.iter()].find(
         (v) =>
           v.roomId === room.id &&
@@ -759,7 +775,7 @@ export class Bot {
   // ---- Helpers ------------------------------------------------------------
 
   private transitionByStatus(status: string) {
-    if (status === 'in_progress' || status === 'active') {
+    if (status === 'in_progress' || status === 'active' || status === 'arena') {
       this.state = 'IN_GAME';
       this.hasVotedEndRound = false;
       this.debug('Transitioned to IN_GAME');

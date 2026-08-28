@@ -24,4 +24,6 @@ export default __t.row({
   isAlive: __t.bool().name("is_alive"),
   positionX: __t.f32().name("position_x"),
   positionY: __t.f32().name("position_y"),
+  spawnX: __t.f32().name("spawn_x"),
+  spawnY: __t.f32().name("spawn_y"),
 });

@@ -43,6 +43,10 @@ export const TID = {
   // ── Voting ───────────────────────────────────────────────
   voteRed: 'vote-red',
   voteBlue: 'vote-blue',
+  voteTally: 'vote-tally',
+  fateBanner: 'fate-banner',
+  listVoteBtn: 'list-vote-btn',
+  unlistVoteBtn: 'unlist-vote-btn',
   /** Dynamic: `vote-chip-${id}` */
   voteChip: (id: number) => `vote-chip-${id}` as const,
   endRoundBtn: 'end-round-btn',

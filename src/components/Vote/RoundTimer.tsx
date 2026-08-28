@@ -21,6 +21,7 @@ const RoundTimer: Component<RoundTimerProps> = (props) => {
   const [isWarning, setIsWarning] = createSignal(false);
 
   let interval: number | undefined;
+  let endedForStart: bigint | undefined;
 
   onMount(() => {
     // Emit the starting phase so the HUD is in sync before the first tick.
@@ -52,10 +53,10 @@ const RoundTimer: Component<RoundTimerProps> = (props) => {
         // Warning if less than 30 seconds
         setIsWarning(remaining <= 30 && remaining > 0);
 
-        // Round ended
-        if (remaining === 0) {
+        // Timeframe ended — keep ticking so a new startTime (next round) resumes the clock
+        if (remaining === 0 && props.roundStartTime !== endedForStart) {
+          endedForStart = props.roundStartTime;
           props.onRoundEnd?.();
-          clearInterval(interval);
         }
       });
     }, 1000) as unknown as number;

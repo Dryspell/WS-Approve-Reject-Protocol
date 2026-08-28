@@ -11,7 +11,7 @@ This folder contains the canonical design intent for all game systems. These doc
 | Document | What It Covers | Implementation Alignment |
 |----------|---------------|--------------------------|
 | [rules.md](./rules.md) | Binary voting, minority wins, pot, guarantees, wallet, settings | Mostly aligned — see STATUS.md for gaps |
-| [rules-colony-builder.md](./rules-colony-builder.md) | Laborers, buildings, resources, crafting, combat, per-skill XP, evacuation, bot simulation | Fully aligned — all major systems implemented |
+| [rules-colony-builder.md](./rules-colony-builder.md) | Long-game colony catalog plus the live expedition loop | Live loop aligned (camp, 3 actions, arena, roster + gear). 16-building / genetics / server-tree sections are parked design |
 | [shared-systems.md](./shared-systems.md) | Currency (MT/MBLS), resource markets, multi-timeframe server hierarchy | MT/MBLS implemented; markets partial; hierarchy implemented but not production-deployed |
 
 ### Supporting Analysis
@@ -44,43 +44,37 @@ The following principles govern all design decisions across digital and physical
 
 ---
 
-## Current State of Implementation (February 2026)
+## Current State of Implementation (August 2026)
 
-### Fully Implemented
-- Vote Exchange Protocol core loop (vote, trade, eliminate, win)
-- Guarantee system (create, purchase, honor/break tracking)
-- Laborer-as-voter integration (vote_id on Unit)
-- Resource gathering and refinement pipeline
-- Equipment system (craft, equip, stat bonuses)
-- Laborer genetics and breeding
-- Per-skill XP (Woodcutting, Mining, Quarrying, Hunting, Farming, Crafting, Combat; level cap 5)
-- Minion evacuation (withdraw unvoted laborers before combat)
-- Auto-chess combat (automated BattleArena; `combat_enabled` flag for dev mode)
-- Dual currency (MT + MBLS via PlayerCurrency table)
-- Multi-timeframe server hierarchy (ServerNode table; not production-deployed)
-- Bot simulation (full player AI via `scripts/bot-runner.ts`)
+### Live on `/vote`
+- Vote Exchange Protocol (vote, trade, guarantees, eliminate, pot)
+- Vote-on-voting trigger (2/3 of remaining players; timer is the backstop)
+- Unplaced tickets split evenly at lock; 0–0 restarts the timer; sold-out hands drop at end of round
+- Laborer-as-voter (`vote_id`); 3 actions per minion per round
+- Harvest, one camp, refine, craft-and-equip (hatchet / spear / vest)
+- Send-home and match-end roster; equipped gear persists on the veteran
+- Guest recovery code + username/passphrase bind
+- Majority hex-arena melee; `combat_enabled` can skip the fight
+- Practice bots that vote and play the colony path
+- Guarantee cancel (unsold) and buyer refund if the seller leaves
 
-### Partially Implemented
-- Resource markets tied to Vote Exchange Protocol instances (basic structure; market closure not fully enforced)
-- Parent-child game termination rules (ServerNode exists; cascade logic partial)
+### Parked (code may exist; not the live HUD)
+- 16-building catalog, `game_tick` production, genetics breeding, EV/tournament panels
+- Dual currency (MT + MBLS), multi-timeframe server tree
+- Resource markets tied to Vote Exchange Protocol instances
 
-### Not Yet Implemented
-- Real-money integration
-- Blockchain / MBLS cryptocurrency mechanics
-- SaaS platform / API
-- Wallet spending limits
-- Per-round partial pot distribution
-- Vote-on-voting trigger
+### Not this game yet
+- Real-money integration, blockchain, SaaS, wallet caps, per-round pot drip, clans
 
 ---
 
 ## Reading Order
 
-1. **New to the project?** Start with [rules.md](./rules.md) to understand the voting core, then [rules-colony-builder.md](./rules-colony-builder.md) for the full game.
+1. **New to the project?** Start with [rules.md](./rules.md) for the voting core, then the live-loop note at the top of [rules-colony-builder.md](./rules-colony-builder.md). The rest of that file is the parked long-game catalog.
 2. **Building a feature?** Check [docs/STATUS.md](../docs/STATUS.md) for implementation status, then read the relevant design doc section.
 3. **Thinking about monetization?** Read [monetization.md](./monetization.md) as a vision document, not a requirements document.
 4. **Board game prototyping?** Go directly to [boardgame-variant/](./boardgame-variant/).
 
 ---
 
-**Last Updated**: February 26, 2026
+**Last Updated**: August 25, 2026

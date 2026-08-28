@@ -94,12 +94,24 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
         price: createPrice(),
         guaranteeType: createType(),
       });
-      ToastHelper.success("Guarantee Created", `Vote #${voteId} locked to ${createColor()} at $${createPrice()}`);
+      ToastHelper.success("Guarantee Created", `Vote #${voteId} locked to ${createColor()} — cannot be sold or recast`);
       sounds.guaranteePurchased();
       setCreatePrice(5);
       setSelectedVoteId(null);
     } catch (error: any) {
       ToastHelper.error(error?.message || "Failed to create guarantee");
+      sounds.error();
+    }
+  };
+
+  const handleCancelGuarantee = async (guaranteeId: number) => {
+    const connection = conn();
+    if (!connection) return;
+    try {
+      await connection.reducers.cancelGuarantee({ guaranteeId });
+      ToastHelper.success("Guarantee cancelled", "That vote can be recast or sold again");
+    } catch (error: any) {
+      ToastHelper.error(error?.message || "Failed to cancel guarantee");
       sounds.error();
     }
   };
@@ -238,11 +250,11 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
           class="w-full rounded bg-green-600/70 py-1.5 text-[10px] font-semibold text-white transition-colors hover:bg-green-500/80 disabled:opacity-30"
           disabled={selectedVoteId() === null || availableVotesForGuarantee().length === 0}
         >
-          Lock Vote #{selectedVoteId() ?? "?"} to {createColor()} (${createPrice().toFixed(2)})
+          Guarantee Vote #{selectedVoteId() ?? "?"} {createColor()} (${createPrice().toFixed(2)})
         </button>
 
         <div class="rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1.5 text-[9px] text-amber-300/70">
-          🔒 <strong>Enforced:</strong> Your vote will be locked once a buyer purchases.
+          🔒 <strong>Binding:</strong> This vote is locked to the color now and cannot be sold.
         </div>
       </div>
 
@@ -331,16 +343,26 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
                         </div>
                       </div>
                     </div>
-                    <span
-                      class="rounded px-1.5 py-0.5 text-[9px] font-semibold"
-                      classList={{
-                        "bg-green-600/30 text-green-400": guarantee.isActive && purchaseCount() > 0,
-                        "bg-amber-500/20 text-amber-300": guarantee.isActive && purchaseCount() === 0,
-                        "bg-white/10 text-white/40": !guarantee.isActive,
-                      }}
-                    >
-                      {guarantee.isActive ? (purchaseCount() > 0 ? "🔒 Locked" : "Active") : "Sold"}
-                    </span>
+                    <div class="flex items-center gap-1.5">
+                      <Show when={guarantee.isActive && purchaseCount() === 0}>
+                        <button
+                          class="rounded px-1.5 py-0.5 text-[9px] font-semibold text-white/50 hover:bg-white/10 hover:text-white/80"
+                          onClick={() => handleCancelGuarantee(guarantee.id)}
+                        >
+                          Cancel
+                        </button>
+                      </Show>
+                      <span
+                        class="rounded px-1.5 py-0.5 text-[9px] font-semibold"
+                        classList={{
+                          "bg-green-600/30 text-green-400": guarantee.isActive && purchaseCount() > 0,
+                          "bg-amber-500/20 text-amber-300": guarantee.isActive && purchaseCount() === 0,
+                          "bg-white/10 text-white/40": !guarantee.isActive,
+                        }}
+                      >
+                        {guarantee.isActive ? (purchaseCount() > 0 ? "🔒 Locked" : "Active") : "Sold"}
+                      </span>
+                    </div>
                   </div>
                 );
               }}
@@ -353,11 +375,10 @@ const GuaranteeMarket: Component<GuaranteeMarketProps> = (props) => {
       <div class="rounded-lg border border-blue-400/15 bg-blue-500/5 p-2.5 text-[9px] text-blue-300/60">
         <p class="font-semibold text-blue-300/80">How Guarantees Work</p>
         <ul class="ml-3 mt-1 list-disc space-y-0.5">
-          <li>Each guarantee locks one specific vote to a color</li>
-          <li>Once purchased, the server locks the vote -- seller cannot change it</li>
-          <li><strong>Public:</strong> One buyer only, then removed</li>
+          <li>Each guarantee locks one specific vote to a color — it cannot be broken</li>
+          <li>A guaranteed vote cannot be sold or transferred</li>
+          <li><strong>Public:</strong> One buyer only, then removed from the market</li>
           <li><strong>Private:</strong> Multiple different buyers can each purchase</li>
-          <li>Buyers can bluff others about what guarantees they hold</li>
         </ul>
       </div>
     </div>

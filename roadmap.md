@@ -13,37 +13,28 @@ Nashfall is a **market-based voting game** (The Vote Exchange Protocol) where pl
 
 ---
 
-## Current State (February 2026)
+## Current State (August 2026)
 
-### Implemented
+### Live
 
-The full Vote Exchange Protocol + Colony Builder game loop is functional:
+Vote Exchange Protocol plus a **narrow expedition colony loop**. The 16-building MMO catalog is parked.
 
 **Vote Exchange Protocol Core**
-- Binary voting (Red/Blue) with minority wins and majority elimination
-- Vote trading marketplace (list, buy, cancel)
-- Trade offer negotiation system (chat-based accept/decline)
-- Multiple votes per player (configurable per room; start with configured count)
-- Public and private guarantee system (create, purchase, honor/break tracking)
-- Wallet and bank account management (transfer between wallet/bank)
-- Buy-in system and pot distribution to winners
-- Player elimination across multiple rounds
-- Post-elimination re-buy (3x buy-in, 80% to pot)
-- Side-betting for eliminated/spectating players (SideBetPanel)
-- Transaction fees (1% on all trades, added to pot)
-- Live vote tally on drop zones during voting
+- Binary voting (Red/Blue); minority tickets stay; majority minions fight
+- Unplaced tickets split evenly at lock; 0–0 restarts the timer
+- Vote trading marketplace (list, buy, cancel) and chat trade offers
+- Multiple votes per player (configurable per room)
+- Public and private guarantees (locked color, cannot be sold; cancel unsold; refund if seller leaves)
+- Wallet, buy-in, pot to winners; re-buy; side bets; 1% fees to pot
+- Live vote tally; 2/3 vote-on-voting; timer backstop
 
 **UI/UX**
-- Full-screen Three.js colony viewport with glassmorphism HUD overlay
-- Reactive room state, correct player name resolution, Game Over modal dismissal
-- Labeled panel buttons (Build, Equip, Gene, EV, Tourney, Bet)
-- Market panel open by default
-- Leave button confirmation, admin panel gated behind `isDev()`
-- In-game navigation links (Ranks, Profile, Home)
-- Guest name prompt on direct `/vote` navigation
-- Position update throttle (100ms + 0.1-unit dead zone)
-- Global ChatOverlay suppressed on `/vote`; in-game ChatPanel is sole chat interface
-- 3-second game-start countdown overlay
+- Full-screen Three.js colony viewport with glassmorphism HUD
+- Live side buttons: Equip, Bet (Build / Gene / EV / Tourney hidden)
+- Game Over keep-this-save card (recovery code + bind)
+- Lobby Restore save and roster picker (veterans keep gear)
+- Market open by default; leave confirm; admin gated to `isDev()`
+- Guest name prompt on `/vote`
 
 **Social & Profile**
 - Real-time chat system (game rooms + general)
@@ -58,25 +49,21 @@ The full Vote Exchange Protocol + Colony Builder game loop is functional:
 - In-game event feed panel (trades, harvests, purchases, eliminations, votes — real time)
 - Post-game match history accessible from Game Over modal and player profile
 
-**Colony Builder**
-- 16 building types (construction, assignment, taxation)
-- Resource refinement pipeline (game_tick processes building production)
-- Equipment system (craft/equip/unequip with stat bonuses; 5 material tiers)
-- Laborer genetics and breeding (LaborerGenetics with 6 IVs)
-- Per-skill XP system: Woodcutting, Mining, Quarrying, Hunting, Farming, Crafting, Combat — each capped at level 5
-- Minion harvesting assignment (assign minion to resource node; auto-pathfind and gather)
-- Minion evacuation (send unvoted minion out before voting closes to avoid combat death)
-- Auto-chess combat (majority-voting laborers teleported to BattleArena; automated turn-based resolution)
-- `combat_enabled` room flag (disables Battle Arena for development/testing)
-- BattleArenaViewport wired to combat results
+**Expedition colony (live)**
+- 3 actions per minion per round; instant harvest (skill may double yield)
+- One camp; refine at camp; craft-and-equip hatchet / spear / vest
+- Send-home and match-end roster; equipped gear persists (`OwnedEquipment`)
+- Hex-board majority melee; `combat_enabled` skips the fight
+- Per-skill XP (level cap 5) on harvest/refine/craft
+
+**Parked colony catalog**
+- 16 building types, `game_tick` production, genetics breeding HUD, mithril craft tree
 
 **Bot Simulation**
-- Bots wander the colony map with realistic position updates
-- Bots spawn and manage laborers (up to `votesPerPlayer` count)
-- Bots assign laborers to nearest resource nodes and harvest
-- Bots participate in the vote market (list votes, buy underpriced votes)
-- Eliminated bots place side bets on majority color
-- Bot chat messages render as speech bubbles in the 3D viewport
+- Vote strategies (mixed leans contrarian/splitter)
+- Harvest, found camp, refine, craft; sit still during `arena`
+- Buy cheap listed votes; do not spawn extra laborers
+- Eliminated bots may side-bet; optional chat bubbles
 
 **Terrain & Environment**
 - Simplex-noise terrain height displacement (multi-octave; center flat, edges undulate)
@@ -99,7 +86,7 @@ The full Vote Exchange Protocol + Colony Builder game loop is functional:
 
 - Wallet limits / spending caps
 - Per-round partial pot distribution
-- Vote-on-voting trigger (alternative to timer)
+- 16-building / genetics / server-tree catalog (parked, not deleted)
 - Real-money integration / cryptocurrency
 - SaaS platform / API for third-party integration
 - Mobile-optimized layout

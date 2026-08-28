@@ -16,6 +16,7 @@ interface StrategyPanelProps {
   players: User[];
   votes: Vote[];
   transactions: Transaction[];
+  votesRevealed?: boolean;
 }
 
 function loadAnnotations(roomId: number): Record<string, PlayerAnnotation> {
@@ -52,8 +53,10 @@ const StrategyPanel: Component<StrategyPanelProps> = (props) => {
       const d = data[v.playerId];
       if (!d) continue;
       d.total++;
-      if (v.color === "red") d.red++;
-      else if (v.color === "blue") d.blue++;
+      const mine = v.playerId === props.currentUserId;
+      const color = props.votesRevealed || mine ? v.color : null;
+      if (color === "red") d.red++;
+      else if (color === "blue") d.blue++;
       else d.unset++;
       if (v.isForSale) d.forSale++;
     }

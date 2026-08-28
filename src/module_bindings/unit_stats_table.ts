@@ -27,4 +27,5 @@ export default __t.row({
   foragingLevel: __t.i32().name("foraging_level"),
   craftingXp: __t.i32().name("crafting_xp"),
   craftingLevel: __t.i32().name("crafting_level"),
+  actionsRemaining: __t.i32().name("actions_remaining"),
 });

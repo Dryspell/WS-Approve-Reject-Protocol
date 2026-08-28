@@ -598,7 +598,7 @@ const Game: Component<Props> = (props) => {
     if (!hoveredUnit()) return;
     const connection = conn();
     if (connection) {
-      connection.reducers.queueUnitTask({ unitId: hoveredUnit()!.id, taskType: "gather", targetId: resource.id });
+      connection.reducers.harvestKind({ unitId: hoveredUnit()!.id, resourceType: resource.resourceType });
     }
   };
 
@@ -606,7 +606,7 @@ const Game: Component<Props> = (props) => {
     const connection = conn();
     if (connection && selectedUnits().size > 0) {
       selectedUnits().forEach(unitId => {
-        connection.reducers.queueUnitTask({ unitId, taskType: "gather", targetId: resource.id });
+        connection.reducers.harvestKind({ unitId, resourceType: resource.resourceType });
       });
     }
   };

@@ -16,6 +16,7 @@ import { resolvePlayerName } from "~/lib/game-utils";
 import { TID } from "~/lib/test-ids";
 import GuestNamePrompt from "~/components/GuestNamePrompt";
 import { practiceBots, type Strategy } from "~/lib/practice-bots";
+import AccountSaveCard from "~/components/game/AccountSaveCard";
 
 /**
  * Check if multiuser mode is enabled via URL parameter.
@@ -88,6 +89,7 @@ const VoteBox: Component = () => {
   const [practiceStrategy, setPracticeStrategy] = createSignal<Strategy>("mixed");
   const [practiceStarting, setPracticeStarting] = createSignal(false);
   const [botsActive, setBotsActive] = createSignal(0);
+  const [showRestore, setShowRestore] = createSignal(false);
 
   // Initialize SpacetimeDB connection
   const { conn, connected, identity, subscribed, connectionError } = useSpacetimeDB();
@@ -506,6 +508,15 @@ const VoteBox: Component = () => {
             <Button
               size="sm"
               variant="outline"
+              onClick={() => setShowRestore((v) => !v)}
+              disabled={!connected()}
+              class="border-white/20 text-white/70 hover:bg-white/10"
+            >
+              Restore save
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => setShowPractice((v) => !v)}
               disabled={!connected()}
               class="border-violet-400/40 text-violet-200 hover:bg-violet-500/20"
@@ -575,7 +586,11 @@ const VoteBox: Component = () => {
                     <input type="checkbox" checked={allowMidgameJoin()} onChange={e => setAllowMidgameJoin(e.currentTarget.checked)} data-testid={TID.allowMidgameJoinCheckbox} class="rounded" />
                     Mid-game Join
                   </label>
-                  <label class="flex items-center gap-1.5 text-xs cursor-pointer" classList={{ "text-emerald-400": combatEnabled(), "text-white/40": !combatEnabled() }}>
+                  <label
+                    class="flex items-center gap-1.5 text-xs cursor-pointer"
+                    title="When off, majority minions extract without a fight"
+                    classList={{ "text-emerald-400": combatEnabled(), "text-white/40": !combatEnabled() }}
+                  >
                     <input type="checkbox" checked={combatEnabled()} onChange={e => setCombatEnabled(e.currentTarget.checked)} class="rounded" />
                     ⚔️ Combat
                   </label>
@@ -658,7 +673,11 @@ const VoteBox: Component = () => {
                 </div>
               </div>
               <div class="flex items-center justify-between">
-                <label class="flex items-center gap-1.5 text-xs cursor-pointer" classList={{ "text-emerald-400": combatEnabled(), "text-white/40": !combatEnabled() }}>
+                <label
+                  class="flex items-center gap-1.5 text-xs cursor-pointer"
+                  title="When off, majority minions extract without a fight"
+                  classList={{ "text-emerald-400": combatEnabled(), "text-white/40": !combatEnabled() }}
+                >
                   <input type="checkbox" checked={combatEnabled()} onChange={(e) => setCombatEnabled(e.currentTarget.checked)} class="rounded" />
                   ⚔️ Combat
                 </label>
@@ -675,6 +694,17 @@ const VoteBox: Component = () => {
                   </Button>
                 </div>
               </div>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={showRestore()}>
+          <div class="border-b border-white/10 bg-black/30 backdrop-blur-md p-4">
+            <div class="mx-auto max-w-lg">
+              <AccountSaveCard
+                conn={conn}
+                identityHex={identity()?.toHexString() || ""}
+              />
             </div>
           </div>
         </Show>
@@ -735,8 +765,8 @@ const VoteBox: Component = () => {
                         <TabsTrigger
                           value={roomId}
                           class="text-xs px-3"
-                          disabled={room()?.gameStatus === "active" && roomId !== currentRoom()}
-                          title={room()?.gameStatus === "active" && roomId !== currentRoom() ? "Game in progress — cannot switch rooms" : undefined}
+                          disabled={(room()?.gameStatus === "active" || room()?.gameStatus === "arena") && roomId !== currentRoom()}
+                          title={(room()?.gameStatus === "active" || room()?.gameStatus === "arena") && roomId !== currentRoom() ? "Game in progress — cannot switch rooms" : undefined}
                         >
                           {room()?.name}
                           <Badge variant="secondary" class="ml-1.5 px-1 py-0 text-[10px]">

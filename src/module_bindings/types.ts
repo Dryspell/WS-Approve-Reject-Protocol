@@ -10,6 +10,16 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AccountBind = __t.object("AccountBind", {
+  username: __t.string(),
+  identityHex: __t.string(),
+  saltB64: __t.string(),
+  nonceB64: __t.string(),
+  cipherB64: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AccountBind = __Infer<typeof AccountBind>;
+
 export const BattleArena = __t.object("BattleArena", {
   id: __t.i32(),
   roomId: __t.i32(),
@@ -18,8 +28,32 @@ export const BattleArena = __t.object("BattleArena", {
   turnNumber: __t.i32(),
   winnerTeam: __t.option(__t.string()),
   createdAt: __t.timestamp(),
+  nextActorIndex: __t.i32(),
 });
 export type BattleArena = __Infer<typeof BattleArena>;
+
+export const BattleCombatEvent = __t.object("BattleCombatEvent", {
+  id: __t.i32(),
+  arenaId: __t.i32(),
+  seq: __t.i32(),
+  attackerId: __t.i32(),
+  targetId: __t.i32(),
+  attackerSourceUnitId: __t.i32(),
+  targetSourceUnitId: __t.i32(),
+  damage: __t.i32(),
+  targetKilled: __t.bool(),
+  action: __t.i32(),
+  destX: __t.i32(),
+  destY: __t.i32(),
+});
+export type BattleCombatEvent = __Infer<typeof BattleCombatEvent>;
+
+export const BattleTurnTimer = __t.object("BattleTurnTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  arenaId: __t.i32(),
+});
+export type BattleTurnTimer = __Infer<typeof BattleTurnTimer>;
 
 export const BattleUnit = __t.object("BattleUnit", {
   id: __t.i32(),
@@ -35,6 +69,8 @@ export const BattleUnit = __t.object("BattleUnit", {
   isAlive: __t.bool(),
   positionX: __t.f32(),
   positionY: __t.f32(),
+  spawnX: __t.f32(),
+  spawnY: __t.f32(),
 });
 export type BattleUnit = __Infer<typeof BattleUnit>;
 
@@ -221,6 +257,57 @@ export const Message = __t.object("Message", {
 });
 export type Message = __Infer<typeof Message>;
 
+export const OwnedEquipment = __t.object("OwnedEquipment", {
+  id: __t.i32(),
+  ownerId: __t.string(),
+  laborerId: __t.i32(),
+  equipmentType: __t.string(),
+  slot: __t.string(),
+  itemName: __t.string(),
+  tier: __t.i32(),
+  material: __t.string(),
+  enchantment: __t.option(__t.string()),
+  quality: __t.string(),
+  surface: __t.string(),
+  attackBonus: __t.i32(),
+  defenseBonus: __t.i32(),
+  speedBonus: __t.i32(),
+  healthBonus: __t.i32(),
+  durability: __t.i32(),
+  maxDurability: __t.i32(),
+});
+export type OwnedEquipment = __Infer<typeof OwnedEquipment>;
+
+export const OwnedLaborer = __t.object("OwnedLaborer", {
+  id: __t.i32(),
+  ownerId: __t.string(),
+  displayName: __t.string(),
+  origin: __t.string(),
+  woodcuttingXp: __t.i32(),
+  woodcuttingLevel: __t.i32(),
+  miningXp: __t.i32(),
+  miningLevel: __t.i32(),
+  foragingXp: __t.i32(),
+  foragingLevel: __t.i32(),
+  craftingXp: __t.i32(),
+  craftingLevel: __t.i32(),
+  sourceRoomId: __t.i32(),
+  health: __t.i32(),
+  maxHealth: __t.i32(),
+  attack: __t.i32(),
+  defense: __t.i32(),
+  speed: __t.i32(),
+});
+export type OwnedLaborer = __Infer<typeof OwnedLaborer>;
+
+export const PendingArenaResolve = __t.object("PendingArenaResolve", {
+  roomId: __t.i32(),
+  arenaId: __t.i32(),
+  minorityColor: __t.string(),
+  roundNumber: __t.i32(),
+});
+export type PendingArenaResolve = __Infer<typeof PendingArenaResolve>;
+
 export const PlayerCurrency = __t.object("PlayerCurrency", {
   playerId: __t.string(),
   mtBalance: __t.f64(),
@@ -238,6 +325,28 @@ export const PlayerPosition = __t.object("PlayerPosition", {
   isMoving: __t.bool(),
 });
 export type PlayerPosition = __Infer<typeof PlayerPosition>;
+
+export const PlayerStash = __t.object("PlayerStash", {
+  playerId: __t.string(),
+  wood: __t.i32(),
+  stone: __t.i32(),
+  metalOre: __t.i32(),
+  coal: __t.i32(),
+  gems: __t.i32(),
+  fiber: __t.i32(),
+  hide: __t.i32(),
+  sand: __t.i32(),
+  food: __t.i32(),
+  woodenPole: __t.i32(),
+  lumber: __t.i32(),
+  cutStone: __t.i32(),
+  metalIngot: __t.i32(),
+  cloth: __t.i32(),
+  rope: __t.i32(),
+  leather: __t.i32(),
+  glass: __t.i32(),
+});
+export type PlayerStash = __Infer<typeof PlayerStash>;
 
 export const ReadyState = __t.object("ReadyState", {
   roomId: __t.string(),
@@ -260,6 +369,14 @@ export const Resource = __t.object("Resource", {
   depletionThreshold: __t.i32(),
 });
 export type Resource = __Infer<typeof Resource>;
+
+export const RosterPick = __t.object("RosterPick", {
+  id: __t.i32(),
+  roomId: __t.i32(),
+  playerId: __t.string(),
+  laborerId: __t.i32(),
+});
+export type RosterPick = __Infer<typeof RosterPick>;
 
 export const RoundTimerEntry = __t.object("RoundTimerEntry", {
   scheduledId: __t.u64(),
@@ -415,6 +532,7 @@ export const UnitStats = __t.object("UnitStats", {
   foragingLevel: __t.i32(),
   craftingXp: __t.i32(),
   craftingLevel: __t.i32(),
+  actionsRemaining: __t.i32(),
 });
 export type UnitStats = __Infer<typeof UnitStats>;
 

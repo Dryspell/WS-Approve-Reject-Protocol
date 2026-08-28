@@ -6,21 +6,11 @@ interface EquipmentPanelProps {
   equipment: Equipment[];
   onEquip: (equipmentId: number, unitId: number) => void;
   onUnequip: (equipmentId: number) => void;
-  onCraft: (buildingId: number, equipmentType: string, material: string) => void;
-  buildings: { id: number; buildingType?: string }[];
 }
 
 const SLOTS = [
-  { key: "head", label: "Head" },
-  { key: "body", label: "Body" },
-  { key: "hands", label: "Hands" },
-  { key: "feet", label: "Feet" },
   { key: "main_hand", label: "Main Hand" },
-  { key: "off_hand", label: "Off Hand" },
-  { key: "ring1", label: "Ring 1" },
-  { key: "ring2", label: "Ring 2" },
-  { key: "amulet", label: "Amulet" },
-  { key: "belt", label: "Belt" },
+  { key: "body", label: "Body" },
 ];
 
 const TIER_COLORS: Record<number, string> = {
@@ -31,14 +21,8 @@ const TIER_COLORS: Record<number, string> = {
   5: "text-amber-300",
 };
 
-const MATERIALS = ["iron", "steel", "mithril", "adamantite", "titanite"];
-const EQUIPMENT_TYPES = ["weapon", "helmet", "body", "shield", "tool", "clothes"];
-
 const EquipmentPanel: Component<EquipmentPanelProps> = (props) => {
   const [selectedItem, setSelectedItem] = createSignal<Equipment | null>(null);
-  const [craftType, setCraftType] = createSignal("weapon");
-  const [craftMaterial, setCraftMaterial] = createSignal("iron");
-  const [showCraft, setShowCraft] = createSignal(false);
 
   const equippedItems = createMemo(() => {
     if (props.selectedUnitId == null) return {};
@@ -170,58 +154,9 @@ const EquipmentPanel: Component<EquipmentPanelProps> = (props) => {
           </div>
         </Show>
       </Show>
-
-      {/* Crafting */}
-      <div class="border-t border-white/10 pt-2">
-        <button
-          class="text-[10px] font-semibold text-white/50 hover:text-white/70 mb-1"
-          onClick={() => setShowCraft(!showCraft())}
-          aria-expanded={showCraft()}
-        >
-          {showCraft() ? "▼" : "▶"} Craft Equipment
-        </button>
-        <Show when={showCraft()}>
-          <div class="space-y-1.5 mt-1">
-            <label class="block text-[10px] text-white/40">
-              Type
-              <select
-                class="mt-0.5 w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-[10px] text-white/70"
-                value={craftType()}
-                onChange={(e) => setCraftType(e.currentTarget.value)}
-              >
-                <For each={EQUIPMENT_TYPES}>
-                  {(t) => <option value={t}>{t}</option>}
-                </For>
-              </select>
-            </label>
-            <label class="block text-[10px] text-white/40">
-              Material
-              <select
-                class="mt-0.5 w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-[10px] text-white/70"
-                value={craftMaterial()}
-                onChange={(e) => setCraftMaterial(e.currentTarget.value)}
-              >
-                <For each={MATERIALS}>
-                  {(m) => <option value={m}>{m}</option>}
-                </For>
-              </select>
-            </label>
-            <For each={props.buildings}>
-              {(bldg) => (
-                <button
-                  class="w-full rounded bg-amber-500/20 border border-amber-500/30 px-2 py-1.5 text-[10px] font-medium text-amber-200 hover:bg-amber-500/30 transition-all"
-                  onClick={() => props.onCraft(bldg.id, craftType(), craftMaterial())}
-                >
-                  Craft at {bldg.buildingType?.replace("manufacturing_", "")} #{bldg.id}
-                </button>
-              )}
-            </For>
-            <Show when={props.buildings.length === 0}>
-              <p class="text-[10px] text-white/30">No manufacturing buildings available</p>
-            </Show>
-          </div>
-        </Show>
-      </div>
+      <p class="mt-2 text-[10px] text-white/30">
+        Craft a hatchet, spear, or vest from the selected minion. This panel only swaps what they already wear.
+      </p>
     </div>
   );
 };

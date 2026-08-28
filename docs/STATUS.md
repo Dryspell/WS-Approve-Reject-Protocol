@@ -2,43 +2,45 @@
 
 Maps each section of the design documents to its actual implementation status. This is the source of truth for what exists in the codebase vs. what is aspirational.
 
-**Legend**: Implemented | Partial | Not Started | N/A (not applicable to digital version)
+**Live game (August 2026):** Vote Exchange Protocol + a narrow expedition colony loop. One camp, 3 actions per minion per round, harvest / refine / craft-and-equip (hatchet, spear, vest), majority melee, send-home + lobby roster (gear travels with the veteran), guest recovery code + username/passphrase bind.
+
+**Parked:** The 16-building catalog, `game_tick` production, genetics breeding HUD, EV/tournament HUD, parent-server tree, dual-currency / MBLS, clans, monetization. Reducers and tables may still exist; they are not the `/vote` game.
+
+**Legend**: Implemented | Partial | Parked | Not Started | N/A (not applicable to digital version)
 
 ---
 
-## Complete Feature Roadmap (Phases A–K + L–Q)
+## Live loop vs parked phases (A–Q)
 
 | Phase | Name | Status | Notes |
 |-------|------|--------|-------|
-| A | Laborer-Vote Unification | COMPLETE | `vote_id` on Unit, units linked to votes |
-| B | Functional Buildings | COMPLETE | 16 building types, construction, assignment, taxation |
-| C | Resource Refinement Pipeline | COMPLETE | `game_tick` processes building production |
-| D | Equipment System | COMPLETE | `equip_item`/`unequip_item` apply stat bonuses via `recalculate_unit_stats`; `craft_equipment` consumes tiered materials |
-| E | Battle Arena | COMPLETE | `create_battle_arena` reducer snapshots unit stats; BattleArenaViewport wired; auto-chess combat loop |
-| F | Laborer Genetics | COMPLETE | Initial units get LaborerGenetics records; breeding works |
-| G | Vote Mechanics Polish | COMPLETE | SideBet economics backed by pot; payouts from pot_size |
-| H | Multi-Timeframe Server Hierarchy | COMPLETE | ServerNode table, transfer reducers |
-| I | Dual Currency | COMPLETE | PlayerCurrency table with MT + MBLS |
-| J | Platform Features | COMPLETE | Tournament, Spectator tables |
-| K | Technical Debt | COMPLETE | Dead code removal, docs update, cleanup |
-| L | Integration Gap Fixes | COMPLETE | Stat application, craft costs, battle creation, side bet economics, equipment cleanup, tax bugfix, UI wiring, initial genetics, vote sale unification |
-| M | UI/UX Fix Pass | COMPLETE | 24 issues: P0 bugs, P1 UX, P3 polish |
-| N | Match History & Chat Bubbles | COMPLETE | In-game event feed, post-game log, 3D speech bubbles |
-| O | Bot Full Simulation Expansion | COMPLETE | Wandering, laborer harvesting, market activity, side bets |
-| P | Minion Resource & Combat Mechanics | COMPLETE | Per-skill XP, evacuation, auto-chess, combat toggle |
-| Q | Terrain Procedural Generation | COMPLETE | Height displacement, biome texturing, environment scattering |
+| A | Laborer-Vote Unification | LIVE | Each minion is a vote (`vote_id` on Unit) |
+| B | Functional Buildings | PARKED | 16-type Build catalog hidden from HUD. Live building is one camp via `found_camp` |
+| C | Resource Refinement Pipeline | PARKED / LIVE | `game_tick` building production is parked. Live refine is `refine_at_camp` (2 raw → 1 processed) |
+| D | Equipment System | LIVE | Camp `craft_and_equip` + Equip panel swap. Spear/vest feed arena stats; hatchet adds harvest. Gear persists on `OwnedEquipment` |
+| E | Battle Arena | LIVE | Majority minions fight on a hex board; survivors extract unless the match is ending |
+| F | Laborer Genetics | PARKED | Default IVs still spawn; breeding HUD is hidden |
+| G | Vote Mechanics Polish | LIVE | Guarantees lock and cannot be sold; cancel unsold; refund if seller leaves; side bets remain |
+| H | Multi-Timeframe Server Hierarchy | PARKED | ServerNode / transfer reducers exist; not the live loop |
+| I | Dual Currency | PARKED | PlayerCurrency table exists; play uses wallet + buy-in |
+| J | Platform Features | PARKED | Tournament HUD hidden; Spectator table remains |
+| K–N | Debt / UX / match history | LIVE | Chat, event feed, Game Over, lobby restore |
+| O | Bot simulation | LIVE | Bots vote, harvest, found camp, refine, craft, sit through `arena`; they do not buy extra laborers |
+| P | Minion resource & combat | LIVE | 3 actions, skill double-chance, send-home, `combat_enabled` skips arena |
+| Q | Terrain | LIVE | Procedural map; resource nodes clustered by biome |
 
-### UI Components (Complete)
+### HUD (live)
 
-- `BuildingPanel.tsx`
-- `EquipmentPanel.tsx`
+- `EquipmentPanel.tsx` — swap hatchet/spear/vest
 - `BattleArenaViewport.tsx`
-- `GeneticsPanel.tsx`
 - `SideBetPanel.tsx`
-- `EVCalculator.tsx`
-- `TournamentPanel.tsx`
-- `MatchHistoryPanel.tsx`
-- `EventFeedPanel.tsx`
+- `UnitContextPanel.tsx` — harvest, camp, refine, craft, send-home
+- `RosterPicker.tsx` — next-lobby veterans + gear
+- `AccountSaveCard.tsx` — recovery code + bind/restore
+
+### HUD (parked; files remain)
+
+- `BuildingPanel.tsx`, `GeneticsPanel.tsx`, `EVCalculator.tsx`, `TournamentPanel.tsx`
 
 ---
 
@@ -47,20 +49,24 @@ Maps each section of the design documents to its actual implementation status. T
 | Section | Feature | Status | Notes |
 |---------|---------|--------|-------|
 | Gameplay | Binary choice (red/blue) | Implemented | |
-| Gameplay | Timer-based rounds | Implemented | Client-side interval triggers `processRoundVotes` |
-| Gameplay | Minority wins, majority eliminated | Implemented | |
+| Gameplay | Timer-based rounds | Implemented | Server `RoundTimerEntry` is authoritative; HUD timer resets each round |
+| Gameplay | Minority wins, majority eliminated | Implemented | Minority tickets carry forward. Unplaced tickets split evenly at lock. Majority minions fight in the arena; survivors return to the roster unless the match is ending. Sold-out hands stay in until end of round, then drop if still empty |
 | Gameplay | Game ends at 1-2 players | Implemented | |
-| Gameplay | Tie = game ends, pot split proportionally | Implemented | Confirmed as intended behavior |
+| Gameplay | Tie = game ends, pot split proportionally | Implemented | 0–0 is not a tie (timeframe restarts); UI shows pot-split, not a red tiebreaker |
 | Gameplay | Game-start countdown overlay | Implemented | 3-second client-side countdown when all players ready |
 | Gameplay | Live vote tally on drop zones | Implemented | Per-color count shown below each drop zone |
 | Players | 3 to Unlimited | Implemented | Min/max configurable per room via `min_players`/`max_players` |
 | Vote Trading | Buy/sell votes | Implemented | Flat-price listings only |
 | Vote Trading | Trade offers (negotiation) | Implemented | Trade offer system in ChatPanel with accept/decline |
 | Vote Splitting | Split votes across colors | Partial | UI exists; server doesn't validate per-player split semantics |
-| Guarantees | Public guarantees (one buyer) | Implemented | |
-| Guarantees | Private guarantees (multiple buyers) | Implemented | |
-| Guarantees | Per-vote enforcement | Implemented | Each guarantee locks a specific vote; server enforces color |
+| Guarantees | Public guarantees (one buyer) | Implemented | Listing deactivates after first purchase |
+| Guarantees | Private guarantees (multiple buyers) | Implemented | Stays listed; same buyer cannot buy twice |
+| Guarantees | Per-vote enforcement | Implemented | Active or purchased guarantee locks color on `set_vote_color` / `set_unit_vote_color` and at tally |
 | Guarantees | Duplicate purchase prevention | Implemented | Server + UI prevent same buyer purchasing same guarantee twice |
+| Guarantees | Cancel / unlist unsold | Implemented | `cancel_guarantee` unlists unsold promises and drops the lock |
+| Guarantees | Transfer with vote sale | Blocked | Guaranteed votes cannot be listed, transferred, or accepted in a trade |
+| Guarantees | Refund if seller leaves | Implemented | `leave_room` refunds buyers, claws seller proceeds + pot fee |
+| Guarantees | Honor/break (bluff) | N/A | Digital version forces the color; cannot break a purchased guarantee |
 | Guarantees | Honor/break tracking | Implemented | `process_round_votes` records outcome; shown in EliminationModal |
 | Wallet | Player wallet for trading | Implemented | |
 | Wallet | Wallet limits/caps | Not Started | rules.md discusses spending limits |
@@ -77,14 +83,14 @@ Maps each section of the design documents to its actual implementation status. T
 | Settings | Allow/disallow re-buy per room | Implemented | Per-room `allow_rebuy` boolean |
 | Settings | Allow/disallow mid-game join per room | Implemented | Per-room `allow_midgame_join` boolean |
 | Settings | Configurable min/max players per room | Implemented | Per-room `min_players` and `max_players` fields |
-| Settings | `combat_enabled` toggle | Implemented | Disables Battle Arena for development/testing; majority eliminated without combat |
-| Settings | Vote-on-voting trigger | Not Started | |
+| Settings | `combat_enabled` toggle | Implemented | When off, majority minions extract without entering the arena |
+| Settings | Vote-on-voting trigger | Implemented | Supermajority (2/3 of remaining players) calls `vote_end_round`; timer remains the backstop |
 | UI | Market panel open by default | Implemented | `marketOpen` initialises to `true` |
-| UI | Labeled panel buttons | Implemented | Build, Equip, Gene, EV, Tourney, Bet (icon + text) |
+| UI | Labeled panel buttons | Implemented | Live HUD: Equip, Bet. Build / Gene / EV / Tourney hidden (parked catalog) |
 | UI | Leave confirmation | Implemented | Inline card (not modal) with forfeit warning |
 | UI | In-game navigation links | Implemented | Ranks, Profile, Home in top bar |
 | UI | Admin panel gated to dev | Implemented | `isDev()` guard |
-| UI | Tie tiebreaker message | Implemented | EliminationModal shows "Tie — Red eliminated by tiebreaker" |
+| UI | Tie results copy | Implemented | EliminationModal and Game Over: pot splits by votes cast |
 
 ---
 
@@ -111,8 +117,11 @@ Maps each section of the design documents to its actual implementation status. T
 | Section | Feature | Status | Notes |
 |---------|---------|--------|-------|
 | Core | Laborer assignment to tasks | Implemented | Units with vote_id, task system; UI for resource assignment |
-| Core | Building construction | Implemented | 16 building types, BuildingPanel |
-| Core | Resource gathering | Implemented | Resource refinement pipeline |
+| Core | Building construction | Parked | 16-type catalog hidden. Live: one camp |
+| Core | Resource gathering | Implemented | 3-action harvest; skill level is a (level−1)×10% chance to double yield (0–40%). Node still loses 1. |
+| Core | Camp / refine / craft | Implemented | One camp per player (3 wood + 2 stone). Refine 2 raw → 1 processed (craft skill may double). Craft+equip hatchet/spear/vest. |
+| Core | Send home | Implemented | Spends 1 action; bag → `PlayerStash`, minion → `OwnedLaborer`, equipped gear → `OwnedEquipment`. |
+| Core | Roster / next lobby | Implemented | Winners' surviving minions + camp goods settle to the account. Lobby `RosterPicker` brings veterans up to `votes_per_player`; empty slots are recruits. Equipped gear travels with the veteran and is worn again on the next expedition. Sent-home veterans stay out of that expedition. Guest recovery code + username/passphrase bind on Game Over and lobby Restore save. |
 | Core | Crafting system | Implemented | Craft/equip/unequip reducers; consumes building inventory |
 | Integration | Laborers as voters | Implemented | `vote_id` on Unit, units linked to votes |
 | Integration | Majority laborers enter Battle Arena | Implemented | BattleArena, BattleUnit tables; auto-chess combat |
@@ -120,19 +129,19 @@ Maps each section of the design documents to its actual implementation status. T
 | Integration | Minion evacuation before voting | Implemented | Unvoted/un-promised minions can be withdrawn to safety |
 | Combat | Battle Arena | Implemented | BattleArenaViewport, turn-based automated combat |
 | Combat | Team-based automated combat (auto-chess) | Implemented | Automated turn resolution using unit stats + equipment |
-| Combat | `combat_enabled` room flag | Implemented | Development toggle; disables Battle Arena when off |
+| Combat | Majority melee each round | Implemented | Each player's majority minions sit together on a hex board, spaced around the center. They walk toward the closest enemy player and attack when adjacent. Survivors return to the roster unless the match is ending. |
 | Combat | Equipment durability | Implemented | Equipment system |
-| Resources | Primary resources (wood, stone, ore...) | Implemented | game_tick processes production; biome zone clustering |
+| Resources | Primary resources (wood, stone, ore...) | Implemented | Instant harvest from biome-clustered nodes. `game_tick` building production is parked |
 | Resources | Secondary resources (lumber, ingots...) | Implemented | Refinement pipeline |
 | Resources | Tertiary products (armor, weapons...) | Implemented | Equipment crafting |
-| Equipment | Item modifiers/tiers | Implemented | Equipment table, EquipmentPanel |
+| Equipment | Item modifiers/tiers | Partial | Live items are hatchet / spear / vest. Extra slots and mithril tiers are parked |
 | Equipment | Weapons and armor types | Implemented | craft/equip/unequip reducers |
-| Buildings | Dormitories, farms, refineries | Implemented | 16 building types, taxation |
-| Laborers | Genetics and lineage system | Implemented | LaborerGenetics (6 IVs), breeding, GeneticsPanel |
+| Buildings | Dormitories, farms, refineries | Parked | Long-game catalog; not on the live HUD |
+| Laborers | Genetics and lineage system | Parked | Default IVs still apply; breeding HUD hidden |
 | Laborers | Stats (combat, gathering, crafting) | Implemented | Stat fields on unit type; recalculated on equip/unequip |
 | Laborers | Per-skill XP (level cap 5) | Implemented | Woodcutting, Mining, Quarrying, Hunting, Farming, Crafting, Combat |
-| Automation | Bot simulation | Implemented | `scripts/bot-runner.ts` — full simulation with wandering, harvesting, market, side bets |
-| Automation | Player automation / task queuing | Partial | `UnitTaskQueue` move/gather; craft/upgrade tasks not yet processed |
+| Automation | Bot simulation | Implemented | `scripts/bot-runner.ts` — vote strategies, camp/refine/craft, harvest, cheap-vote buys; no extra `spawnLaborer` |
+| Automation | Player automation / task queuing | Parked | Instant 3-action reducers replaced the queue. `UnitTaskQueue` craft/upgrade is unused |
 | Setting | Medieval fantasy art style | Partial | KayKit 3D models; procedural terrain |
 
 ---
@@ -183,7 +192,7 @@ Maps each section of the design documents to its actual implementation status. T
 | Revenue | Transaction fees (~1%) | Implemented | `TRANSACTION_FEE_RATE` constant, fees added to pot |
 | Revenue | Cash-out system | Not Started | |
 | Revenue | Skins/cosmetics | Not Started | |
-| Revenue | Tournament entry fees | Implemented | Tournament table, TournamentPanel |
+| Revenue | Tournament entry fees | Parked | Tournament table remains; HUD hidden |
 | Revenue | Side-betting platform | Implemented | SideBet table, SideBetPanel |
 | SaaS | Chat-based API platform | Not Started | |
 | SaaS | Twitch/Discord/YouTube integration | Not Started | |
@@ -204,8 +213,8 @@ Maps each section of the design documents to its actual implementation status. T
 
 | Section | Feature | Status | Notes |
 |---------|---------|--------|-------|
-| EV Display | Show expected values to players | Implemented | EVCalculator component |
-| Strategy Info | Probability/odds display in UI | Implemented | EVCalculator |
+| EV Display | Show expected values to players | Parked | EVCalculator exists; removed from live HUD |
+| Strategy Info | Probability/odds display in UI | Parked | EVCalculator hidden |
 | Balance | Guarantee pricing guidance | Partial | |
 
 ---
@@ -238,7 +247,7 @@ Summary of testability based on current implementation:
 | User blocking | Implemented | Auto-removes friendship, cancels pending requests |
 | Clan/guild system | Not Started | |
 | Spectator mode | Implemented | Spectator table |
-| Bot players | Implemented | `scripts/bot-runner.ts` — full simulation |
+| Bot players | Implemented | `scripts/bot-runner.ts` — colony + vote AI for practice |
 
 ---
 
@@ -279,8 +288,8 @@ Summary of testability based on current implementation:
 | Procedural terrain | Implemented | Simplex-noise displacement, biome texturing, pond, prop scattering |
 | Shared test-id contract | Implemented | `src/lib/test-ids.ts` — constants shared between UI and E2E tests |
 | DRY E2E test helpers | Implemented | Page objects + game flow helpers eliminate raw selectors |
-| Equipment system | Implemented | Equipment table, EquipmentPanel, craft/equip/unequip reducers |
-| Building types | Implemented | 16 building types, BuildingPanel |
+| Equipment system | Implemented | Equip panel swaps worn gear; camp crafts hatchet/spear/vest; gear persists on veterans |
+| Building types | Parked | 16-type BuildingPanel hidden; live camp only |
 | Task animations | Partial | Walk/idle transitions work; gather/craft animations not yet connected |
 
 ---
@@ -290,7 +299,7 @@ Summary of testability based on current implementation:
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Dark-themed landing page | Implemented | Hero, How It Works, Features, CTA sections |
-| Guest play flow | Implemented | GuestNamePrompt modal, auto-generated guest names |
+| Guest play flow | Implemented | Display-name prompt. Game Over + lobby Restore save: recovery code, username/passphrase bind (`account_bind`) |
 | Guest name prompt on direct /vote nav | Implemented | Shown when name is empty after subscription |
 | Restyled Nav | Implemented | Dark theme, Play/Ranks/Profile links |
 | In-game navigation links | Implemented | Ranks, Profile, Home icon links in top bar during gameplay |
@@ -299,4 +308,4 @@ Summary of testability based on current implementation:
 
 ---
 
-**Last Updated**: February 26, 2026
+**Last Updated**: August 25, 2026

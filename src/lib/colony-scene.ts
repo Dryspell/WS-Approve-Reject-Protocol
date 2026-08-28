@@ -37,6 +37,7 @@ export interface ColonyUnit {
   team: TeamColor;
   x: number;
   z: number;
+  ownerId?: string;
   characterClass?: CharacterClass;
   taskType?: string;
   targetX?: number;
@@ -81,6 +82,11 @@ export interface ColonyBuilding {
   constructionMax?: number;
 }
 
+export interface HoverFocus {
+  unitId?: number;
+  ownerId?: string;
+}
+
 export interface ColonySceneCallbacks {
   onSelect: (ids: number[]) => void;
   onMoveUnit?: (id: number, x: number, z: number) => void;
@@ -88,6 +94,9 @@ export interface ColonySceneCallbacks {
   onLoadProgress?: (progress: number) => void;
   onAssetsReady?: () => void;
   onTradeOfferClick?: (offerId: number, screenX: number, screenY: number) => void;
+  onHoverUnit?: (id: number | null) => void;
+  onHoverPlayer?: (id: string | null) => void;
+  onWorldContextMenu?: (target: { unitId?: number; playerId?: string }, screenX: number, screenY: number) => void;
   getSelectedIds: () => number[];
 }
 
@@ -138,6 +147,7 @@ function springSettled(s: Spring3, threshold = 0.01): boolean {
 interface InternalUnit {
   id: number;
   team: TeamColor;
+  ownerId?: string;
   characterClass: CharacterClass;
   mesh: THREE.Group;
   hitTarget: THREE.Mesh;
@@ -264,6 +274,12 @@ export class ColonySceneManager {
   private callbacks: ColonySceneCallbacks;
   private elapsed = 0;
   private lastAvatarBroadcast = 0;
+  private localPlayerId: string | null = null;
+  private hoverFocus: HoverFocus | null = null;
+  private ownershipLines: THREE.Line[] = [];
+  private lastHoverUnitId: number | null = null;
+  private lastHoverPlayerId: string | null = null;
+  private suppressOrbit = false;
 
   constructor(container: HTMLElement, callbacks: ColonySceneCallbacks) {
     this.container = container;
@@ -306,7 +322,10 @@ export class ColonySceneManager {
       canvas.removeEventListener("pointerdown", this.handlePointerDown);
       canvas.removeEventListener("pointermove", this.handlePointerMove);
       canvas.removeEventListener("pointerup", this.handlePointerUp);
+      canvas.removeEventListener("pointerleave", this.handlePointerLeave);
       canvas.removeEventListener("click", this.handleClick);
+      canvas.removeEventListener("contextmenu", this.handleContextMenu);
+      this.clearOwnershipLines();
     }
     this.controls?.dispose();
 
@@ -494,7 +513,9 @@ export class ColonySceneManager {
     canvas.addEventListener("pointerdown", this.handlePointerDown);
     canvas.addEventListener("pointermove", this.handlePointerMove);
     canvas.addEventListener("pointerup", this.handlePointerUp);
+    canvas.addEventListener("pointerleave", this.handlePointerLeave);
     canvas.addEventListener("click", this.handleClick);
+    canvas.addEventListener("contextmenu", this.handleContextMenu);
   }
 
   private getMouseNDC(e: MouseEvent) {
@@ -512,6 +533,20 @@ export class ColonySceneManager {
     return this.internalUnits.find((u) => u.hitTarget === hits[0].object) ?? null;
   }
 
+  private raycastPlayers(e: MouseEvent): string | null {
+    this.getMouseNDC(e);
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const targets: THREE.Object3D[] = [];
+    for (const [, avatar] of this.otherAvatars) {
+      const hit = avatar.mesh.userData.hitTarget as THREE.Object3D | undefined;
+      if (hit) targets.push(hit);
+    }
+    if (targets.length === 0) return null;
+    const hits = this.raycaster.intersectObjects(targets, false);
+    if (hits.length === 0) return null;
+    return (hits[0].object.userData.playerId as string) ?? null;
+  }
+
   private raycastGround(e: MouseEvent): THREE.Vector3 | null {
     this.getMouseNDC(e);
     this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -521,6 +556,15 @@ export class ColonySceneManager {
 
   // Arrow functions preserve `this` binding for event listeners
   private handlePointerDown = (e: PointerEvent) => {
+    if (e.button === 2) {
+      const hitUnit = this.raycastUnits(e);
+      const hitPlayer = this.raycastPlayers(e);
+      if (hitUnit || hitPlayer) {
+        this.suppressOrbit = true;
+        this.controls.enabled = false;
+      }
+      return;
+    }
     if (e.button !== 0) return;
     const hitUnit = this.raycastUnits(e);
     if (hitUnit) {
@@ -550,16 +594,27 @@ export class ColonySceneManager {
   };
 
   private handlePointerMove = (e: PointerEvent) => {
-    if (!this.isDragging || !this.dragUnit) return;
-    const groundHit = this.raycastGround(e);
-    if (!groundHit) return;
+    if (this.isDragging && this.dragUnit) {
+      const groundHit = this.raycastGround(e);
+      if (!groundHit) return;
 
-    const halfBound = GROUND_SIZE / 2 - 1;
-    this.dragUnit.spring.tx = Math.max(-halfBound, Math.min(halfBound, groundHit.x - this.dragOffset.x));
-    this.dragUnit.spring.tz = Math.max(-halfBound, Math.min(halfBound, groundHit.z - this.dragOffset.z));
+      const halfBound = GROUND_SIZE / 2 - 1;
+      this.dragUnit.spring.tx = Math.max(-halfBound, Math.min(halfBound, groundHit.x - this.dragOffset.x));
+      this.dragUnit.spring.tz = Math.max(-halfBound, Math.min(halfBound, groundHit.z - this.dragOffset.z));
+      return;
+    }
+    this.updateHoverFromEvent(e);
+  };
+
+  private handlePointerLeave = () => {
+    this.clearWorldHover();
   };
 
   private handlePointerUp = (e: PointerEvent) => {
+    if (this.suppressOrbit) {
+      this.suppressOrbit = false;
+      this.controls.enabled = true;
+    }
     if (this.isDragging && this.dragUnit) {
       this.controls.enabled = true;
       this.renderer.domElement.releasePointerCapture(e.pointerId);
@@ -567,6 +622,21 @@ export class ColonySceneManager {
       this.isDragging = false;
       this.dragUnit = null;
     }
+  };
+
+  private handleContextMenu = (e: MouseEvent) => {
+    const hitUnit = this.raycastUnits(e);
+    const hitPlayer = this.raycastPlayers(e);
+    if (!hitUnit && !hitPlayer) return;
+    e.preventDefault();
+    this.callbacks.onWorldContextMenu?.(
+      {
+        unitId: hitUnit?.id,
+        playerId: hitPlayer ?? hitUnit?.ownerId,
+      },
+      e.clientX,
+      e.clientY,
+    );
   };
 
   private handleClick = (e: MouseEvent) => {
@@ -633,6 +703,7 @@ export class ColonySceneManager {
       this.updateResources();
       this.updateSelectionPulse();
       this.updateBillboardFade(dt);
+      this.updateOwnershipLinePositions();
 
       this.renderer.render(this.scene, this.camera);
     };
@@ -868,6 +939,7 @@ export class ColonySceneManager {
     return {
       id: pu.id,
       team: pu.team,
+      ownerId: pu.ownerId,
       characterClass: charClass,
       mesh: group,
       hitTarget,
@@ -1098,17 +1170,150 @@ export class ColonySceneManager {
   }
 
   highlightUnit(id: number | null) {
+    const unit = id != null ? this.internalUnits.find((u) => u.id === id) : undefined;
+    this.setHoverFocus(unit ? { unitId: unit.id, ownerId: unit.ownerId } : null);
+  }
+
+  setLocalPlayerId(id: string | null) {
+    this.localPlayerId = id;
+  }
+
+  setHoverFocus(focus: HoverFocus | null) {
+    this.hoverFocus = focus;
+    const highlightIds = new Set<number>();
+    if (focus?.unitId != null) highlightIds.add(focus.unitId);
+    if (focus?.ownerId) {
+      for (const u of this.internalUnits) {
+        if (u.ownerId === focus.ownerId) highlightIds.add(u.id);
+      }
+    }
     for (const u of this.internalUnits) {
-      if (u.id === id && !u.hoverRing) {
+      const on = highlightIds.has(u.id);
+      if (on && !u.hoverRing) {
         const ring = createHoverRing();
         u.mesh.add(ring);
         u.hoverRing = ring;
-      } else if (u.id !== id && u.hoverRing) {
+      } else if (!on && u.hoverRing) {
         u.mesh.remove(u.hoverRing);
         u.hoverRing.geometry.dispose();
         (u.hoverRing.material as THREE.Material).dispose();
         u.hoverRing = undefined;
       }
+    }
+    this.rebuildOwnershipLines();
+  }
+
+  private updateHoverFromEvent(e: PointerEvent) {
+    const unit = this.raycastUnits(e);
+    const player = unit ? null : this.raycastPlayers(e);
+    const unitId = unit?.id ?? null;
+    const playerId = player ?? unit?.ownerId ?? null;
+
+    if (unitId !== this.lastHoverUnitId) {
+      this.lastHoverUnitId = unitId;
+      this.callbacks.onHoverUnit?.(unitId);
+    }
+    if (playerId !== this.lastHoverPlayerId) {
+      this.lastHoverPlayerId = playerId;
+      this.callbacks.onHoverPlayer?.(playerId);
+    }
+
+    this.setHoverFocus(
+      unit
+        ? { unitId: unit.id, ownerId: unit.ownerId }
+        : player
+          ? { ownerId: player }
+          : null,
+    );
+    this.renderer.domElement.style.cursor = unit || player ? "pointer" : "";
+  }
+
+  private clearWorldHover() {
+    if (this.lastHoverUnitId != null) {
+      this.lastHoverUnitId = null;
+      this.callbacks.onHoverUnit?.(null);
+    }
+    if (this.lastHoverPlayerId != null) {
+      this.lastHoverPlayerId = null;
+      this.callbacks.onHoverPlayer?.(null);
+    }
+    this.setHoverFocus(null);
+    this.renderer.domElement.style.cursor = "";
+  }
+
+  private avatarPosition(ownerId: string): THREE.Vector3 | null {
+    if (this.localPlayerId && ownerId === this.localPlayerId && this.playerAvatar) {
+      return this.playerAvatar.mesh.position;
+    }
+    const avatar = this.otherAvatars.get(ownerId);
+    return avatar ? avatar.mesh.position : null;
+  }
+
+  private clearOwnershipLines() {
+    for (const line of this.ownershipLines) {
+      this.scene?.remove(line);
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+    }
+    this.ownershipLines = [];
+  }
+
+  private rebuildOwnershipLines() {
+    this.clearOwnershipLines();
+    if (!this.scene || !this.hoverFocus) return;
+    const ownerId =
+      this.hoverFocus.ownerId ??
+      this.internalUnits.find((u) => u.id === this.hoverFocus?.unitId)?.ownerId;
+    if (!ownerId) return;
+    const from = this.avatarPosition(ownerId);
+    if (!from) return;
+
+    const units =
+      this.hoverFocus.unitId != null && !this.hoverFocus.ownerId
+        ? this.internalUnits.filter((u) => u.id === this.hoverFocus!.unitId)
+        : this.internalUnits.filter((u) => u.ownerId === ownerId);
+
+    for (const u of units) {
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(from.x, 1.4, from.z),
+        new THREE.Vector3(u.mesh.position.x, 1.4, u.mesh.position.z),
+      ]);
+      const mat = new THREE.LineDashedMaterial({
+        color: 0xfbbf24,
+        dashSize: 0.4,
+        gapSize: 0.22,
+        transparent: true,
+        opacity: 0.7,
+      });
+      const line = new THREE.Line(geo, mat);
+      line.computeLineDistances();
+      this.scene.add(line);
+      this.ownershipLines.push(line);
+    }
+  }
+
+  private updateOwnershipLinePositions() {
+    if (this.ownershipLines.length === 0 || !this.hoverFocus) return;
+    const ownerId =
+      this.hoverFocus.ownerId ??
+      this.internalUnits.find((u) => u.id === this.hoverFocus?.unitId)?.ownerId;
+    if (!ownerId) return;
+    const from = this.avatarPosition(ownerId);
+    if (!from) return;
+
+    const units =
+      this.hoverFocus.unitId != null && !this.hoverFocus.ownerId
+        ? this.internalUnits.filter((u) => u.id === this.hoverFocus!.unitId)
+        : this.internalUnits.filter((u) => u.ownerId === ownerId);
+
+    for (let i = 0; i < this.ownershipLines.length; i++) {
+      const u = units[i];
+      if (!u) continue;
+      const pos = this.ownershipLines[i].geometry.getAttribute("position");
+      pos.setXYZ(0, from.x, 1.4, from.z);
+      pos.setXYZ(1, u.mesh.position.x, 1.4, u.mesh.position.z);
+      pos.needsUpdate = true;
+      this.ownershipLines[i].computeLineDistances();
     }
   }
 
@@ -1134,6 +1339,7 @@ export class ColonySceneManager {
         iu.spring.tx = pu.x;
         iu.spring.tz = pu.z;
         iu.taskType = pu.taskType;
+        iu.ownerId = pu.ownerId;
       }
     }
   }
@@ -1327,6 +1533,10 @@ export class ColonySceneManager {
 
           const nameSprite = createNameSprite(p.name);
           group.add(nameSprite);
+          const hitTarget = createHitTarget();
+          hitTarget.userData.playerId = p.id;
+          group.add(hitTarget);
+          group.userData.hitTarget = hitTarget;
           this.scene.add(group);
 
           const mixer = new THREE.AnimationMixer(model);

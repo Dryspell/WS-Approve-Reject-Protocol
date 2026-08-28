@@ -18,4 +18,5 @@ export default __t.row({
   turnNumber: __t.i32().name("turn_number"),
   winnerTeam: __t.option(__t.string()).name("winner_team"),
   createdAt: __t.timestamp().name("created_at"),
+  nextActorIndex: __t.i32().name("next_actor_index"),
 });

@@ -4,6 +4,7 @@ import type { ChatMessage as DBChatMessage } from "~/module_bindings/types";
 import { showToast } from "~/components/ui/toast";
 import { TID } from "~/lib/test-ids";
 import { acceptOffer, cancelOffer, makeOffer } from "~/lib/vote-trading";
+import { parseWhisper } from "~/lib/whisper";
 
 interface ChatMessage {
   id: string;
@@ -11,7 +12,8 @@ interface ChatMessage {
   senderName: string;
   message: string;
   timestamp: number;
-  type: 'player' | 'system' | 'trade-offer';
+  type: 'player' | 'system' | 'trade-offer' | 'whisper';
+  whisperTo?: string;
   tradeOfferId?: number;
   tradeOfferType?: string;
   tradeOfferPrice?: number;
@@ -102,6 +104,24 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
 
     const sender = Array.from(connection.db.user.iter()).find(u => u.identity.toHexString() === dbMessage.sender.toHexString());
     const timestamp = dbMessage.timestamp.seconds * 1000 + dbMessage.timestamp.nanoseconds / 1000000;
+    const myId = identity()?.toHexString();
+    const whisper = parseWhisper(dbMessage.text);
+
+    if (whisper) {
+      const senderId = dbMessage.sender.toHexString();
+      if (senderId !== myId && whisper.toPlayerId !== myId) return;
+      const msg: ChatMessage = {
+        id: dbMessage.id,
+        senderId,
+        senderName: sender?.name || 'Anonymous',
+        message: whisper.body,
+        timestamp,
+        type: 'whisper',
+        whisperTo: whisper.toPlayerId,
+      };
+      setMessages(prev => (prev.some(m => m.id === msg.id) ? prev : [...prev, msg]));
+      return;
+    }
 
     const msg: ChatMessage = {
       id: dbMessage.id,
@@ -222,6 +242,14 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const resolveWhisperName = (playerId?: string) => {
+    if (!playerId) return "player";
+    const connection = conn();
+    if (!connection) return playerId.slice(0, 8);
+    const user = Array.from(connection.db.user.iter()).find((u) => u.identity.toHexString() === playerId);
+    return user?.name || playerId.slice(0, 8);
+  };
+
   return (
     <div class="flex h-full flex-col bg-transparent" classList={{
       'h-12': props.minimized,
@@ -256,6 +284,26 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
                     <Show when={msg.type === 'system'}>
                       <div class="inline-block rounded bg-white/5 px-3 py-1 text-xs text-white/40">
                         {msg.message}
+                      </div>
+                    </Show>
+
+                    <Show when={msg.type === 'whisper'}>
+                      <div classList={{
+                        'text-right': msg.senderId === identity()?.toHexString(),
+                      }}>
+                        <div class="mb-0.5 flex items-center gap-2" classList={{
+                          'justify-end': msg.senderId === identity()?.toHexString(),
+                        }}>
+                          <span class="text-[10px] font-semibold text-violet-300/80">
+                            {msg.senderId === identity()?.toHexString() ? `Whisper to ${resolveWhisperName(msg.whisperTo)}` : `Whisper from ${msg.senderName}`}
+                          </span>
+                          <span class="text-[10px] text-white/25">
+                            {getMessageTime(msg.timestamp)}
+                          </span>
+                        </div>
+                        <div class="inline-block max-w-[80%] rounded-lg border border-violet-400/25 bg-violet-500/15 px-2.5 py-1.5 text-xs text-violet-100">
+                          {msg.message}
+                        </div>
                       </div>
                     </Show>
 
@@ -335,7 +383,7 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
           <Show when={showTradeForm()}>
             <div class="border-t border-amber-500/20 bg-amber-500/5 p-2.5 space-y-2">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-white/70">Create Trade Offer</span>
+                <span class="text-xs font-semibold text-white/70">Direct trade offer</span>
                 <button class="text-white/40 hover:text-white/70 text-xs" onClick={() => setShowTradeForm(false)}>✕</button>
               </div>
               <div class="flex gap-2">
@@ -344,8 +392,8 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
                   value={tradeType()}
                   onChange={(e) => setTradeType(e.currentTarget.value as 'sell_vote' | 'buy_vote')}
                 >
-                  <option value="sell_vote">Sell my vote</option>
-                  <option value="buy_vote">Buy a vote</option>
+                  <option value="sell_vote">Sell a vote I own</option>
+                  <option value="buy_vote">Bid to buy a vote</option>
                 </select>
                 <input
                   type="number"
@@ -357,7 +405,7 @@ export const ChatPanel: Component<ChatPanelProps> = (props) => {
                 />
               </div>
               <button class="w-full rounded bg-amber-600/80 px-2 py-1 text-xs font-medium text-white hover:bg-amber-500" onClick={handleCreateTradeOffer}>
-                Post Offer (${tradePrice().toFixed(2)})
+                Post {tradeType() === "sell_vote" ? "sell" : "buy"} offer (${tradePrice().toFixed(2)})
               </button>
             </div>
           </Show>

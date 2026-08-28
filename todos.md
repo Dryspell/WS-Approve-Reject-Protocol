@@ -1,6 +1,6 @@
 # Project TODOs
 
-> **Current Focus**: Documentation review and alignment with implemented features through Sprint 15.
+> **Current Focus**: Live expedition loop is in. Next session starts from playtesting, not the 16-building catalog. See [docs/STATUS.md](./docs/STATUS.md).
 >
 > See [docs/development-history.md](./docs/development-history.md) for completed sprint summaries.
 > See [docs/STATUS.md](./docs/STATUS.md) for vision-vs-implementation mapping.

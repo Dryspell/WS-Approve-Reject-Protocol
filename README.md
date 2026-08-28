@@ -10,11 +10,11 @@ A multiplayer game combining market-based voting mechanics with strategic elimin
 
 Players buy into a game, creating a pot. During each timed round:
 - **Trade votes**: Buy and sell voting tickets between players
-- **Trade guarantees**: Purchase promises about how others will vote (they can bluff!)
-- **Manage your colony**: Assign minions to harvest resources, craft equipment, level up skills
-- **Strategic voting**: Players with multiple votes can split them to guarantee minority
-- **Evacuation**: Unvoted minions can be sent to safety before voting closes
-- **Elimination**: After voting, majority voters' laborers enter an automated Battle Arena; losers are eliminated
+- **Trade guarantees**: Purchase promises about how others will vote (a guaranteed vote is locked and cannot be sold or broken)
+- **Spend 3 actions**: Harvest, found one camp, refine, craft a hatchet/spear/vest
+- **Strategic voting**: Players with multiple votes can split them to hold a minority ticket
+- **Send home**: Uncolored minions bank bag + veteran (and their gear) for the next lobby
+- **Elimination**: After the tally, majority minions fight in the arena; survivors return to the roster
 - **Winner takes pot**: Last 1-2 players standing win the pot
 
 ## Quick Start
@@ -40,11 +40,11 @@ See [docs/getting-started.md](./docs/getting-started.md) for detailed setup inst
 
 ## Project Status
 
-**Current Focus**: Feature-complete across The Vote Exchange Protocol and Colony Builder. Active work on bot simulation fidelity, match history, and terrain procedural generation.
+**Current Focus**: Live expedition loop — vote market + 3-action camp/arena/roster. The 16-building catalog is parked.
 
 **Backend**: SpacetimeDB 2.0 (migrated Feb 2026)
 
-The full game loop is functional: vote trading, guarantee bluffing, minion harvesting, per-skill XP, auto-chess combat, match history event feed, and real-time bot simulation of all player activities. See [STATUS.md](./docs/STATUS.md) for the detailed feature map and [roadmap.md](./roadmap.md) for phase tracking.
+See [STATUS.md](./docs/STATUS.md) for live vs parked, and [roadmap.md](./roadmap.md) for history. The long-game colony catalog lives in [rules-colony-builder.md](./game-design/rules-colony-builder.md) and is not the current HUD.
 
 ## Documentation
 

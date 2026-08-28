@@ -4,6 +4,20 @@ This document summarizes the development sprints for Nashfall.
 
 ---
 
+## August 2026 — Narrow expedition loop
+
+Closed the vote + colony refactor so `/vote` is one loop, not a catalog:
+
+- Vote lock: unset tickets split evenly; 0–0 is not a tie; guarantees cannot be sold or broken; cancel unsold; refund if the seller leaves
+- Colony: 3 actions, one camp, refine, craft-and-equip (hatchet / spear / vest); majority hex arena
+- Account: send-home + roster; veterans keep gear; guest recovery code and username/passphrase bind
+- HUD: Equip + Bet only. Build / Gene / EV / Tourney parked
+- Bots: harvest/camp/craft and sit through `arena`; no extra `spawnLaborer`
+
+Canonical status: [STATUS.md](./STATUS.md). Long-game catalog remains in [rules-colony-builder.md](../game-design/rules-colony-builder.md) as parked design.
+
+---
+
 ## Sprint Timeline
 
 | Sprint | Focus | Status |

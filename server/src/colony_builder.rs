@@ -315,7 +315,7 @@ pub fn unequip_item(
     Ok(())
 }
 
-fn recalculate_unit_stats(ctx: &ReducerContext, unit_id: i32) {
+pub(crate) fn recalculate_unit_stats(ctx: &ReducerContext, unit_id: i32) {
     let genetics = ctx.db.laborer_genetics().unit_id().find(unit_id);
     let (base_combat, base_gather, base_craft, base_speed, base_health) = match &genetics {
         Some(g) => (g.combat_iv, g.gathering_iv, g.crafting_iv, g.speed_iv, g.health_iv),
@@ -340,6 +340,176 @@ fn recalculate_unit_stats(ctx: &ReducerContext, unit_id: i32) {
         stats.craft_rate = 2 + base_craft / 3;
         ctx.db.unit_stats().unit_id().update(stats);
     }
+}
+
+fn require_owned_minion(ctx: &ReducerContext, unit_id: i32) -> Result<Unit, String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let unit = ctx.db.unit().id().find(unit_id).ok_or("Unit not found")?;
+    if unit.owner_id != caller_id {
+        return Err("You don't own this unit".to_string());
+    }
+    if unit.unit_type != "minion" {
+        return Err("Only minions can do this".to_string());
+    }
+    Ok(unit)
+}
+
+/// Instant camp: 1 action + 3 wood + 2 stone. One per player per room.
+#[reducer]
+pub fn found_camp(ctx: &ReducerContext, unit_id: i32) -> Result<(), String> {
+    let unit = require_owned_minion(ctx, unit_id)?;
+    if find_player_camp(ctx, unit.room_id, &unit.owner_id).is_some() {
+        return Err("You already have a camp in this room".to_string());
+    }
+    let mut inventory = ctx.db.unit_inventory().unit_id().find(unit_id)
+        .ok_or("Inventory not found")?;
+    if inventory.wood < 3 || inventory.stone < 2 {
+        return Err("Need 3 wood and 2 stone to found a camp".to_string());
+    }
+
+    spend_unit_action(ctx, unit_id)?;
+    inventory.wood -= 3;
+    inventory.stone -= 2;
+    ctx.db.unit_inventory().unit_id().update(inventory.clone());
+
+    let camp = ctx.db.unit().insert(Unit {
+        id: 0,
+        room_id: unit.room_id,
+        owner_id: unit.owner_id.clone(),
+        unit_type: "structure".to_string(),
+        position: unit.position.clone(),
+        dimensions: Vector2 { x: 40.0, y: 40.0 },
+        fill_style: "#6b4423".to_string(),
+        task_type: None,
+        target_id: None,
+        vote_color: None,
+        vote_guarantee: None,
+        vote_price: None,
+        vote_owner: None,
+        vote_id: None,
+        storage_capacity: Some(200),
+        is_storage: true,
+        building_type: Some("camp".to_string()),
+        construction_progress: Some(1),
+        construction_max: Some(1),
+        assigned_unit_id: None,
+        building_recipe: None,
+        tax_rate: Some(0.0),
+        contributors: vec![unit.owner_id.clone()],
+    });
+    ctx.db.unit_inventory().insert(empty_inventory(camp.id, 200));
+
+    award_skill_xp(ctx, unit_id, "crafting", SKILL_XP_PER_ACTION);
+    create_game_event(
+        ctx,
+        unit.room_id.to_string(),
+        "found_camp".to_string(),
+        unit_id.to_string(),
+        camp.id.to_string(),
+        1,
+    )?;
+    Ok(())
+}
+
+/// 2 raw → 1 processed (crafting skill may double the output). Requires a camp.
+#[reducer]
+pub fn refine_at_camp(ctx: &ReducerContext, unit_id: i32, raw_type: String) -> Result<(), String> {
+    let unit = require_owned_minion(ctx, unit_id)?;
+    find_player_camp(ctx, unit.room_id, &unit.owner_id)
+        .ok_or("Found a camp before you can refine")?;
+
+    let output = match raw_type.as_str() {
+        "wood" => "lumber",
+        "stone" => "cut_stone",
+        "metal_ore" => "metal_ingot",
+        _ => return Err("Can only refine wood, stone, or ore".to_string()),
+    };
+
+    let mut inventory = ctx.db.unit_inventory().unit_id().find(unit_id)
+        .ok_or("Inventory not found")?;
+    take_inventory_kind(&mut inventory, &raw_type, 2)?;
+
+    spend_unit_action(ctx, unit_id)?;
+    let mut produced = 1;
+    if let Some(stats) = ctx.db.unit_stats().unit_id().find(unit_id) {
+        if roll_skill_double(ctx, stats.crafting_level) {
+            produced = 2;
+        }
+    }
+    add_inventory_kind(&mut inventory, output, produced)?;
+    ctx.db.unit_inventory().unit_id().update(inventory);
+
+    award_skill_xp(ctx, unit_id, "crafting", SKILL_XP_PER_ACTION);
+    create_game_event(
+        ctx,
+        unit.room_id.to_string(),
+        "refine".to_string(),
+        unit_id.to_string(),
+        output.to_string(),
+        produced,
+    )?;
+    Ok(())
+}
+
+/// Craft and auto-equip a tool, weapon, or armor at camp.
+#[reducer]
+pub fn craft_and_equip(ctx: &ReducerContext, unit_id: i32, recipe: String) -> Result<(), String> {
+    let unit = require_owned_minion(ctx, unit_id)?;
+    find_player_camp(ctx, unit.room_id, &unit.owner_id)
+        .ok_or("Found a camp before you can craft")?;
+
+    let (cost_kind, cost_amt, equipment_type, slot, item_name, attack, defense) = match recipe.as_str() {
+        "tool" => ("lumber", 2, "tool", "main_hand", "Hatchet", 0, 0),
+        "weapon" => ("metal_ingot", 2, "weapon", "main_hand", "Spear", 4, 0),
+        "armor" => ("cut_stone", 2, "armor", "body", "Vest", 0, 4),
+        _ => return Err("Unknown recipe".to_string()),
+    };
+
+    let mut inventory = ctx.db.unit_inventory().unit_id().find(unit_id)
+        .ok_or("Inventory not found")?;
+    take_inventory_kind(&mut inventory, cost_kind, cost_amt)?;
+    spend_unit_action(ctx, unit_id)?;
+    ctx.db.unit_inventory().unit_id().update(inventory);
+
+    let existing: Vec<Equipment> = ctx.db.equipment().iter()
+        .filter(|e| e.equipped_to_unit_id == Some(unit_id) && e.slot == slot)
+        .collect();
+    for mut old in existing {
+        old.equipped_to_unit_id = None;
+        ctx.db.equipment().id().update(old);
+    }
+
+    ctx.db.equipment().insert(Equipment {
+        id: 0,
+        room_id: unit.room_id,
+        owner_id: unit.owner_id.clone(),
+        equipped_to_unit_id: Some(unit_id),
+        equipment_type: equipment_type.to_string(),
+        slot: slot.to_string(),
+        item_name: item_name.to_string(),
+        tier: 1,
+        material: cost_kind.to_string(),
+        enchantment: None,
+        quality: "normal".to_string(),
+        surface: "worn".to_string(),
+        attack_bonus: attack,
+        defense_bonus: defense,
+        speed_bonus: 0,
+        health_bonus: 0,
+        durability: 80,
+        max_durability: 80,
+    });
+    recalculate_unit_stats(ctx, unit_id);
+    award_skill_xp(ctx, unit_id, "crafting", SKILL_XP_PER_ACTION);
+    create_game_event(
+        ctx,
+        unit.room_id.to_string(),
+        "craft".to_string(),
+        unit_id.to_string(),
+        recipe,
+        1,
+    )?;
+    Ok(())
 }
 
 // ============================================================================

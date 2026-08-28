@@ -26,8 +26,13 @@ export interface ColonyViewportProps {
   otherPlayers?: OtherPlayerAvatar[];
   onPositionUpdate?: (x: number, z: number, rotY: number, moving: boolean) => void;
   hoveredUnitId?: number | null;
+  hoveredOwnerId?: string | null;
+  localPlayerId?: string;
   activeOffers?: ActiveTradeOffer[];
   onTradeOfferClick?: (offerId: number, screenX: number, screenY: number) => void;
+  onHoverUnit?: (id: number | null) => void;
+  onHoverPlayer?: (id: string | null) => void;
+  onWorldContextMenu?: (target: { unitId?: number; playerId?: string }, x: number, y: number) => void;
 }
 
 export default function ColonyViewport(props: ColonyViewportProps) {
@@ -50,6 +55,9 @@ export default function ColonyViewport(props: ColonyViewportProps) {
       onLoadProgress: setLoadingProgress,
       onAssetsReady: () => setAssetsReady(true),
       onTradeOfferClick: (offerId, sx, sy) => props.onTradeOfferClick?.(offerId, sx, sy),
+      onHoverUnit: (id) => props.onHoverUnit?.(id),
+      onHoverPlayer: (id) => props.onHoverPlayer?.(id),
+      onWorldContextMenu: (target, x, y) => props.onWorldContextMenu?.(target, x, y),
       getSelectedIds: () => props.selectedIds(),
     });
 
@@ -87,8 +95,17 @@ export default function ColonyViewport(props: ColonyViewportProps) {
   });
 
   createEffect(() => {
-    const hid = props.hoveredUnitId;
-    manager?.highlightUnit(hid ?? null);
+    manager?.setLocalPlayerId(props.localPlayerId ?? null);
+  });
+
+  createEffect(() => {
+    const unitId = props.hoveredUnitId ?? null;
+    const ownerId = props.hoveredOwnerId ?? null;
+    manager?.setHoverFocus(
+      unitId != null || ownerId
+        ? { unitId: unitId ?? undefined, ownerId: ownerId ?? undefined }
+        : null,
+    );
   });
 
   createEffect(() => {

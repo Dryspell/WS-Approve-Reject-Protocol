@@ -84,10 +84,10 @@ test.describe('Full Game Simulation (1 Browser + 4 Bots)', () => {
     log(logStream, 'Real player sent chat');
 
     // Real player browses tabs
-    const myVotesTab = setup.page.locator('[role="tab"]:has-text("Mine")');
+    const myVotesTab = setup.page.locator('[data-testid="my-votes-tab"]');
     if (await myVotesTab.isVisible({ timeout: 3000 }).catch(() => false)) {
       await myVotesTab.click();
-      log(logStream, 'Real player opened My Votes tab');
+      log(logStream, 'Real player opened Sell tab');
     }
     await snapshot([setup.page], SC, 'market-browsing', logStream);
 

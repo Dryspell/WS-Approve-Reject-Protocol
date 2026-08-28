@@ -37,14 +37,17 @@ import {
 import AcceptFriendRequestReducer from "./accept_friend_request_reducer";
 import AcceptTradeOfferReducer from "./accept_trade_offer_reducer";
 import AssignUnitToBuildingReducer from "./assign_unit_to_building_reducer";
+import BindAccountReducer from "./bind_account_reducer";
 import BlockUserReducer from "./block_user_reducer";
 import BreedLaborersReducer from "./breed_laborers_reducer";
 import CancelFriendRequestReducer from "./cancel_friend_request_reducer";
+import CancelGuaranteeReducer from "./cancel_guarantee_reducer";
 import CancelTradeOfferReducer from "./cancel_trade_offer_reducer";
 import CancelUnitTaskReducer from "./cancel_unit_task_reducer";
 import ConstructBuildingReducer from "./construct_building_reducer";
 import ContributeToBuildingReducer from "./contribute_to_building_reducer";
 import ConvertMtToMblsReducer from "./convert_mt_to_mbls_reducer";
+import CraftAndEquipReducer from "./craft_and_equip_reducer";
 import CraftEquipmentReducer from "./craft_equipment_reducer";
 import CreateBattleArenaReducer from "./create_battle_arena_reducer";
 import CreateChatRoomReducer from "./create_chat_room_reducer";
@@ -56,7 +59,9 @@ import CreateStorageBuildingReducer from "./create_storage_building_reducer";
 import CreateTournamentReducer from "./create_tournament_reducer";
 import CreateTradeOfferReducer from "./create_trade_offer_reducer";
 import EquipItemReducer from "./equip_item_reducer";
+import FoundCampReducer from "./found_camp_reducer";
 import GatherResourceReducer from "./gather_resource_reducer";
+import HarvestKindReducer from "./harvest_kind_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import JoinTournamentReducer from "./join_tournament_reducer";
 import LeaveRoomReducer from "./leave_room_reducer";
@@ -68,6 +73,7 @@ import ProcessRoundVotesReducer from "./process_round_votes_reducer";
 import PurchaseGuaranteeReducer from "./purchase_guarantee_reducer";
 import QueueUnitTaskReducer from "./queue_unit_task_reducer";
 import RebuyIntoGameReducer from "./rebuy_into_game_reducer";
+import RefineAtCampReducer from "./refine_at_camp_reducer";
 import RejectFriendRequestReducer from "./reject_friend_request_reducer";
 import RemoveFriendReducer from "./remove_friend_reducer";
 import RemoveVoteFromSaleReducer from "./remove_vote_from_sale_reducer";
@@ -79,6 +85,7 @@ import SendMessageReducer from "./send_message_reducer";
 import SetBuildingTaxReducer from "./set_building_tax_reducer";
 import SetChatPermissionReducer from "./set_chat_permission_reducer";
 import SetNameReducer from "./set_name_reducer";
+import SetRosterPicksReducer from "./set_roster_picks_reducer";
 import SetUnitTaskReducer from "./set_unit_task_reducer";
 import SetUnitVoteColorReducer from "./set_unit_vote_color_reducer";
 import SetVoteColorReducer from "./set_vote_color_reducer";
@@ -104,7 +111,9 @@ import WithdrawFromBankReducer from "./withdraw_from_bank_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AccountBindRow from "./account_bind_table";
 import BattleArenaRow from "./battle_arena_table";
+import BattleCombatEventRow from "./battle_combat_event_table";
 import BattleUnitRow from "./battle_unit_table";
 import BlockedUserRow from "./blocked_user_table";
 import ChatMessageRow from "./chat_message_table";
@@ -122,10 +131,15 @@ import GuaranteeRow from "./guarantee_table";
 import GuaranteePurchaseRow from "./guarantee_purchase_table";
 import LaborerGeneticsRow from "./laborer_genetics_table";
 import MessageRow from "./message_table";
+import OwnedEquipmentRow from "./owned_equipment_table";
+import OwnedLaborerRow from "./owned_laborer_table";
+import PendingArenaResolveRow from "./pending_arena_resolve_table";
 import PlayerCurrencyRow from "./player_currency_table";
 import PlayerPositionRow from "./player_position_table";
+import PlayerStashRow from "./player_stash_table";
 import ReadyStateRow from "./ready_state_table";
 import ResourceRow from "./resource_table";
+import RosterPickRow from "./roster_pick_table";
 import ServerNodeRow from "./server_node_table";
 import SideBetRow from "./side_bet_table";
 import SpectatorRow from "./spectator_table";
@@ -143,6 +157,17 @@ import VoteRow from "./vote_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  account_bind: __table({
+    name: 'account_bind',
+    indexes: [
+      { name: 'username', algorithm: 'btree', columns: [
+        'username',
+      ] },
+    ],
+    constraints: [
+      { name: 'account_bind_username_key', constraint: 'unique', columns: ['username'] },
+    ],
+  }, AccountBindRow),
   battle_arena: __table({
     name: 'battle_arena',
     indexes: [
@@ -154,6 +179,17 @@ const tablesSchema = __schema({
       { name: 'battle_arena_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, BattleArenaRow),
+  battle_combat_event: __table({
+    name: 'battle_combat_event',
+    indexes: [
+      { name: 'id', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'battle_combat_event_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, BattleCombatEventRow),
   battle_unit: __table({
     name: 'battle_unit',
     indexes: [
@@ -337,6 +373,39 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MessageRow),
+  owned_equipment: __table({
+    name: 'owned_equipment',
+    indexes: [
+      { name: 'id', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'owned_equipment_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, OwnedEquipmentRow),
+  owned_laborer: __table({
+    name: 'owned_laborer',
+    indexes: [
+      { name: 'id', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'owned_laborer_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, OwnedLaborerRow),
+  pending_arena_resolve: __table({
+    name: 'pending_arena_resolve',
+    indexes: [
+      { name: 'room_id', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+    ],
+    constraints: [
+      { name: 'pending_arena_resolve_room_id_key', constraint: 'unique', columns: ['roomId'] },
+    ],
+  }, PendingArenaResolveRow),
   player_currency: __table({
     name: 'player_currency',
     indexes: [
@@ -359,6 +428,17 @@ const tablesSchema = __schema({
       { name: 'player_position_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, PlayerPositionRow),
+  player_stash: __table({
+    name: 'player_stash',
+    indexes: [
+      { name: 'player_id', algorithm: 'btree', columns: [
+        'playerId',
+      ] },
+    ],
+    constraints: [
+      { name: 'player_stash_player_id_key', constraint: 'unique', columns: ['playerId'] },
+    ],
+  }, PlayerStashRow),
   ready_state: __table({
     name: 'ready_state',
     indexes: [
@@ -381,6 +461,17 @@ const tablesSchema = __schema({
       { name: 'resource_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, ResourceRow),
+  roster_pick: __table({
+    name: 'roster_pick',
+    indexes: [
+      { name: 'id', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'roster_pick_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, RosterPickRow),
   server_node: __table({
     name: 'server_node',
     indexes: [
@@ -520,14 +611,17 @@ const reducersSchema = __reducers(
   __reducerSchema("accept_friend_request", AcceptFriendRequestReducer),
   __reducerSchema("accept_trade_offer", AcceptTradeOfferReducer),
   __reducerSchema("assign_unit_to_building", AssignUnitToBuildingReducer),
+  __reducerSchema("bind_account", BindAccountReducer),
   __reducerSchema("block_user", BlockUserReducer),
   __reducerSchema("breed_laborers", BreedLaborersReducer),
   __reducerSchema("cancel_friend_request", CancelFriendRequestReducer),
+  __reducerSchema("cancel_guarantee", CancelGuaranteeReducer),
   __reducerSchema("cancel_trade_offer", CancelTradeOfferReducer),
   __reducerSchema("cancel_unit_task", CancelUnitTaskReducer),
   __reducerSchema("construct_building", ConstructBuildingReducer),
   __reducerSchema("contribute_to_building", ContributeToBuildingReducer),
   __reducerSchema("convert_mt_to_mbls", ConvertMtToMblsReducer),
+  __reducerSchema("craft_and_equip", CraftAndEquipReducer),
   __reducerSchema("craft_equipment", CraftEquipmentReducer),
   __reducerSchema("create_battle_arena", CreateBattleArenaReducer),
   __reducerSchema("create_chat_room", CreateChatRoomReducer),
@@ -539,7 +633,9 @@ const reducersSchema = __reducers(
   __reducerSchema("create_tournament", CreateTournamentReducer),
   __reducerSchema("create_trade_offer", CreateTradeOfferReducer),
   __reducerSchema("equip_item", EquipItemReducer),
+  __reducerSchema("found_camp", FoundCampReducer),
   __reducerSchema("gather_resource", GatherResourceReducer),
+  __reducerSchema("harvest_kind", HarvestKindReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("join_tournament", JoinTournamentReducer),
   __reducerSchema("leave_room", LeaveRoomReducer),
@@ -551,6 +647,7 @@ const reducersSchema = __reducers(
   __reducerSchema("purchase_guarantee", PurchaseGuaranteeReducer),
   __reducerSchema("queue_unit_task", QueueUnitTaskReducer),
   __reducerSchema("rebuy_into_game", RebuyIntoGameReducer),
+  __reducerSchema("refine_at_camp", RefineAtCampReducer),
   __reducerSchema("reject_friend_request", RejectFriendRequestReducer),
   __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("remove_vote_from_sale", RemoveVoteFromSaleReducer),
@@ -562,6 +659,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_building_tax", SetBuildingTaxReducer),
   __reducerSchema("set_chat_permission", SetChatPermissionReducer),
   __reducerSchema("set_name", SetNameReducer),
+  __reducerSchema("set_roster_picks", SetRosterPicksReducer),
   __reducerSchema("set_unit_task", SetUnitTaskReducer),
   __reducerSchema("set_unit_vote_color", SetUnitVoteColorReducer),
   __reducerSchema("set_vote_color", SetVoteColorReducer),

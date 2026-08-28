@@ -123,6 +123,7 @@ pub fn spawn_laborer(
         mining_xp: 0, mining_level: 1,
         foraging_xp: 0, foraging_level: 1,
         crafting_xp: 0, crafting_level: 1,
+        actions_remaining: ACTIONS_PER_ROUND,
     });
     ctx.db.unit_inventory().insert(UnitInventory {
         unit_id: new_unit.id,
@@ -184,21 +185,23 @@ pub fn transfer_laborer_to_parent(
         return Err("Cannot send home: minion is promised as a guarantee".to_string());
     }
 
+    spend_unit_action(ctx, unit_id)?;
+    award_skill_xp(ctx, unit_id, "foraging", SKILL_XP_PER_ACTION);
+
     // Void the vote for this laborer (per design: vote is voided on upward transfer)
     if let Some(vid) = unit.vote_id {
         ctx.db.vote().id().delete(vid);
     }
 
-    // Return equipped items to owner's pool before deletion
-    let unit_equips: Vec<Equipment> = ctx.db.equipment().iter()
-        .filter(|e| e.equipped_to_unit_id == Some(unit_id)).collect();
-    for mut eq in unit_equips { eq.equipped_to_unit_id = None; ctx.db.equipment().id().update(eq); }
-
-    ctx.db.unit_inventory().unit_id().delete(unit_id);
-    ctx.db.unit_stats().unit_id().delete(unit_id);
-    ctx.db.laborer_genetics().unit_id().delete(unit_id);
-    ctx.db.unit().id().delete(unit_id);
-
+    extract_minion_to_account(ctx, &unit, "sent_home");
+    let _ = create_game_event(
+        ctx,
+        unit.room_id.to_string(),
+        "send_home".to_string(),
+        unit_id.to_string(),
+        unit.owner_id.clone(),
+        1,
+    );
     Ok(())
 }
 
@@ -337,6 +340,49 @@ pub fn stop_spectating(
         .find(|s| s.room_id == room_id && s.user_id == user_id)
         .ok_or("Not spectating")?;
     ctx.db.spectator().id().delete(spec.id);
+    Ok(())
+}
+
+#[reducer]
+pub fn set_roster_picks(
+    ctx: &ReducerContext,
+    room_id: i32,
+    laborer_ids: Vec<i32>,
+) -> Result<(), String> {
+    let caller_id = ctx.sender().to_hex().to_string();
+    let room = ctx.db.game_room().id().find(room_id).ok_or("Room not found")?;
+    if room.game_status != "lobby" {
+        return Err("Roster can only be set in the lobby".to_string());
+    }
+    if !room.member_ids.contains(&caller_id) {
+        return Err("You are not in this room".to_string());
+    }
+    if laborer_ids.len() > room.votes_per_player as usize {
+        return Err(format!("You can bring at most {} veterans", room.votes_per_player));
+    }
+
+    for id in &laborer_ids {
+        let lab = ctx.db.owned_laborer().id().find(*id).ok_or("Veteran not found")?;
+        if lab.owner_id != caller_id {
+            return Err("You don't own that veteran".to_string());
+        }
+    }
+
+    let existing: Vec<i32> = ctx.db.roster_pick().iter()
+        .filter(|p| p.room_id == room_id && p.player_id == caller_id)
+        .map(|p| p.id)
+        .collect();
+    for pid in existing {
+        ctx.db.roster_pick().id().delete(pid);
+    }
+    for laborer_id in laborer_ids {
+        ctx.db.roster_pick().insert(RosterPick {
+            id: 0,
+            room_id,
+            player_id: caller_id.clone(),
+            laborer_id,
+        });
+    }
     Ok(())
 }
 

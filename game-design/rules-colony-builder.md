@@ -83,6 +83,10 @@ For core Vote Exchange Protocol mechanics, see [rules.md](./rules.md)
 
 The MMO/Colony-Builder is an extension of The Vote Exchange Protocol that adds resource management, colony building, and laborer management mechanics. This document focuses on these additional features while maintaining integration with the core Vote Exchange Protocol mechanics.
 
+**Live expedition loop (August 2026).** What `/vote` actually plays: each minion is a vote; **3 actions** per round; harvest wood/stone/ore; found **one camp** (3 wood + 2 stone); refine 2 raw → 1 processed; craft-and-equip hatchet / spear / vest; send-home or survive to the **roster** (gear stays on the veteran); majority minions fight on a hex board. Guest Game Over can copy a recovery code or bind a username + passphrase.
+
+**Parked in this document.** The 16-building catalog, `game_tick` workshops, genetics breeding, housing/tax, parent-server tree, and Eternal Format are the long-game design. They are not on the live HUD. Implementation truth: [docs/STATUS.md](../docs/STATUS.md).
+
 ## Inspiration and References
 
 The games market has long been filled with MMOs and Colony-Builders with all of them building and iterating on similar and novel ideas. See [Construction and Management Simulation](https://en.wikipedia.org/wiki/Construction_and_management_simulation). Their intersection is an extension of RPG ideas going back to Dungeons and Dragons and beyond.

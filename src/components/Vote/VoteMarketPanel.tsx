@@ -1,11 +1,14 @@
-import { Component, createSignal, For, Show } from "solid-js";
-import type { Vote, Transaction, User } from "~/module_bindings/types";
+import { Component, createSignal, createEffect, onCleanup, For, Show } from "solid-js";
+import type { Vote, Transaction, User, Guarantee, GuaranteePurchase } from "~/module_bindings/types";
 import GuaranteeMarket from "./GuaranteeMarket";
 import StrategyPanel from "./StrategyPanel";
 import MarketTrends from "./MarketTrends";
 import { useSpacetimeDB } from "~/hooks/useSpacetimeDB";
 import { resolvePlayerName } from "~/lib/game-utils";
 import { buyListedVote, listVote, unlistVote } from "~/lib/vote-trading";
+import { isVoteGuaranteed } from "~/lib/guarantees";
+import { suggestedListPrice, visibleVoteColor } from "~/lib/vote-tally";
+import { TID } from "~/lib/test-ids";
 
 interface VoteMarketPanelProps {
   votes: Vote[];
@@ -15,6 +18,7 @@ interface VoteMarketPanelProps {
   currentUserId: string;
   userWalletBalance: number;
   players?: User[];
+  votesRevealed?: boolean;
 }
 
 type SortOption = "price-asc" | "price-desc" | "color" | "recent";
@@ -25,12 +29,44 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
   const [filterColor, setFilterColor] = createSignal<string | null>(null);
   const [priceInputs, setPriceInputs] = createSignal<Record<number, number>>({});
   const [activeTab, setActiveTab] = createSignal<"market" | "my-votes" | "guarantees" | "history" | "strategy" | "trends">("market");
+  const [guarantees, setGuarantees] = createSignal<Guarantee[]>([]);
+  const [guaranteePurchases, setGuaranteePurchases] = createSignal<GuaranteePurchase[]>([]);
+
+  createEffect(() => {
+    const connection = conn();
+    if (!connection) return;
+    const refreshGuarantees = () => setGuarantees(Array.from(connection.db.guarantee.iter()));
+    const refreshPurchases = () => setGuaranteePurchases(Array.from(connection.db.guarantee_purchase.iter()));
+    refreshGuarantees();
+    refreshPurchases();
+    connection.db.guarantee.onInsert(refreshGuarantees);
+    connection.db.guarantee.onUpdate(refreshGuarantees);
+    connection.db.guarantee.onDelete(refreshGuarantees);
+    connection.db.guarantee_purchase.onInsert(refreshPurchases);
+    connection.db.guarantee_purchase.onUpdate(refreshPurchases);
+    connection.db.guarantee_purchase.onDelete(refreshPurchases);
+    onCleanup(() => {
+      connection.db.guarantee.removeOnInsert(refreshGuarantees);
+      connection.db.guarantee.removeOnUpdate(refreshGuarantees);
+      connection.db.guarantee.removeOnDelete(refreshGuarantees);
+      connection.db.guarantee_purchase.removeOnInsert(refreshPurchases);
+      connection.db.guarantee_purchase.removeOnUpdate(refreshPurchases);
+      connection.db.guarantee_purchase.removeOnDelete(refreshPurchases);
+    });
+  });
+
+  const voteGuaranteed = (voteId: number) =>
+    isVoteGuaranteed(voteId, guarantees(), guaranteePurchases());
 
   const marketListings = () => {
     let listings = props.votes.filter(
-      (v) => v.isForSale && v.playerId !== props.currentUserId && v.roomId === props.roomId
+      (v) =>
+        v.isForSale &&
+        !voteGuaranteed(v.id) &&
+        v.playerId !== props.currentUserId &&
+        v.roomId === props.roomId
     );
-    if (filterColor()) {
+    if (filterColor() && props.votesRevealed) {
       listings = listings.filter((v) => v.color === filterColor());
     }
     const sorted = [...listings].sort((a, b) => {
@@ -83,7 +119,8 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
   };
 
   const handleSetPrice = (voteId: number) => {
-    listVote(conn(), voteId, priceInputs()[voteId]);
+    const typed = priceInputs()[voteId];
+    listVote(conn(), voteId, typed > 0 ? typed : defaultListPrice());
   };
 
   const handleRemoveFromMarket = (voteId: number) => {
@@ -105,13 +142,27 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
     />
   );
 
+  const lastSale = () =>
+    props.transactions
+      .filter((t) => t.roomId === props.roomId && t.transactionType === "vote_sale")
+      .sort((a, b) => Number(b.timestamp) - Number(a.timestamp))[0];
+
+  const lowestAsk = () => {
+    const prices = marketListings()
+      .map((v) => v.salePrice || 0)
+      .filter((p) => p > 0);
+    return prices.length ? Math.min(...prices) : null;
+  };
+
+  const defaultListPrice = () => suggestedListPrice(lastSale()?.amount ?? null, lowestAsk());
+
   const tabs = [
-    { id: "market" as const, label: "Votes", count: () => marketListings().length },
-    { id: "my-votes" as const, label: "Mine", count: () => myVotes().length },
-    { id: "guarantees" as const, label: "Guar.", count: undefined },
-    { id: "strategy" as const, label: "Strategy", count: undefined },
-    { id: "trends" as const, label: "Trends", count: undefined },
-    { id: "history" as const, label: "History", count: undefined },
+    { id: "market" as const, label: "Buy", count: () => marketListings().length, testId: TID.marketTab },
+    { id: "my-votes" as const, label: "Sell", count: () => myVotes().filter((v) => v.isForSale).length, testId: TID.myVotesTab },
+    { id: "guarantees" as const, label: "Guar.", count: undefined, testId: TID.guaranteesTab },
+    { id: "strategy" as const, label: "Strategy", count: undefined, testId: undefined },
+    { id: "trends" as const, label: "Trends", count: undefined, testId: undefined },
+    { id: "history" as const, label: "History", count: undefined, testId: undefined },
   ];
 
   return (
@@ -127,6 +178,7 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                 "text-white/40 hover:text-white/60 hover:bg-white/5": activeTab() !== tab.id,
               }}
               onClick={() => setActiveTab(tab.id)}
+              data-testid={tab.testId}
             >
               {tab.label}
               <Show when={tab.count}>
@@ -142,6 +194,12 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
         {/* Market Listings */}
         <Show when={activeTab() === "market"}>
           <div class="space-y-2">
+            <div class="rounded-md border border-amber-400/20 bg-amber-500/5 px-2.5 py-1.5 text-[10px] leading-snug text-amber-100/70">
+              <span class="font-semibold text-amber-200">Buy a vote</span> and it becomes yours — recast it Red or Blue. Last trade:{" "}
+              <span class="font-semibold text-white">
+                {lastSale() ? `$${lastSale()!.amount.toFixed(2)}` : "none yet"}
+              </span>
+            </div>
             <div class="flex gap-1">
               <select
                 class="flex-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/70 outline-none focus:border-white/20"
@@ -153,6 +211,7 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                 <option value="color">By Color</option>
                 <option value="recent">Most Recent</option>
               </select>
+              <Show when={props.votesRevealed}>
               <select
                 class="rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/70 outline-none focus:border-white/20"
                 value={filterColor() || "all"}
@@ -162,6 +221,7 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                 <option value="red">Red</option>
                 <option value="blue">Blue</option>
               </select>
+              </Show>
             </div>
 
             <For
@@ -170,35 +230,59 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                 <div class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-white/10 bg-white/5 p-6 text-center">
                   <div class="text-2xl opacity-30">🏪</div>
                   <p class="text-[11px] font-medium text-white/40">
-                    {filterColor() ? "No votes match that color filter" : "No votes listed yet"}
+                    {filterColor() ? "No votes match that color filter" : "Nobody is selling yet"}
                   </p>
                   <p class="text-[10px] text-white/25">
-                    {filterColor() ? "Try clearing the filter above" : "Be the first to list a vote!"}
+                    {filterColor()
+                      ? "Try clearing the filter above"
+                      : "Open the Sell tab to list one of yours — or wait for another player."}
                   </p>
                 </div>
               }
             >
-              {(vote) => (
-                <div class="group flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 transition-all hover:border-amber-400/30 hover:bg-white/10">
-                  <div class="flex items-center gap-2">
-                    {colorDot(vote.color)}
-                    <div>
-                      <div class="text-xs font-medium">Vote #{vote.id}</div>
-                      <div class="text-[10px] text-white/30">{resolvePlayerName(vote.playerId, conn())}</div>
+              {(vote) => {
+                const short = props.userWalletBalance < (vote.salePrice || 0);
+                const shown = visibleVoteColor(
+                  vote.playerId,
+                  vote.color,
+                  props.currentUserId,
+                  !!props.votesRevealed,
+                );
+                return (
+                  <div class="group flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 transition-all hover:border-amber-400/30 hover:bg-white/10">
+                    <div class="flex items-center gap-2">
+                      {colorDot(shown)}
+                      <div>
+                        <div class="text-xs font-medium">
+                          Vote #{vote.id}
+                          <span class="ml-1 text-[10px] font-normal capitalize text-white/40">
+                            {shown || (props.votesRevealed ? "unplaced" : "hidden")}
+                          </span>
+                        </div>
+                        <div class="text-[10px] text-white/30">
+                          {resolvePlayerName(vote.playerId, conn())} · becomes yours
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-amber-300">${vote.salePrice}</span>
+                        <button
+                          class="rounded bg-amber-500/80 px-2 py-0.5 text-[10px] font-semibold text-white transition-colors hover:bg-amber-400 disabled:opacity-30"
+                          onClick={() => handleBuyVote(vote.id, vote.salePrice!)}
+                          disabled={short}
+                          title={short ? `Need $${((vote.salePrice || 0) - props.userWalletBalance).toFixed(2)} more` : "Buy this vote and recast it"}
+                        >
+                          Buy
+                        </button>
+                      </div>
+                      <Show when={short}>
+                        <span class="text-[9px] text-rose-300/80">Need ${((vote.salePrice || 0) - props.userWalletBalance).toFixed(2)} more</span>
+                      </Show>
                     </div>
                   </div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-bold text-amber-300">${vote.salePrice}</span>
-                    <button
-                      class="rounded bg-amber-500/80 px-2 py-0.5 text-[10px] font-semibold text-white transition-colors hover:bg-amber-400 disabled:opacity-30"
-                      onClick={() => handleBuyVote(vote.id, vote.salePrice!)}
-                      disabled={props.userWalletBalance < (vote.salePrice || 0)}
-                    >
-                      Buy
-                    </button>
-                  </div>
-                </div>
-              )}
+                );
+              }}
             </For>
           </div>
         </Show>
@@ -206,6 +290,10 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
         {/* My Votes */}
         <Show when={activeTab() === "my-votes"}>
           <div class="space-y-2">
+            <div class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-[10px] leading-snug text-white/50">
+              <span class="font-semibold text-white/70">List a vote</span> at a fixed price. The buyer takes it and can recast it; you keep the cash (minus a 1% fee to the pot). Guaranteed votes cannot be listed. Suggested:{" "}
+              <span class="font-semibold text-amber-200">${defaultListPrice().toFixed(2)}</span>
+            </div>
             <For
               each={myVotes()}
               fallback={
@@ -227,20 +315,29 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                         </div>
                       </div>
                     </div>
-                    <Show when={vote.isForSale}>
+                    <Show when={voteGuaranteed(vote.id)}>
+                      <span class="rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300 border border-violet-500/30">
+                        Guaranteed
+                      </span>
+                    </Show>
+                    <Show when={vote.isForSale && !voteGuaranteed(vote.id)}>
                       <span class="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 border border-amber-500/30">
                         Listed: ${vote.salePrice}
                       </span>
                     </Show>
                   </div>
 
-                  <Show when={!vote.isForSale}>
+                  <Show when={voteGuaranteed(vote.id)}>
+                    <p class="text-[10px] text-violet-300/70">Locked by a guarantee — cannot be sold.</p>
+                  </Show>
+
+                  <Show when={!vote.isForSale && !voteGuaranteed(vote.id)}>
                     <div class="flex gap-1.5">
                       <input
                         type="number"
                         min="0.01"
                         step="0.5"
-                        placeholder="Price..."
+                        placeholder={`$${defaultListPrice().toFixed(0)}`}
                         value={priceInputs()[vote.id] || ""}
                         onInput={(e) => setPriceInput(vote.id, parseFloat(e.currentTarget.value))}
                         class="flex-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/80 outline-none placeholder:text-white/20 focus:border-white/20"
@@ -248,7 +345,7 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
                       <button
                         class="rounded bg-green-600/70 px-2 py-1 text-[10px] font-semibold text-white hover:bg-green-500/80 disabled:opacity-30"
                         onClick={() => handleSetPrice(vote.id)}
-                        disabled={!priceInputs()[vote.id] || priceInputs()[vote.id] <= 0}
+                        disabled={(priceInputs()[vote.id] || defaultListPrice()) <= 0}
                       >
                         List
                       </button>
@@ -289,6 +386,7 @@ const VoteMarketPanel: Component<VoteMarketPanelProps> = (props) => {
             players={props.players || []}
             votes={props.votes}
             transactions={props.transactions}
+            votesRevealed={!!props.votesRevealed}
           />
         </Show>
 
