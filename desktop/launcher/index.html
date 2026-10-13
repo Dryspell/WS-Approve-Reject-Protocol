@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Loading</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          background: #0b1120;
+          color: #e2e8f0;
+        }
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+      main {
+        max-width: 26rem;
+        padding: 2rem;
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin: 0 0 0.75rem;
+      }
+      p {
+        margin: 0 0 1.25rem;
+        line-height: 1.5;
+        opacity: 0.8;
+      }
+      button {
+        font: inherit;
+        padding: 0.55rem 1.25rem;
+        border-radius: 0.5rem;
+        border: 1px solid currentColor;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="name"></h1>
+      <p id="status">Connecting…</p>
+      <button id="retry" type="button" hidden>Try again</button>
+    </main>
+    <script>
+      const shell = window.__SHELL__;
+      const nameEl = document.getElementById("name");
+      const statusEl = document.getElementById("status");
+      const retryEl = document.getElementById("retry");
+      let timer;
+
+      async function connect() {
+        clearTimeout(timer);
+        statusEl.textContent = "Connecting…";
+        retryEl.hidden = true;
+        try {
+          await fetch(shell.site, { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(8000) });
+          location.replace(new URL(shell.start, shell.site));
+        } catch {
+          statusEl.textContent = `Can't reach ${new URL(shell.site).host}. Check your connection. This window keeps trying on its own.`;
+          retryEl.hidden = false;
+          timer = setTimeout(connect, 15000);
+        }
+      }
+
+      if (shell) {
+        document.title = shell.name;
+        nameEl.textContent = shell.name;
+        retryEl.addEventListener("click", connect);
+        window.addEventListener("online", connect);
+        connect();
+      } else {
+        statusEl.textContent = "This page only works inside the desktop app.";
+      }
+    </script>
+  </body>
+</html>

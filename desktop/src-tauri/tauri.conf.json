@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Nashfall",
+  "version": "../package.json",
+  "identifier": "com.stratalace.nashfall",
+  "build": {
+    "frontendDist": "../launcher"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "url": "index.html",
+        "title": "Nashfall",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "center": true,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "nashfall"
+        ]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZEQ0UwRjlBNThGMzI0OUYKUldTZkpQTlltZy9PL1FKdHNyM091T3IrY20xUzBKcWpxVUVVdWlHUUNIck43Wm5WaHplSmdGTUMK",
+      "endpoints": [
+        "https://github.com/Dryspell/WS-Approve-Reject-Protocol/releases/download/nashfall-desktop-feed/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
